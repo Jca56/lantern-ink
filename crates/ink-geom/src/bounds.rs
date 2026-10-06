@@ -5,6 +5,7 @@ use std::f64::consts::TAU;
 
 use lntrn_math::{Rect, Vec2};
 
+use crate::affine::Affine;
 use crate::arc::{Centered, Shape, shape};
 use crate::path::{Path, Seg};
 
@@ -45,17 +46,22 @@ fn cubic_at(p0: Vec2, c1: Vec2, c2: Vec2, p1: Vec2, t: f64) -> Vec2 {
     p0 * (u * u * u) + c1 * (3.0 * u * u * t) + c2 * (3.0 * u * t * t) + p1 * (t * t * t)
 }
 
-/// Where an arc turns back in x or in y, within its sweep.
-fn arc_extremes(a: &Centered, grow: &mut Grow) {
+/// Where an arc, seen through `t`, turns back in x or in y, within its
+/// sweep.
+fn arc_extremes(a: &Centered, t: &Affine, grow: &mut Grow) {
     let (sin, cos) = a.phi.sin_cos();
-    // dx/dt = 0 and dy/dt = 0 on the turned ellipse, each twice a turn.
-    let turning = [(-sin * a.ry).atan2(cos * a.rx), (cos * a.ry).atan2(sin * a.rx)];
+    // Through `t` the arc is M (cos θ, sin θ) plus a move: the ellipse's
+    // turn and radii, then `t`'s own stretch and turn.
+    let (m00, m01) = ((t.a * cos + t.c * sin) * a.rx, (t.c * cos - t.a * sin) * a.ry);
+    let (m10, m11) = ((t.b * cos + t.d * sin) * a.rx, (t.d * cos - t.b * sin) * a.ry);
+    // dx/dθ = 0 and dy/dθ = 0, each twice a turn.
+    let turning = [m01.atan2(m00), m11.atan2(m10)];
     let way = if a.delta < 0.0 { -1.0 } else { 1.0 };
-    for t in turning.into_iter().flat_map(|t| [t, t + std::f64::consts::PI]) {
+    for angle in turning.into_iter().flat_map(|angle| [angle, angle + std::f64::consts::PI]) {
         // How far round from the start, the way the arc goes.
-        let along = ((t - a.theta) * way).rem_euclid(TAU);
+        let along = ((angle - a.theta) * way).rem_euclid(TAU);
         if along < a.delta.abs() {
-            grow.add(a.at(a.theta + way * along, 1.0));
+            grow.add(t.apply(a.at(a.theta + way * along, 1.0)));
         }
     }
 }
@@ -65,36 +71,49 @@ impl Path {
     /// draws nothing (lone moves aren't drawn) or has a point that isn't
     /// a real number.
     pub fn bounds(&self) -> Option<Rect> {
+        self.bounds_through(&Affine::IDENTITY)
+    }
+
+    /// The smallest box holding the path once it's through `t`: around
+    /// the turned or skewed outline itself, not around its own box's
+    /// corners.
+    pub fn bounds_through(&self, t: &Affine) -> Option<Rect> {
         let mut grow = Grow(None);
         for sub in self.subpaths.iter().filter(|s| !s.segs.is_empty() || s.closed) {
-            grow.add(sub.start);
+            grow.add(t.apply(sub.start));
+            // Where the pen is: in the path's own coordinates (an arc is
+            // worked out there), and through `t` (a Bézier's control
+            // points go through with it).
             let mut at = sub.start;
             for seg in &sub.segs {
+                let from = t.apply(at);
                 match *seg {
                     Seg::Line { .. } => {}
                     Seg::Quad { c, to } => {
-                        let d = at - c * 2.0 + to;
-                        for (num, den) in [(at.x - c.x, d.x), (at.y - c.y, d.y)] {
-                            let t = num / den;
-                            if den != 0.0 && t > 0.0 && t < 1.0 {
-                                grow.add(quad_at(at, c, to, t));
+                        let (c, to) = (t.apply(c), t.apply(to));
+                        let d = from - c * 2.0 + to;
+                        for (num, den) in [(from.x - c.x, d.x), (from.y - c.y, d.y)] {
+                            let at = num / den;
+                            if den != 0.0 && at > 0.0 && at < 1.0 {
+                                grow.add(quad_at(from, c, to, at));
                             }
                         }
                     }
                     Seg::Cubic { c1, c2, to } => {
-                        // The derivative, a quadratic in t, per axis.
-                        let (a, b, c) = (to - c2 * 3.0 + c1 * 3.0 - at, (c2 - c1 * 2.0 + at) * 2.0, c1 - at);
-                        for t in roots(a.x, b.x, c.x).into_iter().chain(roots(a.y, b.y, c.y)).flatten() {
-                            grow.add(cubic_at(at, c1, c2, to, t));
+                        let (c1, c2, to) = (t.apply(c1), t.apply(c2), t.apply(to));
+                        // The derivative, a quadratic, per axis.
+                        let (a, b, c) = (to - c2 * 3.0 + c1 * 3.0 - from, (c2 - c1 * 2.0 + from) * 2.0, c1 - from);
+                        for at in roots(a.x, b.x, c.x).into_iter().chain(roots(a.y, b.y, c.y)).flatten() {
+                            grow.add(cubic_at(from, c1, c2, to, at));
                         }
                     }
                     Seg::Arc { ref arc, to } => {
                         if let Shape::Arc(centered) = shape(at, arc, to) {
-                            arc_extremes(&centered, &mut grow);
+                            arc_extremes(&centered, t, &mut grow);
                         }
                     }
                 }
-                grow.add(seg.to());
+                grow.add(t.apply(seg.to()));
                 at = seg.to();
             }
         }
@@ -159,5 +178,25 @@ mod tests {
         let (exact, flat) = (odd.bounds().unwrap(), odd.flatten(1e-6));
         let (lo, hi) = flat[0].points.iter().fold((flat[0].points[0], flat[0].points[0]), |(lo, hi), &p| (lo.min(p), hi.max(p)));
         assert!(exact.min.distance(lo) < 1e-4 && exact.max.distance(hi) < 1e-4, "{exact:?} vs {lo:?} {hi:?}");
+    }
+
+    #[test]
+    fn a_turned_path_has_the_box_of_its_turned_outline() {
+        // A circle is its own box's size however it's turned; its box's
+        // corners, turned, would reach further.
+        let circle = Path::ellipse(Vec2::new(10.0, 10.0), 5.0, 5.0);
+        let turned = circle.bounds_through(&Affine::rotate(0.7).about(Vec2::new(10.0, 10.0))).unwrap();
+        assert!(close(turned, 5.0, 5.0, 15.0, 15.0), "{turned:?}");
+        // Stretched and skewed, against the same path flattened finely
+        // and put through point by point.
+        let t = Affine::scale(2.0, 0.5).then(&Affine::skew_x(0.4)).then(&Affine::rotate(-1.1)).then(&Affine::translate(3.0, -8.0));
+        for d in ["M3 1 A8 3 30 1 0 -2 6", "M0 0 C40 0 -30 10 10 10 Q20 30 0 20 Z", "M1 2 L5 9 L-4 3"] {
+            let path = Path::parse(d).path;
+            let exact = path.bounds_through(&t).unwrap();
+            let points: Vec<Vec2> = path.flatten(1e-7).into_iter().flat_map(|l| l.points).map(|p| t.apply(p)).collect();
+            let (lo, hi) = points.iter().fold((points[0], points[0]), |(lo, hi), &p| (lo.min(p), hi.max(p)));
+            assert!(exact.min.distance(lo) < 1e-5 && exact.max.distance(hi) < 1e-5, "{d}: {exact:?} vs {lo:?} {hi:?}");
+        }
+        assert_eq!(Path::new().bounds_through(&t), None);
     }
 }

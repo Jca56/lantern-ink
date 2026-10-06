@@ -107,7 +107,7 @@ ink-mcp → bin lantern-ink-mcp      ink-app → bin lantern-ink
 | XML | `lntrn-svg/src/xml.rs` drops comments, text and formatting | A new lossless one in `ink-doc` (§3.2) |
 | Text shaping, glyph outlines | `lntrn-text` (`place_outlines`, U057) | Use as is |
 | PNG, JPEG, WebP encoders | `lntrn-image` | Use as is |
-| JSON; JSON-RPC lines, both MCP eras, schemas, staged calls, the socket pipe | `lntrn-data`; LS3 `studio-tools` (about 1.5k generic lines among 7.2k) | D11: a shared crate, or a copy |
+| JSON; JSON-RPC lines, both MCP eras, schemas, arguments, replies, the stdio loop | `lntrn-data`; LS3 `studio-tools` (about 1.5k generic lines among 7.2k) | D11: lifted into a new LUI2 crate, `lntrn-mcp` (LUI2 U082). LS3's staged calls and socket pipe stay with it until the live bridge (M5) needs them shared |
 | The Studio look: theme, layout, chrome, controls | LS3 `studio-app` (about 1.8k lines) | D12: copy at M4, or a shared crate |
 
 That makes three vector stacks in the ecosystem once Ink has its own
@@ -195,10 +195,13 @@ enum  Child { Node(NodeId), Text(String) /* text, comments, CDATA, as written */
   (a headless server's) or `w1` (the window's), nodes `N7`. Node IDs live
   for as long as the document is open and are not written to the file
   (D10). An element's own `id="…"` is just an attribute, shown beside it.
-- **One coordinate frame for everyone: document space**, the root's user
-  units, y down: the numbers a top-level shape has in the file. Commands
-  and MCP tools speak it; the core converts into a node's own frame
-  (through its ancestors' transforms) when it writes attributes (D16).
+- **Numbers mean what they mean in the file** (D16): an attribute a tool
+  or a Command sets is in the node's own coordinates, inside whatever
+  transforms its groups have, exactly as SVG has it. Nothing is converted
+  behind anyone's back. What's reported back (`doc_info`'s boxes, hit
+  tests) says where a node shows in the document's coordinates, the
+  root's user units, y down; and the tools that move things about on the
+  page (M3's `node_transform`) work in those.
 - **View state lives outside the document:** camera, the selection, the
   open groups, guides being dragged. The selection is not undoable and
   never Claude's (every Command names its nodes).
@@ -368,9 +371,10 @@ carries over; only the differences and the tool list are new here.
   whose steps name what they make (`as: "leaf"` → `"@leaf"`). No implicit
   selection or active anything: every call names its IDs, every creating
   call returns them. There is no arbitrary-code tool.
-- **Conventions:** document space (user units, y down); colours
-  `"#rrggbb"` / `"#rrggbbaa"` (or any SVG paint string); opacity 0..1;
-  angles in degrees; paths absolute, `~/…`, or relative to the project.
+- **Conventions:** attributes as the file writes them (D16): the
+  element's own coordinates, y down; any SVG paint string; numbers
+  written with at most three decimals (D15); file paths absolute, `~/…`,
+  or relative to the project.
 - **Previews are a strength here:** a vector draws sharp at any size.
   `doc_preview` takes a size, a region, a background (checker, white,
   black, none) and optionally only some nodes; `renderer: "lantern"`
@@ -385,8 +389,8 @@ carries over; only the differences and the tool list are new here.
 
 | Group | Tools |
 |---|---|
-| Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size, or a tidied SVG), `doc_close`\*, `doc_set` (viewBox, size) |
-| Nodes | `node_add`\* (rect, ellipse, line, polygon, path, group), `node_add_svg`\*, `node_set`\* (geometry, style, any attribute), `node_info`, `node_move`\*, `node_duplicate`, `node_delete`\*, `node_group`, `node_ungroup`, `node_transform`, `node_align` |
+| Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set` (viewBox, size) |
+| Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`, `node_move`\*, `node_duplicate`, `node_delete`\*, `node_group`, `node_ungroup`, `node_transform`, `node_align` |
 | Paths | `path_set`, `path_edit` (anchors and handles), `path_op` (boolean ops, outline stroke, simplify, reverse, to path) |
 | Paint | `gradient_add`, `gradient_set`, `clip_set`, `filter_set` |
 | Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
@@ -500,7 +504,7 @@ As LS3 §7, to the letter where it can be:
 |---|---|---|
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
-| **M2** | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉 |
+| **M2** (built) | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test is a fresh Claude Code session's to pass, since a session's tools are fixed when it starts |
 | **M3** | Operations: every Command in §3.4 as a Command + tool + test | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
@@ -532,13 +536,13 @@ the foundation; the rest wait for their milestone.
 | D13 | Moving and scaling | **Bake into the geometry whenever that's exact**; keep a `transform` only where it isn't (a rotated rect stays a `<rect>` with a `rotate`, so its radius stays adjustable) | M3 |
 | D14 | Where a style is written | Where that node already has it (`style=""` or the attribute); a new property goes in as a presentation attribute | M3 |
 | D15 | Numbers Ink writes | Three decimals, trailing zeros dropped, settable per document | M3 |
-| D16 | Coordinates Claude and the GUI speak | Document space everywhere; the core converts into a node's own frame. `SetAttr` alone is as written | M2 |
+| D16 | Coordinates Claude and the GUI speak | ✅ **Decided 2026-10-06, revising my first recommendation:** attributes are as the file writes them (the node's own coordinates, as in any SVG), which is also what `node_add_svg`'s raw markup means; what's reported back is where things show in the document's coordinates (§3.3) | M2 |
 | D17 | Pen tool | Click points, bend the segments after (your May preference); no click-drag handles while placing. Still what you want? | M4 |
 | D18 | Path anchors' addresses | Stable ids kept beside the path in memory (`A3`), so a selection survives a point being added; not written to the file | M3 |
 | D19 | Ink's own attributes | `xmlns:ink="urn:lantern:ink"`; `ink:locked`, `ink:label`, guides on the root. Nothing else until something needs it | M3 |
 | D20 | What "done" means for the window | Ink replaces Boxy SVG for Lantern's icons. I'm inferring Boxy from the `bx:` marks in 107 files; the checklist gets written with you at M4's start | M4 |
 | D21 | SVG features | §5.2's list for v1; `<use>`, masks, patterns, images and markers when something needs them. M1 draws what `lntrn-svg` does; text, `<style>` rules and blur follow in M3 | M1, then as needed |
 | D22 | Golden tolerance | ✅ **Decided 2026-10-06, as revised by measurement:** exact for Ink's own renderer (three goldens, `ink-render/tests/goldens`). Against `lntrn-svg`, "within one level" can only hold on average, not per pixel (§5.4): a file's mean must be within 1.25 levels at 64 px and 0.5 at 256 px, and at most 4 % and 1.5 % of its pixels may be over 16 levels out. `rsvg-convert` is a report to read (`third_opinion`), not a test | M1 |
-| D23 | MCP registration | User scope, `alwaysLoad`, as LS3; registering still needs your OK at M2 | M2 |
+| D23 | MCP registration | ✅ **Decided and done 2026-10-06:** user scope, `alwaysLoad`, as LS3 (`claude mcp get ink` connects), and `mcp__ink` allowed in `~/.claude/settings.json` beside `mcp__studio` | M2 |
 | D24 | Claude's edits on screen | Whether paths draw themselves as LS3's strokes do | M5 |
 | D25 | Other editors' marks | ✅ **Decided 2026-10-05 (Alva):** Boxy SVG's are stripped and Lantern Ink's put in their place. How, which is mine and open to change: on opening, everything in Boxy's namespace goes and `xmlns:bx` becomes `xmlns:ink` (§3.1); the file changes when it's next saved. Boxy's export list and shape hints have no Ink equivalent yet, so they are dropped, not translated | M1 |

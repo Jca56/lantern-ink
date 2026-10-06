@@ -1,0 +1,21 @@
+[package]
+name = "ink-tools"
+description = "Lantern Ink's MCP tools: their schemas, and the host that turns a call into a Command (or a query) on an ink-core."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ink-core.workspace = true
+ink-geom.workspace = true
+lntrn-data.workspace = true
+lntrn-image.workspace = true
+lntrn-mcp.workspace = true
+lntrn-svg.workspace = true
+
+[dev-dependencies]
+lntrn-core.workspace = true

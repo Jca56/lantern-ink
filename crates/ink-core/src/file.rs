@@ -26,7 +26,7 @@ pub(crate) fn read(path: &Path) -> Result<String, CoreError> {
 }
 
 /// Write `bytes` as the file at `path`, all or nothing.
-pub(crate) fn write(path: &Path, bytes: &[u8]) -> Result<(), CoreError> {
+pub fn write(path: &Path, bytes: &[u8]) -> Result<(), CoreError> {
     let name = path.file_name().ok_or_else(|| failed(path, "that isn't a file's name"))?;
     let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let mut temp_name = std::ffi::OsString::from(".");

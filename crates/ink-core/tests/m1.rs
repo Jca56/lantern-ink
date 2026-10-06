@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use ink_core::ink_doc::{Element, Viewport};
-use ink_core::{Actor, Command, Core, CoreError, DocId, NodeId, Place, View};
+use ink_core::{Actor, Autosave, Command, Core, CoreError, DocId, NodeId, Place, View};
 
 /// A folder of this test's own, empty.
 fn scratch(name: &str) -> PathBuf {
@@ -151,4 +151,47 @@ fn what_cannot_be_done_says_why_and_leaves_no_step() {
     let none = View { width: 0, height: 10, ..View::icon(&core.viewport(doc).unwrap(), 16) };
     assert!(matches!(core.render(doc, &none), Err(CoreError::Size(_))));
     assert!(matches!(core.save(doc, Some(&dir.join("no/such/folder/x.svg"))), Err(CoreError::File { .. })));
+}
+
+#[test]
+fn the_autosave_folder_follows_the_drawings() {
+    let dir = scratch("autosave");
+    let mut core = Core::headless();
+    let mut saver = Autosave::new(dir.join("autosave"), "test");
+    let lines = std::cell::RefCell::new(Vec::<String>::new());
+    let log = |l: &str| lines.borrow_mut().push(l.to_owned());
+    let files = || std::fs::read_dir(dir.join("autosave")).map_or(Vec::new(), |d| d.filter_map(Result::ok).map(|e| e.file_name().to_string_lossy().into_owned()).collect::<Vec<_>>());
+    let touch = |core: &mut Core, doc, value: &str| {
+        let root = core.doc(doc).unwrap().root();
+        core.apply(doc, &Command::SetAttr { node: root, name: "data-n".into(), value: Some(value.into()) }, Actor::Claude, "touch").unwrap();
+    };
+
+    let doc = core.new_doc(8.0, 8.0);
+    saver.run(&core, &log);
+    assert!(files().is_empty(), "a new drawing nothing was done to has nothing to lose");
+
+    touch(&mut core, doc, "1");
+    saver.run(&core, &log);
+    saver.run(&core, &log);
+    assert_eq!(files(), [format!("test-{}-d1-untitled.svg", std::process::id())]);
+    assert_eq!(lines.borrow().len(), 1, "written once, not again while unchanged");
+    assert_eq!(std::fs::read_to_string(dir.join("autosave").join(&files()[0])).unwrap(), core.doc(doc).unwrap().to_svg());
+
+    core.save(doc, Some(&dir.join("real.svg"))).unwrap();
+    saver.run(&core, &log);
+    assert!(files().is_empty(), "a real save retires the autosave");
+
+    touch(&mut core, doc, "2");
+    saver.run(&core, &log);
+    assert_eq!(files(), [format!("test-{}-d1-real.svg", std::process::id())], "under its file's name now");
+    core.undo(doc).unwrap();
+    saver.run(&core, &log);
+    assert!(files().is_empty(), "undone back to what's saved: nothing to lose again");
+
+    touch(&mut core, doc, "3");
+    saver.run(&core, &log);
+    core.close(doc).unwrap();
+    saver.run(&core, &log);
+    assert!(files().is_empty(), "closing retires it too");
+    assert!(!saver.overdue());
 }

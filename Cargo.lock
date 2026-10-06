@@ -27,6 +27,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ink-mcp"
+version = "0.1.0"
+dependencies = [
+ "ink-core",
+ "ink-tools",
+ "lntrn-core",
+ "lntrn-mcp",
+]
+
+[[package]]
 name = "ink-render"
 version = "0.1.0"
 dependencies = [
@@ -38,12 +48,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "ink-tools"
+version = "0.1.0"
+dependencies = [
+ "ink-core",
+ "ink-geom",
+ "lntrn-core",
+ "lntrn-data",
+ "lntrn-image",
+ "lntrn-mcp",
+ "lntrn-svg",
+]
+
+[[package]]
+name = "lntrn-core"
+version = "0.2.0"
+
+[[package]]
+name = "lntrn-data"
+version = "0.2.0"
+dependencies = [
+ "lntrn-core",
+ "lntrn-math",
+ "lntrn-props",
+]
+
+[[package]]
 name = "lntrn-image"
 version = "0.2.0"
 
 [[package]]
 name = "lntrn-math"
 version = "0.2.0"
+
+[[package]]
+name = "lntrn-mcp"
+version = "0.2.0"
+dependencies = [
+ "lntrn-core",
+ "lntrn-data",
+]
+
+[[package]]
+name = "lntrn-props"
+version = "0.2.0"
+dependencies = [
+ "lntrn-core",
+ "lntrn-math",
+]
 
 [[package]]
 name = "lntrn-svg"

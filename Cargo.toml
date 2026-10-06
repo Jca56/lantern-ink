@@ -5,6 +5,8 @@ members = [
     "crates/ink-doc",
     "crates/ink-render",
     "crates/ink-core",
+    "crates/ink-tools",
+    "crates/ink-mcp",
 ]
 
 [workspace.package]
@@ -18,8 +20,12 @@ ink-geom = { path = "crates/ink-geom" }
 ink-doc = { path = "crates/ink-doc" }
 ink-render = { path = "crates/ink-render" }
 ink-core = { path = "crates/ink-core" }
+ink-tools = { path = "crates/ink-tools" }
+lntrn-core = { path = "../lantern-ui-2/crates/lntrn-core" }
+lntrn-data = { path = "../lantern-ui-2/crates/lntrn-data" }
 lntrn-image = { path = "../lantern-ui-2/crates/lntrn-image" }
 lntrn-math = { path = "../lantern-ui-2/crates/lntrn-math" }
+lntrn-mcp = { path = "../lantern-ui-2/crates/lntrn-mcp" }
 lntrn-svg = { path = "../lantern-ui-2/crates/lntrn-svg" }
 
 [workspace.lints.rust]

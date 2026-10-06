@@ -45,9 +45,41 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     overlap in part of it (the inside of a curved stroke comes out
     heavier); `lntrn-svg` and `rsvg-convert` both lose a drop shadow that
     is thrown into the picture from past its edge.
-- **M2 (headless MCP) is under way:** `ink-tools`, `lantern-ink-mcp`,
-  and `lntrn-mcp`, a new crate in LUI2 (D11, approved by Alva
-  2026-10-06: that crate, and nothing else there without asking).
+- **M2 (headless MCP) is built**, 2026-10-06; its done-test is a fresh
+  session's to pass (a session's tools are fixed when it starts):
+  1. ✅ `lntrn-mcp`, a new crate in LUI2 (D11, LUI2 U082; approved by
+     Alva: that crate, and nothing else there without asking): JSON-RPC
+     lines, a `Server` around a `Host` (both protocol eras), schemas,
+     `Args`, `Reply`, `stdio::serve`, `Log`. LS3's protocol transcripts
+     run against it.
+  2. ✅ `ink-tools`: 17 tools (`doc_new`, `doc_open`, `doc_list`,
+     `doc_info`, `doc_source`, `doc_preview`, `doc_save`, `doc_export`,
+     `doc_close`, `node_add`, `node_add_svg`, `node_set`, `node_move`,
+     `node_delete`, `history_undo`, `history_redo`, `batch` with
+     "@names"). Transcript tests: `ink-tools/tests/transcripts.rs`.
+     Attributes are as the file writes them (D16); `doc_info` gives each
+     node's box in the document's coordinates (exact under any
+     transform: `Path::bounds_through`).
+  3. ✅ `ink-mcp` → `~/.lantern/bin/lantern-ink-mcp`: stdio, no GPU, logs
+     to stderr and `~/.lantern/log/lantern-ink-mcp.log`, previews in
+     `~/.lantern/cache/lantern-ink/previews/` (cleared after a day),
+     unsaved drawings autosaved to
+     `~/.lantern/config/lantern-ink/autosave/` when idle 5 s, once a
+     minute while busy, and at EOF (`ink_core::Autosave`).
+  4. ✅ Registered 2026-10-06 (user scope, `alwaysLoad`, as server `ink`:
+     tools appear as `mcp__ink__…`; `mcp__ink` allowed in
+     `~/.claude/settings.json`). Smoke-tested over real stdio, and
+     `claude mcp get ink` connects.
+  5. **Still to do, in a new session:** draw an icon with the real tools,
+     look at it, save it. Whatever the tool descriptions get wrong for a
+     model that has only them to go by shows up there.
+  - `doc_preview` with `renderer: "lantern"` draws the drawing with
+    `lntrn-svg` itself at 16, 24, 32, 48 and 64 px, each enlarged pixel
+    for pixel (ARCHITECTURE §5.4).
+  - **Deploy:** `cargo build --release --workspace`, then `install` the
+    binary to `~/.lantern/bin/lantern-ink-mcp.new` and `mv` it over.
+  - `~/.lantern/bin/lantern-ink` is the May 2026 iced prototype's
+    binary, not ours: left alone until M4's window takes the name.
 
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.

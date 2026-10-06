@@ -1,0 +1,20 @@
+[package]
+name = "ink-mcp"
+description = "lantern-ink-mcp: Lantern Ink's MCP server over stdio."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "lantern-ink-mcp"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+ink-core.workspace = true
+ink-tools.workspace = true
+lntrn-core.workspace = true
+lntrn-mcp.workspace = true
