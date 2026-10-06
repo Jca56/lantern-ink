@@ -45,8 +45,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     overlap in part of it (the inside of a curved stroke comes out
     heavier); `lntrn-svg` and `rsvg-convert` both lose a drop shadow that
     is thrown into the picture from past its edge.
-- **M2 (headless MCP) is built**, 2026-10-06; its done-test is a fresh
-  session's to pass (a session's tools are fixed when it starts):
+- **M2 (headless MCP) is done**, 2026-10-06: built, and its done-test
+  passed in a fresh session (a session's tools are fixed when it starts):
   1. ✅ `lntrn-mcp`, a new crate in LUI2 (D11, LUI2 U082; approved by
      Alva: that crate, and nothing else there without asking): JSON-RPC
      lines, a `Server` around a `Host` (both protocol eras), schemas,
@@ -70,9 +70,30 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
      tools appear as `mcp__ink__…`; `mcp__ink` allowed in
      `~/.claude/settings.json`). Smoke-tested over real stdio, and
      `claude mcp get ink` connects.
-  5. **Still to do, in a new session:** draw an icon with the real tools,
-     look at it, save it. Whatever the tool descriptions get wrong for a
-     model that has only them to go by shows up there.
+  5. ✅ The done-test passed 2026-10-06: a fresh session drew a lantern
+     icon with only the tool descriptions to go by, looked at it with
+     both renderers, saved it and exported it (Alva's copy:
+     `~/Pictures/lantern.svg`). Opened again, edited, undone and saved,
+     it gave the same bytes; the refused calls each named their fix.
+  - **Found by the done-test** (none blocking, none fixed yet):
+    - `batch`'s schema says every value in a step's `args` is a string,
+      but the server takes `attrs` objects, `node_ids` arrays and bare
+      numbers there: a stricter client would refuse or stringify them.
+    - `doc_open` on a file that is already open makes a second document
+      on it without a word; either can save over the other.
+    - `max_edge` does nothing with `renderer: "lantern"` (the strip was
+      672 × 152 asked for 1000 or left at the default), and the reply
+      doesn't say so.
+    - Every preview of a document goes to the same file
+      (`249994-d1.png` that session), so each one replaces the last on
+      disk.
+    - A new drawing declares `xmlns:ink="urn:lantern:ink"` with nothing
+      in it using the namespace.
+    - `node_add_svg` indents the elements it is given but leaves what
+      is nested in them as written: a `<defs>` of gradients is one long
+      line.
+    - `doc_info` lists a gradient's stops last first and without their
+      attributes, so telling them apart takes `doc_source`.
   - `doc_preview` with `renderer: "lantern"` draws the drawing with
     `lntrn-svg` itself at 16, 24, 32, 48 and 64 px, each enlarged pixel
     for pixel (ARCHITECTURE §5.4).
