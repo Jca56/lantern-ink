@@ -1,0 +1,40 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/ink-geom",
+    "crates/ink-doc",
+    "crates/ink-render",
+    "crates/ink-core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Alva"]
+
+[workspace.dependencies]
+ink-geom = { path = "crates/ink-geom" }
+ink-doc = { path = "crates/ink-doc" }
+ink-render = { path = "crates/ink-render" }
+ink-core = { path = "crates/ink-core" }
+lntrn-image = { path = "../lantern-ui-2/crates/lntrn-image" }
+lntrn-math = { path = "../lantern-ui-2/crates/lntrn-math" }
+lntrn-svg = { path = "../lantern-ui-2/crates/lntrn-svg" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+debug = 1
+lto = "thin"
+codegen-units = 4

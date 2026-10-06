@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="foam" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="330">
+      <stop offset="0" stop-color="rgb(255, 232, 130)"/>
+      <stop offset="1" stop-color="rgb(226, 150, 20)"/>
+    </linearGradient>
+    <linearGradient id="scrub" gradientUnits="userSpaceOnUse" x1="0" y1="300" x2="0" y2="372">
+      <stop offset="0" stop-color="rgb(120, 200, 110)"/>
+      <stop offset="1" stop-color="rgb(34, 110, 60)"/>
+    </linearGradient>
+    <linearGradient id="drop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgb(191, 235, 255)"/>
+      <stop offset="1" stop-color="rgb(42, 133, 210)"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(-14 256 240)" stroke="rgb(60, 60, 60)" stroke-width="10" stroke-linejoin="round">
+    <!-- The scouring side underneath, then the foam. -->
+    <rect x="72" y="262" width="368" height="110" rx="30" fill="url(#scrub)"/>
+    <rect x="72" y="120" width="368" height="210" rx="38" fill="url(#foam)"/>
+    <g stroke="none" fill="rgb(176, 106, 8)" opacity="0.6">
+      <ellipse cx="140" cy="186" rx="22" ry="16"/>
+      <ellipse cx="216" cy="252" rx="28" ry="20"/>
+      <ellipse cx="286" cy="176" rx="18" ry="13"/>
+      <ellipse cx="352" cy="244" rx="24" ry="17"/>
+      <ellipse cx="384" cy="170" rx="13" ry="10"/>
+      <ellipse cx="132" cy="274" rx="14" ry="10"/>
+      <ellipse cx="296" cy="286" rx="13" ry="9"/>
+      <ellipse cx="212" cy="168" rx="10" ry="8"/>
+    </g>
+    <rect x="104" y="136" width="150" height="12" rx="6" fill="#fff" stroke="none" opacity="0.5"/>
+  </g>
+  <!-- Wrung out. -->
+  <g fill="url(#drop)" stroke="rgb(60, 60, 60)" stroke-width="8" stroke-linejoin="round">
+    <path d="M 150 400 C 150 400 118 444 118 464 C 118 482 132 496 150 496 C 168 496 182 482 182 464 C 182 444 150 400 150 400 Z"/>
+    <path d="M 256 420 C 256 420 234 450 234 464 C 234 476 244 486 256 486 C 268 486 278 476 278 464 C 278 450 256 420 256 420 Z"/>
+    <path d="M 352 384 C 352 384 326 420 326 437 C 326 451 338 463 352 463 C 366 463 378 451 378 437 C 378 420 352 384 352 384 Z"/>
+  </g>
+</svg>

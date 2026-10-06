@@ -1,0 +1,14 @@
+[package]
+name = "ink-doc"
+description = "Lantern Ink's document: an SVG's own tree, read and written losslessly, with typed views, Commands and their validation. CPU only."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ink-geom.workspace = true
+lntrn-math.workspace = true

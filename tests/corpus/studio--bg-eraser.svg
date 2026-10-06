@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="38.214 104.671 407.708 392.329" width="512" height="512" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="eraserPink" x1="0%" y1="0%" x2="0%" y2="100%" gradientTransform="rotate(-35)">
+      <stop offset="0" stop-color="rgb(255, 167, 230)"/>
+      <stop offset="1" stop-color="rgb(148, 23, 65)"/>
+    </linearGradient>
+    <linearGradient id="eraserPinkDark" x1="0%" y1="0%" x2="0%" y2="100%" gradientTransform="rotate(-35)">
+      <stop offset="0" stop-color="rgb(255, 167, 230)"/>
+      <stop offset="1" stop-color="rgb(189, 99, 134)"/>
+    </linearGradient>
+    <linearGradient id="bandBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0" stop-color="rgb(116, 178, 255)"/>
+      <stop offset="1" stop-color="rgb(11, 40, 86)"/>
+    </linearGradient>
+  </defs>
+  <!-- What it leaves behind: a patch of the transparency checkerboard. -->
+  <rect x="48" y="322" width="168" height="168" rx="12" fill="#dff5ff"/>
+  <g fill="#7397b8">
+    <rect x="48" y="322" width="42" height="42" rx="12"/>
+    <rect x="60" y="322" width="30" height="42"/>
+    <rect x="48" y="334" width="42" height="30"/>
+    <rect x="132" y="322" width="42" height="42"/>
+    <rect x="90" y="364" width="42" height="42"/>
+    <rect x="174" y="364" width="42" height="42"/>
+    <rect x="48" y="406" width="42" height="42"/>
+    <rect x="132" y="406" width="42" height="42"/>
+    <rect x="90" y="448" width="42" height="42"/>
+    <rect x="174" y="448" width="42" height="42" rx="12"/>
+    <rect x="174" y="448" width="30" height="42"/>
+    <rect x="174" y="448" width="42" height="30"/>
+  </g>
+  <rect x="48" y="322" width="168" height="168" rx="12" fill="none" stroke="rgb(60, 60, 60)" stroke-width="10"/>
+  <!-- The eraser, as eraser.svg has it, drawn a little smaller toward the
+       top right so the patch shows. -->
+  <g transform="translate(446 105) scale(0.84) translate(-446 -105) rotate(-35, 248, 280)">
+    <rect x="68" y="200" width="160" height="160" rx="20" fill="url(#eraserPinkDark)" stroke="rgb(60,60,60)" stroke-width="10"/>
+    <rect x="228" y="200" width="200" height="160" rx="20" fill="url(#eraserPink)" stroke="rgb(60,60,60)" stroke-width="10"/>
+    <rect x="218" y="192" width="80" height="176" rx="8" fill="url(#bandBlue)" stroke="rgb(50,50,50)" stroke-width="10"/>
+    <rect x="236" y="250" width="44" height="8" rx="3" fill="#8ab0d8"/>
+    <rect x="236" y="268" width="36" height="8" rx="3" fill="#8ab0d8"/>
+    <rect x="236" y="286" width="44" height="8" rx="3" fill="#8ab0d8"/>
+    <rect x="236" y="304" width="30" height="8" rx="3" fill="#8ab0d8"/>
+    <line x1="88" y1="338.824" x2="145" y2="338.824" stroke="#fff" stroke-linecap="round" style="stroke-width: 7px; opacity: 0.48;"/>
+    <line x1="100" y1="350" x2="160" y2="350" stroke="#fff" stroke-linecap="round" style="stroke-width: 5px; opacity: 0.48;"/>
+    <line x1="80" y1="327.648" x2="130" y2="327.648" stroke="#fff" stroke-linecap="round" style="stroke-width: 9px; opacity: 0.48;"/>
+    <rect x="340.432" y="209.711" width="60" height="12" rx="6" fill="#fff" style="opacity: 0.49;"/>
+  </g>
+</svg>

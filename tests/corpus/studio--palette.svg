@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 497 497">
+  <g>
+    <path fill-rule="evenodd" fill="#e8dcc8" stroke="#8b6c42" stroke-width="16"
+      d="M248 22 C 122 22 22 112 22 234 C 22 356 122 448 248 448 C 302 448 334 427 334 394 C 334 367 313 355 313 332 C 313 309 332 297 358 297 C 430 297 476 265 476 208 C 476 105 374 22 248 22 Z
+         M 196 340 m -52 0 a 52 52 0 1 0 104 0 a 52 52 0 1 0 -104 0 Z"/>
+    <circle cx="118" cy="203" r="41" fill="#ff3187"/>
+    <circle cx="196" cy="118" r="41" fill="#ffd23b"/>
+    <circle cx="303" cy="112" r="41" fill="#b0d16f"/>
+    <circle cx="388" cy="186" r="41" fill="#7ed7ff"/>
+  </g>
+</svg>

@@ -1,0 +1,195 @@
+# Where each corpus file came from (under ~/Projects), copied 2026-10-05.
+# Files with the same bytes share one copy.
+de-apps--lntrn-afterglow.svg	Lantern-DE/icons/apps/lntrn-afterglow.svg
+de-apps--lntrn-calculator.svg	Lantern-DE/icons/apps/lntrn-calculator.svg
+de-apps--lntrn-code.svg	Lantern-DE/icons/apps/lntrn-code.svg
+de-apps--lntrn-file-manager.svg	Lantern-DE/icons/apps/lntrn-file-manager.svg
+de-apps--lntrn-file-manager.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Standard/lntrn-file-manager.svg
+de-apps--lntrn-file-manager.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/lntrn-file-manager.svg
+de-apps--lntrn-file-manager.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Standard/lntrn-file-manager.svg
+de-apps--lntrn-file-manager.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/lntrn-file-manager.svg
+de-apps--lntrn-git.svg	Lantern-DE/icons/apps/lntrn-git.svg
+de-apps--lntrn-image-viewer.svg	Lantern-DE/icons/apps/lntrn-image-viewer.svg
+de-apps--lntrn-media-player.svg	Lantern-DE/icons/apps/lntrn-media-player.svg
+de-apps--lntrn-notepad.svg	Lantern-DE/icons/apps/lntrn-notepad.svg
+de-apps--lntrn-screenshot.svg	Lantern-DE/icons/apps/lntrn-screenshot.svg
+de-apps--lntrn-snapshot.svg	Lantern-DE/icons/apps/lntrn-snapshot.svg
+de-apps--lntrn-sysmon.svg	Lantern-DE/icons/apps/lntrn-sysmon.svg
+de-apps--lntrn-system-settings.svg	Lantern-DE/icons/apps/lntrn-system-settings.svg
+de-apps--lntrn-terminal.svg	Lantern-DE/icons/apps/lntrn-terminal.svg
+de-apps--lntrn-terminal.svg	Lantern-DE/lntrn-terminal/assets/terminal.svg
+de-apps--lntrn.svg	Lantern-DE/icons/apps/lntrn.svg
+de-cursors--lntrn-cursor-ew.svg	Lantern-DE/icons/cursors/lntrn-cursor-ew.svg
+de-cursors--lntrn-cursor-lntrn.svg	Lantern-DE/icons/cursors/lntrn-cursor-lntrn.svg
+de-cursors--lntrn-cursor-nesw.svg	Lantern-DE/icons/cursors/lntrn-cursor-nesw.svg
+de-cursors--lntrn-cursor-ns.svg	Lantern-DE/icons/cursors/lntrn-cursor-ns.svg
+de-cursors--lntrn-cursor-nwse.svg	Lantern-DE/icons/cursors/lntrn-cursor-nwse.svg
+de-cursors--lntrn-cursor.svg	Lantern-DE/icons/cursors/lntrn-cursor.svg
+de-folders-awesome--lntrn-folder-alchemy.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-alchemy.svg
+de-folders-awesome--lntrn-folder-arcade.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-arcade.svg
+de-folders-awesome--lntrn-folder-arctic.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-arctic.svg
+de-folders-awesome--lntrn-folder-aurora.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-aurora.svg
+de-folders-awesome--lntrn-folder-butterfly.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-butterfly.svg
+de-folders-awesome--lntrn-folder-casino.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-casino.svg
+de-folders-awesome--lntrn-folder-cherryblossom.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-cherryblossom.svg
+de-folders-awesome--lntrn-folder-circuit.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-circuit.svg
+de-folders-awesome--lntrn-folder-cosmic.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-cosmic.svg
+de-folders-awesome--lntrn-folder-crystal.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-crystal.svg
+de-folders-awesome--lntrn-folder-cyberpunk.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-cyberpunk.svg
+de-folders-awesome--lntrn-folder-desert.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-desert.svg
+de-folders-awesome--lntrn-folder-dna.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-dna.svg
+de-folders-awesome--lntrn-folder-enchanted.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-enchanted.svg
+de-folders-awesome--lntrn-folder-haunted.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-haunted.svg
+de-folders-awesome--lntrn-folder-lava.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-lava.svg
+de-folders-awesome--lntrn-folder-matrix.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-matrix.svg
+de-folders-awesome--lntrn-folder-mushroom.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-mushroom.svg
+de-folders-awesome--lntrn-folder-observatory.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-observatory.svg
+de-folders-awesome--lntrn-folder-ocean.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-ocean.svg
+de-folders-awesome--lntrn-folder-storm.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-storm.svg
+de-folders-awesome--lntrn-folder-treasure.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-treasure.svg
+de-folders-awesome--lntrn-folder-vaporwave.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-vaporwave.svg
+de-folders-awesome--lntrn-folder-wave.svg	Lantern-DE/icons/folders/Awesome/lntrn-folder-wave.svg
+de-folders-colors--lntrn-folder-black.svg	Lantern-DE/icons/folders/Colors/lntrn-folder-black.svg
+de-folders-colors--lntrn-folder-black.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Colors/lntrn-folder-black.svg
+de-folders-colors--lntrn-folder-black.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Colors/lntrn-folder-black.svg
+de-folders-colors--lntrn-folder-blue.svg	Lantern-DE/icons/folders/Colors/lntrn-folder-blue.svg
+de-folders-colors--lntrn-folder-blue.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Colors/lntrn-folder-blue.svg
+de-folders-colors--lntrn-folder-blue.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Colors/lntrn-folder-blue.svg
+de-folders-colors--lntrn-folder-green.svg	Lantern-DE/icons/folders/Colors/lntrn-folder-green.svg
+de-folders-colors--lntrn-folder-green.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Colors/lntrn-folder-green.svg
+de-folders-colors--lntrn-folder-green.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Colors/lntrn-folder-green.svg
+de-folders-colors--lntrn-folder-orange.svg	Lantern-DE/icons/folders/Colors/lntrn-folder-orange.svg
+de-folders-colors--lntrn-folder-orange.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Colors/lntrn-folder-orange.svg
+de-folders-colors--lntrn-folder-orange.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Colors/lntrn-folder-orange.svg
+de-folders-colors--lntrn-folder-purple.svg	Lantern-DE/icons/folders/Colors/lntrn-folder-purple.svg
+de-folders-colors--lntrn-folder-purple.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Colors/lntrn-folder-purple.svg
+de-folders-colors--lntrn-folder-purple.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Colors/lntrn-folder-purple.svg
+de-folders-colors--lntrn-folder-red.svg	Lantern-DE/icons/folders/Colors/lntrn-folder-red.svg
+de-folders-colors--lntrn-folder-red.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Colors/lntrn-folder-red.svg
+de-folders-colors--lntrn-folder-red.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Colors/lntrn-folder-red.svg
+de-folders-colors--lntrn-folder-yellow.svg	Lantern-DE/icons/folders/Colors/lntrn-folder-yellow.svg
+de-folders-colors--lntrn-folder-yellow.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Colors/lntrn-folder-yellow.svg
+de-folders-colors--lntrn-folder-yellow.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Colors/lntrn-folder-yellow.svg
+de-folders-standard--lntrn-file-manager.svg	Lantern-DE/icons/folders/Standard/lntrn-file-manager.svg
+de-folders-standard--lntrn-folder-desktop.svg	Lantern-DE/icons/folders/Standard/lntrn-folder-desktop.svg
+de-folders-standard--lntrn-folder-documents.svg	Lantern-DE/icons/folders/Standard/lntrn-folder-documents.svg
+de-folders-standard--lntrn-folder-downloads.svg	Lantern-DE/icons/folders/Standard/lntrn-folder-downloads.svg
+de-folders-standard--lntrn-folder-music.svg	Lantern-DE/icons/folders/Standard/lntrn-folder-music.svg
+de-folders-standard--lntrn-folder-pictures.svg	Lantern-DE/icons/folders/Standard/lntrn-folder-pictures.svg
+de-folders-standard--lntrn-folder-projects.svg	Lantern-DE/icons/folders/Standard/lntrn-folder-projects.svg
+de-folders-standard--lntrn-folder-videos.svg	Lantern-DE/icons/folders/Standard/lntrn-folder-videos.svg
+de-lntrn-desktop-awesome--lntrn-folder-alchemy.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-alchemy.svg
+de-lntrn-desktop-awesome--lntrn-folder-alchemy.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-alchemy.svg
+de-lntrn-desktop-awesome--lntrn-folder-arcade.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-arcade.svg
+de-lntrn-desktop-awesome--lntrn-folder-arcade.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-arcade.svg
+de-lntrn-desktop-awesome--lntrn-folder-arctic.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-arctic.svg
+de-lntrn-desktop-awesome--lntrn-folder-arctic.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-arctic.svg
+de-lntrn-desktop-awesome--lntrn-folder-aurora.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-aurora.svg
+de-lntrn-desktop-awesome--lntrn-folder-aurora.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-aurora.svg
+de-lntrn-desktop-awesome--lntrn-folder-butterfly.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-butterfly.svg
+de-lntrn-desktop-awesome--lntrn-folder-butterfly.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-butterfly.svg
+de-lntrn-desktop-awesome--lntrn-folder-casino.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-casino.svg
+de-lntrn-desktop-awesome--lntrn-folder-casino.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-casino.svg
+de-lntrn-desktop-awesome--lntrn-folder-cherryblossom.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-cherryblossom.svg
+de-lntrn-desktop-awesome--lntrn-folder-cherryblossom.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-cherryblossom.svg
+de-lntrn-desktop-awesome--lntrn-folder-circuit.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-circuit.svg
+de-lntrn-desktop-awesome--lntrn-folder-circuit.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-circuit.svg
+de-lntrn-desktop-awesome--lntrn-folder-cosmic.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-cosmic.svg
+de-lntrn-desktop-awesome--lntrn-folder-cosmic.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-cosmic.svg
+de-lntrn-desktop-awesome--lntrn-folder-crystal.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-crystal.svg
+de-lntrn-desktop-awesome--lntrn-folder-crystal.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-crystal.svg
+de-lntrn-desktop-awesome--lntrn-folder-cyberpunk.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-cyberpunk.svg
+de-lntrn-desktop-awesome--lntrn-folder-cyberpunk.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-cyberpunk.svg
+de-lntrn-desktop-awesome--lntrn-folder-desert.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-desert.svg
+de-lntrn-desktop-awesome--lntrn-folder-desert.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-desert.svg
+de-lntrn-desktop-awesome--lntrn-folder-dna.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-dna.svg
+de-lntrn-desktop-awesome--lntrn-folder-dna.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-dna.svg
+de-lntrn-desktop-awesome--lntrn-folder-enchanted.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-enchanted.svg
+de-lntrn-desktop-awesome--lntrn-folder-enchanted.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-enchanted.svg
+de-lntrn-desktop-awesome--lntrn-folder-haunted.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-haunted.svg
+de-lntrn-desktop-awesome--lntrn-folder-haunted.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-haunted.svg
+de-lntrn-desktop-awesome--lntrn-folder-lava.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-lava.svg
+de-lntrn-desktop-awesome--lntrn-folder-lava.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-lava.svg
+de-lntrn-desktop-awesome--lntrn-folder-matrix.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-matrix.svg
+de-lntrn-desktop-awesome--lntrn-folder-matrix.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-matrix.svg
+de-lntrn-desktop-awesome--lntrn-folder-mushroom.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-mushroom.svg
+de-lntrn-desktop-awesome--lntrn-folder-mushroom.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-mushroom.svg
+de-lntrn-desktop-awesome--lntrn-folder-observatory.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-observatory.svg
+de-lntrn-desktop-awesome--lntrn-folder-observatory.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-observatory.svg
+de-lntrn-desktop-awesome--lntrn-folder-ocean.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-ocean.svg
+de-lntrn-desktop-awesome--lntrn-folder-ocean.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-ocean.svg
+de-lntrn-desktop-awesome--lntrn-folder-storm.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-storm.svg
+de-lntrn-desktop-awesome--lntrn-folder-storm.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-storm.svg
+de-lntrn-desktop-awesome--lntrn-folder-treasure.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-treasure.svg
+de-lntrn-desktop-awesome--lntrn-folder-treasure.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-treasure.svg
+de-lntrn-desktop-awesome--lntrn-folder-vaporwave.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-vaporwave.svg
+de-lntrn-desktop-awesome--lntrn-folder-vaporwave.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-vaporwave.svg
+de-lntrn-desktop-awesome--lntrn-folder-wave.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Awesome/lntrn-folder-wave.svg
+de-lntrn-desktop-awesome--lntrn-folder-wave.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Awesome/lntrn-folder-wave.svg
+de-lntrn-desktop-standard--lntrn-folder-desktop.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Standard/lntrn-folder-desktop.svg
+de-lntrn-desktop-standard--lntrn-folder-desktop.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Standard/lntrn-folder-desktop.svg
+de-lntrn-desktop-standard--lntrn-folder-documents.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Standard/lntrn-folder-documents.svg
+de-lntrn-desktop-standard--lntrn-folder-documents.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Standard/lntrn-folder-documents.svg
+de-lntrn-desktop-standard--lntrn-folder-downloads.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Standard/lntrn-folder-downloads.svg
+de-lntrn-desktop-standard--lntrn-folder-downloads.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Standard/lntrn-folder-downloads.svg
+de-lntrn-desktop-standard--lntrn-folder-music.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Standard/lntrn-folder-music.svg
+de-lntrn-desktop-standard--lntrn-folder-music.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Standard/lntrn-folder-music.svg
+de-lntrn-desktop-standard--lntrn-folder-pictures.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Standard/lntrn-folder-pictures.svg
+de-lntrn-desktop-standard--lntrn-folder-pictures.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Standard/lntrn-folder-pictures.svg
+de-lntrn-desktop-standard--lntrn-folder-projects.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Standard/lntrn-folder-projects.svg
+de-lntrn-desktop-standard--lntrn-folder-videos.svg	Lantern-DE/lntrn-desktop/src/assets/icons/Folder Icons/Standard/lntrn-folder-videos.svg
+de-lntrn-desktop-standard--lntrn-folder-videos.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Standard/lntrn-folder-videos.svg
+de-lntrn-file-manager-standard--lntrn-folder-projects.svg	Lantern-DE/lntrn-file-manager/src/assets/icons/Folder Icons/Standard/lntrn-folder-projects.svg
+de-lntrn-system-settings--settings.svg	Lantern-DE/lntrn-system-settings/assets/settings.svg
+de-system--spark-brightness-high.svg	Lantern-DE/icons/system/spark-brightness-high.svg
+de-system--spark-brightness-low.svg	Lantern-DE/icons/system/spark-brightness-low.svg
+de-system--spark-menu-lockscreen.svg	Lantern-DE/icons/system/spark-menu-lockscreen.svg
+de-system--spark-menu-restart.svg	Lantern-DE/icons/system/spark-menu-restart.svg
+de-system--spark-menu-shutdown.svg	Lantern-DE/icons/system/spark-menu-shutdown.svg
+de-system--spark-menu-sleep.svg	Lantern-DE/icons/system/spark-menu-sleep.svg
+de-system--spark-sound-high.svg	Lantern-DE/icons/system/spark-sound-high.svg
+de-system--spark-sound-low.svg	Lantern-DE/icons/system/spark-sound-low.svg
+de-system--spark-sound-medium.svg	Lantern-DE/icons/system/spark-sound-medium.svg
+de-system--spark-sound-muted.svg	Lantern-DE/icons/system/spark-sound-muted.svg
+labs--react.svg	lntrnlabs/src/assets/react.svg
+labs-public--vite.svg	lntrnlabs/public/vite.svg
+prism-deploy--lantern-prism.svg	lantern-prism/deploy/lantern-prism.svg
+studio--add-layer.svg	lantern-studio-3/crates/studio-app/assets/icons/add_layer.svg
+studio--bg-eraser.svg	lantern-studio-3/crates/studio-app/assets/icons/bg_eraser.svg
+studio--brush.svg	lantern-studio-3/crates/studio-app/assets/icons/brush.svg
+studio--burn.svg	lantern-studio-3/crates/studio-app/assets/icons/burn.svg
+studio--circle.svg	lantern-studio-3/crates/studio-app/assets/icons/circle.svg
+studio--clipping-mask.svg	lantern-studio-3/crates/studio-app/assets/icons/clipping_mask.svg
+studio--clone-stamp.svg	lantern-studio-3/crates/studio-app/assets/icons/clone_stamp.svg
+studio--crop.svg	lantern-studio-3/crates/studio-app/assets/icons/crop.svg
+studio--delete-layer.svg	lantern-studio-3/crates/studio-app/assets/icons/delete_layer.svg
+studio--dodge.svg	lantern-studio-3/crates/studio-app/assets/icons/dodge.svg
+studio--duplicate-layer.svg	lantern-studio-3/crates/studio-app/assets/icons/duplicate_layer.svg
+studio--eraser.svg	lantern-studio-3/crates/studio-app/assets/icons/eraser.svg
+studio--eyedropper.svg	lantern-studio-3/crates/studio-app/assets/icons/eyedropper.svg
+studio--folder.svg	lantern-studio-3/crates/studio-app/assets/icons/folder.svg
+studio--gallery.svg	lantern-studio-3/crates/studio-app/assets/icons/gallery.svg
+studio--gradient.svg	lantern-studio-3/crates/studio-app/assets/icons/gradient.svg
+studio--invisible.svg	lantern-studio-3/crates/studio-app/assets/icons/invisible.svg
+studio--lasso.svg	lantern-studio-3/crates/studio-app/assets/icons/lasso.svg
+studio--layer-crop.svg	lantern-studio-3/crates/studio-app/assets/icons/layer_crop.svg
+studio--layer-mask.svg	lantern-studio-3/crates/studio-app/assets/icons/layer_mask.svg
+studio--layer.svg	lantern-studio-3/crates/studio-app/assets/icons/layer.svg
+studio--layers.svg	lantern-studio-3/crates/studio-app/assets/icons/layers.svg
+studio--line.svg	lantern-studio-3/crates/studio-app/assets/icons/line.svg
+studio--magic-wand.svg	lantern-studio-3/crates/studio-app/assets/icons/magic_wand.svg
+studio--move.svg	lantern-studio-3/crates/studio-app/assets/icons/move.svg
+studio--paint-bucket.svg	lantern-studio-3/crates/studio-app/assets/icons/paint_bucket.svg
+studio--palette.svg	lantern-studio-3/crates/studio-app/assets/icons/palette.svg
+studio--pen.svg	lantern-studio-3/crates/studio-app/assets/icons/pen.svg
+studio--pencil.svg	lantern-studio-3/crates/studio-app/assets/icons/pencil.svg
+studio--picture.svg	lantern-studio-3/crates/studio-app/assets/icons/picture.svg
+studio--pointer.svg	lantern-studio-3/crates/studio-app/assets/icons/pointer.svg
+studio--rectangle.svg	lantern-studio-3/crates/studio-app/assets/icons/rectangle.svg
+studio--selection.svg	lantern-studio-3/crates/studio-app/assets/icons/selection.svg
+studio--settings.svg	lantern-studio-3/crates/studio-app/assets/icons/settings.svg
+studio--sponge.svg	lantern-studio-3/crates/studio-app/assets/icons/sponge.svg
+studio--text.svg	lantern-studio-3/crates/studio-app/assets/icons/text.svg
+studio--transform.svg	lantern-studio-3/crates/studio-app/assets/icons/transform.svg
+studio--transparency.svg	lantern-studio-3/crates/studio-app/assets/icons/transparency.svg
+studio--visible.svg	lantern-studio-3/crates/studio-app/assets/icons/visible.svg

@@ -1,0 +1,18 @@
+[package]
+name = "ink-core"
+description = "Lantern Ink's core: open documents, Commands applied with snapshot undo, saving, rendering and export. Headless."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ink-doc.workspace = true
+ink-render.workspace = true
+lntrn-image.workspace = true
+
+[dev-dependencies]
+lntrn-image.workspace = true

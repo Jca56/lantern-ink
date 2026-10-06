@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512px" height="512px">
+  <defs>
+    <linearGradient id="rope" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgb(255, 200, 0)"/>
+      <stop offset="1" stop-color="rgb(152, 113, 0)"/>
+    </linearGradient>
+    <linearGradient id="knot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgb(108, 230, 255)"/>
+      <stop offset="1" stop-color="rgb(0, 137, 160)"/>
+    </linearGradient>
+    <linearGradient id="tail" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgb(152, 113, 0)"/>
+      <stop offset="1" stop-color="rgb(255, 200, 0)"/>
+    </linearGradient>
+  </defs>
+  <!-- Loop: outline pass, then rope-coloured core, then a twist hint. -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path id="loop" d="M 214 372 C 130 340 40 262 56 176 C 72 92 186 38 292 52 C 404 66 476 156 452 246 C 430 326 322 350 250 366 Z"
+          stroke="rgb(75, 73, 73)" stroke-width="54"/>
+    <path d="M 214 372 C 130 340 40 262 56 176 C 72 92 186 38 292 52 C 404 66 476 156 452 246 C 430 326 322 350 250 366 Z"
+          stroke="url(#rope)" stroke-width="34"/>
+    <path d="M 214 372 C 130 340 40 262 56 176 C 72 92 186 38 292 52 C 404 66 476 156 452 246 C 430 326 322 350 250 366 Z"
+          stroke="rgb(75, 73, 73)" stroke-width="7" stroke-dasharray="16 22" opacity="0.35"/>
+    <!-- Tail from the knot down to the bottom edge. -->
+    <path d="M 226 392 C 196 424 258 442 236 484" stroke="rgb(75, 73, 73)" stroke-width="50"/>
+    <path d="M 226 392 C 196 424 258 442 236 484" stroke="url(#tail)" stroke-width="30"/>
+  </g>
+  <!-- Knot where the rope passes through itself. -->
+  <rect x="192" y="344" width="80" height="56" rx="22" ry="22" transform="rotate(-24 232 372)"
+        fill="url(#knot)" stroke="rgb(75, 73, 73)" stroke-width="10"/>
+  <rect x="206" y="352" width="30" height="12" rx="6" ry="6" transform="rotate(-24 232 372)"
+        fill="rgb(255, 255, 255)" opacity="0.35"/>
+</svg>
