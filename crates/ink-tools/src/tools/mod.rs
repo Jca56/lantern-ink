@@ -5,6 +5,7 @@
 
 mod arrange;
 mod docs;
+mod effects;
 mod gradients;
 mod groups;
 mod history;
@@ -58,6 +59,7 @@ pub(crate) fn all() -> Vec<Entry> {
     tools.extend(groups::tools());
     tools.extend(style::tools());
     tools.extend(gradients::tools());
+    tools.extend(effects::tools());
     tools.extend(query::tools());
     tools.extend(page::tools());
     tools.extend(history::tools());

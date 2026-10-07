@@ -125,3 +125,62 @@ fn a_node_moved_between_groups_stays_where_it_shows() {
     // What shows nowhere itself just moves.
     assert_eq!(after(r#"<g transform="scale(2)"/><linearGradient id="g"/>"#, Command::Move { nodes: ids(&[3]), place: Place::LastIn(NodeId(2)) }), r#"<g transform="scale(2)"><linearGradient id="g"/></g>"#);
 }
+
+fn clip(nodes: &[u64], by: &[u64]) -> Command {
+    Command::SetClip { nodes: ids(nodes), by: ids(by), id: "clip-1".into() }
+}
+
+#[test]
+fn nodes_are_cut_to_shapes_that_go_into_a_clip_path() {
+    let inner = "\n  <rect width=\"8\" height=\"8\"/>\n  <path d=\"M0 12H8\" style=\"stroke: red\"/>\n  <circle cx=\"4\" cy=\"4\" r=\"3\"/>\n  <rect x=\"0\" y=\"11\" width=\"4\" height=\"2\"/>\n";
+    let mut d = doc(inner);
+    let applied = d.apply(&clip(&[2, 3], &[5, 4])).unwrap();
+    assert_eq!((applied.created.clone(), applied.moved.clone(), applied.changed.clone()), (ids(&[7]), ids(&[4, 5]), ids(&[2, 3])));
+    // The <defs> is made for it; the shapes sit in it as they sat; each
+    // node says its clip where it says such things.
+    assert_eq!(
+        d.to_svg(),
+        format!("{OPEN}\n  <defs>\n    <clipPath id=\"clip-1\">\n      <circle cx=\"4\" cy=\"4\" r=\"3\"/>\n      <rect x=\"0\" y=\"11\" width=\"4\" height=\"2\"/>\n    </clipPath>\n  </defs>\n  <rect width=\"8\" height=\"8\" clip-path=\"url(#clip-1)\"/>\n  <path d=\"M0 12H8\" style=\"stroke: red\" clip-path=\"url(#clip-1)\"/>\n</svg>")
+    );
+    // Taken off one, the clip path still cuts the other and stays.
+    let before = d.to_svg();
+    d.apply(&clip(&[2], &[])).unwrap();
+    assert_eq!(d.to_svg(), before.replace("<rect width=\"8\" height=\"8\" clip-path=\"url(#clip-1)\"/>", "<rect width=\"8\" height=\"8\"/>"));
+    // Taken off the last, it's taken apart: its shapes are back in the
+    // drawing, just over what they cut.
+    let applied = d.apply(&clip(&[3], &[])).unwrap();
+    assert_eq!((applied.removed.clone(), applied.moved.clone(), applied.changed.clone()), (ids(&[7]), ids(&[4, 5]), ids(&[3])));
+    assert_eq!(d.to_svg(), format!("{OPEN}\n  <defs>\n  </defs>\n  <rect width=\"8\" height=\"8\"/>\n  <path d=\"M0 12H8\" style=\"stroke: red\"/>\n  <circle cx=\"4\" cy=\"4\" r=\"3\"/>\n  <rect x=\"0\" y=\"11\" width=\"4\" height=\"2\"/>\n</svg>"));
+    assert!(d.apply(&clip(&[3], &[])).unwrap().is_nothing(), "nothing to take off");
+}
+
+#[test]
+fn a_clip_is_written_in_the_coordinates_of_what_it_cuts() {
+    // The group is moved ten across, and the circle is under a scale of
+    // its own: in the clip path it's where it showed, in the group's
+    // numbers.
+    let inner = r#"<g transform="translate(10 0)" mask="url(#m)"><rect width="8" height="8"/></g><g transform="scale(2)" mask="url(#m)"><circle cx="7" cy="2" r="1"/></g>"#;
+    assert_eq!(
+        after(inner, clip(&[2], &[5])),
+        r#"<defs><clipPath id="clip-1"><circle cx="4" cy="4" r="2"/></clipPath></defs><g transform="translate(10 0)" mask="url(#m)" clip-path="url(#clip-1)"><rect width="8" height="8"/></g><g transform="scale(2)" mask="url(#m)"></g>"#
+    );
+    // And comes back out where it showed, in the root's.
+    let mut d = doc(inner);
+    d.apply(&clip(&[2], &[5])).unwrap();
+    d.apply(&clip(&[2], &[])).unwrap();
+    assert!(d.to_svg().contains(r#"<g transform="translate(10 0)" mask="url(#m)"><rect width="8" height="8"/></g><circle cx="14" cy="4" r="2"/>"#), "{}", d.to_svg());
+}
+
+#[test]
+fn what_cannot_be_a_clip_says_so() {
+    let inner = r#"<rect width="8" height="8"/><g><circle r="2"/></g><text>hi</text><g transform="scale(2)" mask="url(#m)"><path d="M0 0H4"/></g><defs/>"#;
+    assert_eq!(refused(inner, clip(&[2], &[3])), "N3 is a <g>: a clip path is cut from shapes (a rect, a circle, a path, …), one or several");
+    assert_eq!(refused(inner, clip(&[2], &[5])), "N5 is a <text>: a clip path is cut from shapes (a rect, a circle, a path, …), one or several");
+    assert_eq!(refused(inner, clip(&[2], &[2])), "N2 is one of the nodes to clip: a node can't be cut by itself or by what's in it");
+    assert_eq!(refused(inner, clip(&[3], &[4])), "N4 is inside N3: a node can't be cut by itself or by what's in it");
+    assert_eq!(refused(inner, clip(&[1], &[2])), "the root <svg> can't be clipped: clip a group of what's in it");
+    assert_eq!(refused(inner, clip(&[8], &[2])), "N8 is a <defs>, which shows nowhere itself: there's nothing of it to clip");
+    assert_eq!(refused(inner, clip(&[2, 7], &[4])), "N2 and N7 are under different transforms, and one clip path can only be in the coordinates of one of them: clip them one at a time, or group them and clip the group");
+    assert_eq!(refused(inner, clip(&[], &[4])), "there's nothing to clip: name at least one node");
+    assert_eq!(refused(inner, Command::SetClip { nodes: ids(&[2]), by: ids(&[4]), id: "".into() }), "a <clipPath> put in <defs> needs an id for others to use it by");
+}

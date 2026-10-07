@@ -43,6 +43,12 @@ pub fn path_of(node: &Node) -> Path {
     }
 }
 
+/// From `id`'s own coordinates to the document's: its own transform,
+/// then every transform it's under.
+pub fn to_doc(doc: &Document, id: NodeId) -> Option<Affine> {
+    crate::settle::node_to_doc(doc, id).ok()
+}
+
 /// Where every drawn node sits in the drawing: the box around its
 /// outline (for a group, around everything in it), strokes aside, in the
 /// document's coordinates (the root's user units), through whatever

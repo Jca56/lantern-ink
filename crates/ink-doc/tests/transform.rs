@@ -145,6 +145,45 @@ fn a_gradient_in_a_shapes_own_coordinates_goes_with_it_when_it_is_the_shapes_alo
 }
 
 #[test]
+fn a_clip_path_that_is_a_nodes_alone_goes_with_it() {
+    // A clipped group: its children take the move, and so does the
+    // shape that clips them. No transform is left anywhere.
+    let clipped = r##"<clipPath id="c"><rect width="12" height="12"/></clipPath><g clip-path="url(#c)"><path d="M4 14 H12"/></g>"##;
+    assert_eq!(through(clipped, &[4], shift(2.0, 3.0)), r##"<clipPath id="c"><rect width="12" height="12" x="2" y="3"/></clipPath><g clip-path="url(#c)"><path d="M6 17 H14"/></g>"##);
+    assert_eq!(through(clipped, &[4], grow(2.0, 0.5)), r##"<clipPath id="c"><rect width="24" height="6"/></clipPath><g clip-path="url(#c)"><path d="M8 7 H24"/></g>"##);
+    // A clipped shape, the same.
+    let shape = r##"<clipPath id="c"><circle cx="4" cy="4" r="4"/></clipPath><rect width="8" height="8" clip-path="url(#c)"/>"##;
+    assert_eq!(through(shape, &[4], shift(1.0, 1.0).then(&grow(2.0, 2.0))), r##"<clipPath id="c"><circle cx="10" cy="10" r="8"/></clipPath><rect width="16" height="16" clip-path="url(#c)" x="2" y="2"/>"##);
+    // What the clip's shapes can't say for themselves stays on the clip
+    // path, as it would on a group.
+    assert_eq!(through(clipped, &[4], turn(45.0, 0.0, 0.0)), r##"<clipPath id="c" transform="rotate(45)"><rect width="12" height="12"/></clipPath><g clip-path="url(#c)"><path d="M-7.071 12.728 L-1.414 18.385"/></g>"##);
+    // And where the node keeps its transform, the clip is under it
+    // already: nothing of it changes.
+    let turned = r##"<clipPath id="c"><rect width="12" height="12"/></clipPath><rect width="8" height="8" clip-path="url(#c)"/>"##;
+    assert_eq!(through(turned, &[4], Affine::skew_x(45f64.to_radians())), r##"<clipPath id="c"><rect width="12" height="12"/></clipPath><rect width="8" height="8" clip-path="url(#c)" transform="matrix(1 0 1 1 0 0)"/>"##);
+}
+
+#[test]
+fn a_clip_path_others_use_is_never_touched() {
+    let clip = r##"<clipPath id="c"><rect width="12" height="12"/></clipPath>"##;
+    // Two nodes cut by it: the one moved keeps its move as a transform.
+    let shared = format!(r##"{clip}<g clip-path="url(#c)"><path d="M4 14 H12"/></g><rect width="4" height="4" clip-path="url(#c)"/>"##);
+    assert_eq!(through(&shared, &[4], shift(2.0, 3.0)), format!(r##"{clip}<g clip-path="url(#c)" transform="translate(2 3)"><path d="M4 14 H12"/></g><rect width="4" height="4" clip-path="url(#c)"/>"##));
+    // One that's cut by another, or goes by its node's box, or isn't
+    // there to look at, or is a mask: the node holds what it's given.
+    for held in [
+        r##"<clipPath id="c" clip-path="url(#d)"><rect width="12" height="12"/></clipPath><clipPath id="d"><rect width="6" height="6"/></clipPath>"##,
+        r##"<clipPath id="c" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath>"##,
+        r##"<mask id="c"><rect width="12" height="12"/></mask>"##,
+    ] {
+        let out = through(&format!(r##"{held}<g id="it" clip-path="url(#c)" mask="none"><path d="M4 14 H12"/></g>"##), &[if held.contains("id=\"d\"") { 6 } else { 4 }], shift(2.0, 3.0));
+        assert!(out.ends_with(r##"<g id="it" clip-path="url(#c)" mask="none" transform="translate(2 3)"><path d="M4 14 H12"/></g>"##), "{out}");
+        assert!(out.starts_with(held), "{out}");
+    }
+    assert_eq!(through(&format!(r##"{clip}<g mask="url(#m)" clip-path="url(#c)"><path d="M0 0H4"/></g>"##), &[4], shift(1.0, 0.0)), format!(r##"{clip}<g mask="url(#m)" clip-path="url(#c)" transform="translate(1 0)"><path d="M0 0H4"/></g>"##));
+}
+
+#[test]
 fn a_gradient_other_shapes_use_is_never_touched() {
     let gradient = r#"<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="0" y2="12"/>"#;
     // Two shapes paint with it: the one moved keeps its move as a

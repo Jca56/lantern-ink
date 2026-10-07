@@ -49,6 +49,11 @@ pub enum Command {
     /// nothing else has) into the drawing's `<defs>`, which is made if
     /// there isn't one.
     Define { elements: Vec<Element> },
+    /// Cut `nodes` to the shapes `by`, which become a clip path called
+    /// `id` in `<defs>` and stay where they show. With no `by`, take the
+    /// clip paths off `nodes` instead: one that then cuts nothing has
+    /// its shapes put back in the drawing, over what they cut.
+    SetClip { nodes: Vec<NodeId>, by: Vec<NodeId>, id: String },
     /// Set how `nodes` are painted: each of `set` is a property and what
     /// it's set to (`None` takes it off). A property is one SVG has,
     /// and its value is checked where Ink draws with it. Each is written
@@ -207,6 +212,13 @@ impl Document {
             Command::Define { elements } => {
                 let made = self.define(elements)?;
                 applied.created.extend(made);
+            }
+            Command::SetClip { nodes, by, id } => {
+                let did = if by.is_empty() { self.unclip(nodes)? } else { self.clip(nodes, by, id)? };
+                applied.created.extend(did.created);
+                applied.moved.extend(did.moved);
+                applied.removed.extend(did.removed);
+                applied.note(did.changed);
             }
             Command::SetStyle { nodes, set } => {
                 let changed = self.set_style(nodes, set)?;

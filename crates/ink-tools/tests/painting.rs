@@ -117,3 +117,81 @@ fn a_gradient_is_made_painted_with_and_changed() {
     assert!(text(&ran).contains("Named: @g = N"), "{}", text(&ran));
     assert!(source(&mut s).contains("<linearGradient id=\"gradient-1\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\" spreadMethod=\"repeat\">"), "{}", source(&mut s));
 }
+
+#[test]
+fn nodes_are_cut_to_shapes_and_let_go_again() {
+    let (mut s, _) = server("clips");
+    ok(&mut s, "doc_new", "{}");
+    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<rect id='sky' width='24' height='24' fill='#2a9df4'/><g id='hills'><path d='M0 24 L8 10 L16 24 Z' fill='#3a3'/></g><circle id='hole' cx='12' cy='12' r='8'/>"}"##);
+    let source = |s: &mut Server<Ink>| text(&ok(s, "doc_source", r#"{"doc_id":"d1"}"#)).lines().skip(1).map(str::to_owned).collect::<Vec<_>>().join("\n");
+    let alpha = |s: &mut Server<Ink>, x: u32, y: u32| picture(&ok(s, "doc_preview", r#"{"doc_id":"d1","max_edge":96,"background":"none"}"#)).1.pixel(x, y)[3];
+    assert_eq!(alpha(&mut s, 4, 4), 255, "the sky, into its corner");
+    // The circle leaves the drawing and cuts the sky and the hills.
+    let cut = ok(&mut s, "clip_set", r#"{"doc_id":"d1","node_ids":["N2","N3"],"by":["N5"],"id":"porthole"}"#);
+    assert_eq!(text(&cut), "Made N7 <clipPath id=\"porthole\"> from N5: it now cuts N2, N3, which show only where it is.");
+    assert_eq!((data(&cut, "node_id"), data(&cut, "id")), ("N7", "porthole"));
+    assert_eq!(
+        source(&mut s),
+        "  <defs>\n    <clipPath id=\"porthole\">\n      <circle id='hole' cx='12' cy='12' r='8'/>\n    </clipPath>\n  </defs>\n  <rect id='sky' width='24' height='24' fill='#2a9df4' clip-path=\"url(#porthole)\"/>\n  <g id='hills' clip-path=\"url(#porthole)\">\n    <path d='M0 24 L8 10 L16 24 Z' fill='#3a3'/>\n  </g>\n</svg>"
+    );
+    assert_eq!((alpha(&mut s, 4, 4), alpha(&mut s, 48, 48)), (0, 255), "only inside the circle now");
+    // Two nodes use it, so neither takes it along: a move stays a
+    // transform. (One node's alone, it would go with it.)
+    ok(&mut s, "node_transform", r#"{"doc_id":"d1","node_ids":["N3"],"move":[2,0]}"#);
+    assert!(source(&mut s).contains("<g id='hills' clip-path=\"url(#porthole)\" transform=\"translate(2 0)\">"));
+    ok(&mut s, "history_undo", r#"{"doc_id":"d1"}"#);
+    // Let go, one at a time: the last brings the circle back, over what
+    // it cut.
+    assert_eq!(text(&ok(&mut s, "clip_set", r#"{"doc_id":"d1","node_ids":["N2"],"release":true}"#)), "Took the clip off N2.");
+    ok(&mut s, "node_transform", r#"{"doc_id":"d1","node_ids":["N3"],"move":[2,0]}"#);
+    assert!(source(&mut s).contains("<circle id='hole' cx='14' cy='12' r='8'/>\n    </clipPath>") && source(&mut s).contains("<path d='M2 24 L10 10 L18 24 Z' fill='#3a3'/>"), "its alone now, the clip goes where it goes: {}", source(&mut s));
+    assert_eq!(text(&ok(&mut s, "clip_set", r#"{"doc_id":"d1","node_ids":["N3"],"release":true}"#)), "Took the clip off N3. Its clip path cut nothing any more and is gone: N5 is back in the drawing, over what it cut.");
+    assert!(source(&mut s).ends_with("  <g id='hills'>\n    <path d='M2 24 L10 10 L18 24 Z' fill='#3a3'/>\n  </g>\n  <circle id='hole' cx='14' cy='12' r='8'/>\n</svg>"), "{}", source(&mut s));
+    assert_eq!(text(&ok(&mut s, "clip_set", r#"{"doc_id":"d1","node_ids":["N3"],"release":true}"#)), "Nothing changed: they had no clip path to take off.");
+    for (args, says) in [
+        (r#""node_ids":["N2"]"#, "say what to cut them to: by (one or more shapes), or release: true to take their clip off"),
+        (r#""node_ids":["N2"],"by":["N5"],"release":true"#, "give by or release, not both"),
+        (r#""node_ids":["N2"],"by":["N3"]"#, "N3 is a <g>: a clip path is cut from shapes (a rect, a circle, a path, …), one or several"),
+        (r#""node_ids":["N2"],"by":["N2"]"#, "N2 is one of the nodes to clip: a node can't be cut by itself or by what's in it"),
+        (r#""node_ids":["N2"],"by":["N5"],"id":"a b""#, "\"a b\" can't be an id: letters, digits, - and _ only, so it can be written url(#…)"),
+    ] {
+        assert_eq!(refused(&mut s, "clip_set", &format!(r#"{{"doc_id":"d1",{args}}}"#)), says);
+    }
+}
+
+#[test]
+fn nodes_are_given_shadows_and_blurs() {
+    let (mut s, _) = server("filters");
+    ok(&mut s, "doc_new", "{}");
+    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<rect id='card' x='6' y='6' width='12' height='8' rx='2' fill='#ffe9a8'/><circle id='dot' cx='12' cy='19' r='2' fill='#ff2e5b'/><path id='line' d='M2 2 H10' stroke='#fff'/>"}"##);
+    let source = |s: &mut Server<Ink>| text(&ok(s, "doc_source", r#"{"doc_id":"d1"}"#)).lines().skip(1).map(str::to_owned).collect::<Vec<_>>().join("\n");
+    let alpha = |s: &mut Server<Ink>, x: u32, y: u32| picture(&ok(s, "doc_preview", r#"{"doc_id":"d1","max_edge":96,"background":"none"}"#)).1.pixel(x, y)[3];
+    assert_eq!(alpha(&mut s, 48, 62), 0, "nothing under the card yet");
+    // A shadow, with room in its region for how far it reaches: 3 × the
+    // blur and the offset, against the card's 12 × 8 box.
+    let cast = ok(&mut s, "filter_set", r##"{"doc_id":"d1","node_ids":["N2"],"shadow":{"dy":1.5,"blur":1,"color":"#12100e","opacity":0.6}}"##);
+    assert_eq!(text(&cast), "Made N6 <filter id=\"shadow-1\">: it now filters N2.");
+    assert_eq!(
+        source(&mut s),
+        "  <defs>\n    <filter id=\"shadow-1\" x=\"-48%\" y=\"-67%\" width=\"195%\" height=\"233%\">\n      <feDropShadow dx=\"0\" dy=\"1.5\" stdDeviation=\"1\" flood-color=\"#12100e\" flood-opacity=\"0.6\"/>\n    </filter>\n  </defs>\n  <rect id='card' x='6' y='6' width='12' height='8' rx='2' fill='#ffe9a8' filter=\"url(#shadow-1)\"/>\n  <circle id='dot' cx='12' cy='19' r='2' fill='#ff2e5b'/>\n  <path id='line' d='M2 2 H10' stroke='#fff'/>\n</svg>"
+    );
+    assert!(alpha(&mut s, 48, 62) > 60, "its shadow falls under it");
+    // A blur, of the node itself; the same filter on two nodes at once.
+    let soft = ok(&mut s, "filter_set", r#"{"doc_id":"d1","node_ids":["N3","N2"],"blur":0.5,"id":"soft"}"#);
+    assert_eq!(text(&soft), "Made N8 <filter id=\"soft\">: it now filters N3, N2.");
+    assert!(source(&mut s).contains("<filter id=\"soft\" x=\"-48%\" y=\"-48%\" width=\"195%\" height=\"195%\">\n      <feGaussianBlur stdDeviation=\"0.5\"/>"), "room for the smaller of the two: {}", source(&mut s));
+    // Taken off.
+    assert_eq!(text(&ok(&mut s, "filter_set", r#"{"doc_id":"d1","node_ids":["N2","N3"],"remove":true}"#)), "Took the filter off N2, N3.");
+    assert_eq!(text(&ok(&mut s, "filter_set", r#"{"doc_id":"d1","node_ids":["N2"],"remove":true}"#)), "Nothing changed: they had no filter to take off.");
+    for (args, says) in [
+        (r#""node_ids":["N2"]"#, "say what to give them: shadow, blur, or remove: true to take their filter off"),
+        (r#""node_ids":["N2"],"shadow":{},"blur":1"#, "give one of shadow, blur or remove"),
+        (r#""node_ids":["N2"],"shadow":{"spread":2}"#, "a shadow has dx, dy, blur, color and opacity, not \"spread\""),
+        (r#""node_ids":["N2"],"shadow":{"color":"blurple"}"#, "a shadow's \"color\" should be a colour: \"#rrggbb\", a name, rgb(…)"),
+        (r#""node_ids":["N2"],"shadow":{"opacity":2}"#, "a shadow's blur isn't less than nothing, and its opacity is from 0 to 1"),
+        (r#""node_ids":["N2"],"blur":0"#, "a blur of nothing blurs nothing: give more than 0, or remove: true to take the filter off"),
+        (r#""node_ids":["N4"],"blur":1"#, "N4 <path id=\"line\"> has no box with both a width and a height, and a filter shows within a region measured by its node's box: group it with what it belongs to, and filter the group"),
+    ] {
+        assert_eq!(refused(&mut s, "filter_set", &format!(r#"{{"doc_id":"d1",{args}}}"#)), says);
+    }
+}

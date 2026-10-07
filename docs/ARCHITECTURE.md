@@ -266,6 +266,22 @@ shape, another gradient's `href`, a group handing it to its children)
 is never touched (Alva, 2026-10-06): its shape keeps the move in
 `transform`.
 
+**So does a clip path** (Alva, 2026-10-07, changing what M3a did): one
+that is a node's alone goes where the node's numbers go, its shapes
+taking what the node took (or the clip path keeping it as its own
+`transform`, as a group would). So a clipped group passes a move down
+like any other. A clip path that others use, that goes by its node's
+box, that is itself cut by another, or that isn't there to look at,
+is never touched, and holds its node's transform. A mask always does.
+
+**`SetClip`** (`clip.rs`) cuts nodes to shapes: the shapes go into a
+new `<clipPath>` in `<defs>`, written in the coordinates of what they
+cut and staying where they showed. With no shapes it takes the clip
+off, and a clip path that then cuts nothing is taken apart, its shapes
+put back in the drawing over what they cut. `SetFilter` is
+`filter_set`, over `Define` and `SetStyle`: a drop shadow or a blur in
+a `<filter>` whose region has room for how far the effect reaches.
+
 **Where a transform is written** (D13, `settle.rs`). A node put through
 a transform looks exactly as SVG says it would with that transform on
 it, so:
@@ -479,7 +495,7 @@ carries over; only the differences and the tool list are new here.
 | Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox) |
 | Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
 | Paths | `path_set`, `path_edit` (anchors and handles), `path_op` (boolean ops, outline stroke, simplify, reverse, to path) |
-| Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`‡, `gradient_set`‡, `clip_set`, `filter_set` (‡ = built in M3b) |
+| Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`‡, `gradient_set`‡, `clip_set`‡, `filter_set`‡ (‡ = built in M3b) |
 | Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
 | Queries | `doc_query`† (what's at a point; a node's bounds are `node_info`'s) |
 | History | `history_undo`\*, `history_redo`\*, `batch`\* |
@@ -595,7 +611,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint, **c** paths, **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths, **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 
@@ -623,7 +639,7 @@ the foundation; the rest wait for their milestone.
 | D10 | Addresses | ✅ **Decided 2026-10-05, as recommended:** docs `d1` / `w1`, nodes `N7`, alive while the document is open and not written to the file; an element's own `id` is just an attribute | Before M1 |
 | D11 | MCP plumbing | ✅ **Decided 2026-10-06, as recommended: a new LUI2 crate, `lntrn-mcp`** (JSON-RPC lines, both protocol eras, schema pieces, cancellation, the socket pipe): additive, nothing existing changes, and LS3 can move onto it whenever you like. The alternative is copying about 1.5k lines out of `studio-tools`, to be fixed twice whenever MCP changes | M2 |
 | D12 | The Studio look | **Copy** LS3's theme, layout, chrome and controls into `ink-app` (about 1.8k lines); consider a shared crate once we see what the two apps really share. U004 and U042 keep app looks out of LUI2 | M4 |
-| D13 | Moving and scaling | ✅ **Decided 2026-10-06, as recommended: bake into the geometry whenever that's exact**; keep a `transform` only where it isn't (a rotated rect stays a `<rect>` with a `rotate`, so its radius stays adjustable). The alternatives were always a `transform` (the numbers stop saying where things are) and always baking (a rotated rect becomes a path). **For groups, decided the same day: passed down** to what's in them when all of it can take it exactly, kept as the group's own `transform` otherwise (§3.4) | M3 |
+| D13 | Moving and scaling | ✅ **Decided 2026-10-06, as recommended: bake into the geometry whenever that's exact**; keep a `transform` only where it isn't (a rotated rect stays a `<rect>` with a `rotate`, so its radius stays adjustable). The alternatives were always a `transform` (the numbers stop saying where things are) and always baking (a rotated rect becomes a path). **For groups, decided the same day: passed down** to what's in them when all of it can take it exactly, kept as the group's own `transform` otherwise (§3.4). **And for what a node is drawn with** (2026-10-06 and 07): a gradient in its coordinates, and its clip path, go with it when they are its alone, and are never touched when anything else uses them | M3 |
 | D14 | Where a style is written | ✅ **Decided 2026-10-06, as recommended:** where that node already has it (`style=""` or the attribute); a new property goes in as a presentation attribute | M3 |
 | D15 | Numbers Ink writes | ✅ **Decided 2026-10-06, as recommended:** three decimals, trailing zeros dropped, settable per document | M3 |
 | D16 | Coordinates Claude and the GUI speak | ✅ **Decided 2026-10-06, revising my first recommendation:** attributes are as the file writes them (the node's own coordinates, as in any SVG), which is also what `node_add_svg`'s raw markup means; what's reported back is where things show in the document's coordinates (§3.3) | M2 |

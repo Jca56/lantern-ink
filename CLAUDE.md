@@ -165,13 +165,31 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
 - **M3b's b3 is built** (2026-10-07, 225 tests): `Command::Define`
   (into `<defs>`, made if missing), the tools `gradient_add` and
   `gradient_set` (28 tools), and a user-space gradient that is one
-  shape's alone now moves with it (`Settle::carry`). **b4 (clips and
-  filters as tools) is next.**
+  shape's alone now moves with it (`Settle::carry`).
   - New gradients go by the painted shape's box unless asked for
     `units: "user"`: a box gradient follows its shape for free and can
     be shared, but can't paint a line with no height.
   - Alva, 2026-10-07: for the rest of M3b each finished piece is
     committed once it's tested and deployed, without asking first.
+    (That was for M3b: from M3c on, commits are asked for again.)
+- **M3b is built** (2026-10-07, 232 tests, 30 tools): its last piece,
+  b4, is `Command::SetClip` (`ink-doc/src/clip.rs`) and the tools
+  `clip_set` and `filter_set`. **M3c (paths) is next**; D18 (anchor
+  ids) is Alva's to decide at its start.
+  - A clip path that is one node's alone now moves with it too
+    (Alva, 2026-10-07; ARCHITECTURE §3.4), so a clipped group passes a
+    move down. What a node is drawn with, and what that lets its
+    numbers take, is `ink-doc/src/settle/drawn.rs`.
+  - `clip_set` takes shapes only (SVG lets a clip path hold nothing
+    else Ink draws); to cut several things as one, group them and clip
+    the group. `release` puts the shapes back.
+  - `filter_set` makes a drop shadow or a blur; any other filter is
+    written with `node_add_svg`. Filters don't travel: a filtered node
+    takes a move into its numbers and keeps a scale or a turn as a
+    transform, so its shadow scales and turns with it.
+  - **Ungroup still refuses** a group with a filter, a clip path, a
+    mask or an opacity over several children unless told to drop them.
+    M4's window will want a friendlier answer.
 
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.

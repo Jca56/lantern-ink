@@ -19,6 +19,7 @@
 //! [`length`], [`Viewport`] (how the drawing sits on its page) and
 //! [`refs`] (what a `url(#…)` points at).
 
+mod clip;
 pub mod color;
 mod command;
 mod document;
