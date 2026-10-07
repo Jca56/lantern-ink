@@ -91,3 +91,77 @@ fn taking_a_file_over_leaves_nothing_of_boxys_and_a_file_that_still_reads() {
     }
     assert!(taken > 50 && untouched > 30, "{taken} taken over, {untouched} untouched");
 }
+
+/// Every file's shapes, each made one with the next by each of the
+/// four operations: real outlines, drawn by hand and by Boxy, lying on
+/// each other the way icons' parts do. None may be more than Ink can
+/// work out, and what the four results hold has to add up.
+#[test]
+fn neighbouring_shapes_of_every_file_are_made_one() {
+    use ink_doc::geometry::{path_of, to_doc};
+    use ink_doc::{Command, Kind, NodeId};
+    use ink_geom::{Combine, FillRule, Path, combine};
+
+    let length = |path: &Path| -> f64 { path.flatten(0.01).iter().map(|line| line.points.windows(2).map(|p| p[0].distance(p[1])).sum::<f64>()).sum() };
+    let (mut pairs, mut made) = (0, 0);
+    for (name, text) in corpus() {
+        let doc = Document::parse(DocId(1), &text).unwrap();
+        // A shape as it shows: its outline in the drawing's coordinates.
+        let shown = |doc: &Document, id: NodeId| doc.get(id).zip(to_doc(doc, id)).map(|(node, t)| path_of(node).transformed(&t));
+        let shapes: Vec<NodeId> = doc
+            .descendants(doc.root())
+            .into_iter()
+            .filter(|id| doc.get(*id).is_some_and(|n| matches!(n.kind, Kind::Path | Kind::Rect | Kind::Circle | Kind::Ellipse | Kind::Polygon)))
+            .filter(|id| shown(&doc, *id).is_some_and(|p| p.bounds().is_some_and(|b| b.width() > 0.0 && b.height() > 0.0)))
+            .collect();
+        for pair in shapes.windows(2) {
+            let (Some(a), Some(b)) = (shown(&doc, pair[0]), shown(&doc, pair[1])) else { continue };
+            pairs += 1;
+            // What each covers, by the rule the Command fills it with:
+            // read back from a union of it alone.
+            let covers = |id: NodeId| {
+                let mut alone = doc.clone();
+                match alone.apply(&Command::Boolean { nodes: vec![id], how: Combine::Union }) {
+                    Ok(_) => shown(&alone, id).map_or(0.0, |p| p.area().abs()),
+                    Err(e) => {
+                        assert!(e.to_string().starts_with("nothing would be left"), "{name} {id} alone: {e}");
+                        0.0
+                    }
+                }
+            };
+            let held: Vec<f64> = [Combine::Union, Combine::Subtract, Combine::Intersect, Combine::Exclude]
+                .into_iter()
+                .map(|how| {
+                    let mut tried = doc.clone();
+                    match tried.apply(&Command::Boolean { nodes: pair.to_vec(), how }) {
+                        Ok(_) => {
+                            made += 1;
+                            shown(&tried, pair[0]).map_or(0.0, |p| p.area().abs())
+                        }
+                        // Nothing left is an answer; not knowing isn't.
+                        Err(e) => {
+                            assert!(e.to_string().contains("nothing would be left"), "{name}: {how:?} of {} and {}: {e}", pair[0], pair[1]);
+                            0.0
+                        }
+                    }
+                })
+                .collect();
+            let (hold_a, hold_b) = (covers(pair[0]), covers(pair[1]));
+            // To what the file's three decimals and the seams left out
+            // can change: a thousandth of a unit along every outline.
+            let slack = 2e-3 * (length(&a) + length(&b)) + 1e-9;
+            let [union, subtract, intersect, exclude] = held[..] else { unreachable!() };
+            let said = || format!("{name}: {} and {}: union {union}, subtract {subtract}, intersect {intersect}, exclude {exclude} of {hold_a} and {hold_b} (to {slack})", pair[0], pair[1]);
+            assert!((union + intersect - hold_a - hold_b).abs() <= slack, "{}", said());
+            assert!((subtract - (hold_a - intersect)).abs() <= slack, "{}", said());
+            assert!((exclude - (union - intersect)).abs() <= slack, "{}", said());
+            // The same from plain geometry, with nothing left out: no
+            // pair is beyond working out.
+            for how in [Combine::Union, Combine::Subtract, Combine::Intersect, Combine::Exclude] {
+                assert!(combine(&[(&a, FillRule::NonZero), (&b, FillRule::NonZero)], how, 0.0).is_ok(), "{name}: {how:?} of {} and {}", pair[0], pair[1]);
+            }
+        }
+    }
+    assert!(pairs >= 3000 && made >= 10000, "{pairs} pairs, {made} results");
+    println!("{pairs} pairs of neighbouring shapes, {made} results");
+}

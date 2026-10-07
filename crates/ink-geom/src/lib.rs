@@ -21,23 +21,29 @@
 mod affine;
 mod arc;
 mod bounds;
+mod combine;
 mod dash;
 mod data;
 mod flatten;
 mod hit;
 mod map;
+mod meet;
 pub mod number;
 mod path;
 mod piece;
 mod stroke;
+mod wind;
 
 pub use affine::{Affine, Axes};
+pub use combine::{Combine, combine};
 pub use data::Parsed;
 pub use flatten::Polyline;
 pub use lntrn_math::{Rect, Vec2};
+pub use meet::{Meet, Tangled, meets};
 pub use path::{ArcTo, Path, Seg, Subpath};
 pub use piece::{Piece, circle_through};
 pub use stroke::{Cap, Join, Stroke, stroke};
+pub use wind::{outline, winding};
 
 /// Which parts of a path that crosses itself are inside it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

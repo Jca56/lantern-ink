@@ -27,13 +27,13 @@ Address everything by the ids results return: doc \"d1\", node \"N3\"; they neve
 an element's own id=\"…\" is just an attribute. \
 Make things with node_add (one element, its attributes) or node_add_svg (markup as you'd write it); \
 change them with node_set (any attribute; null takes one off), node_style (paint, set where it will show), \
-gradient_add (a gradient), clip_set (cut to a shape), filter_set (a shadow, a blur), \
-node_move (stacking order, or into a group) and node_delete. \
-Move, scale, turn and flip things with node_transform, and line them up with node_align: both work in the drawing's coordinates \
+gradient_add, clip_set (cut to a shape), filter_set (a shadow, a blur), \
+node_move (stacking order, into a group) and node_delete. \
+Move, scale, turn and flip things with node_transform, and line them up with node_align: both in the drawing's coordinates, \
 whatever groups a node is in. \
-Reshape a path by its anchors with path_edit and path_set (node_info lists them, \"A3\"); path_op makes a shape a path. \
-node_duplicate copies; node_group and node_ungroup make and dissolve groups. \
-Look things up with doc_info (every node, front to back, with its box), node_info (all about one), \
+Reshape a path by its anchors with path_edit and path_set (node_info lists them, \"A3\"); path_op unites, subtracts and intersects shapes, and makes one a path. \
+node_duplicate copies; node_group and node_ungroup group and ungroup. \
+Ask doc_info (every node, front to back, with its box), node_info (all about one), \
 doc_query (what's at a point) and doc_source (the markup); doc_set sets the page. \
 Workflow: doc_new or doc_open, then edit, then doc_preview to look (at milestones, not after every call; \
 renderer \"lantern\": as Lantern's apps draw it at icon sizes), then doc_save (.svg) or doc_export (a picture). \

@@ -233,6 +233,51 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     made by an earlier step has ids the call can't know yet (only
     `as` names inside one `path_edit`). `path_set` gives a whole
     outline in one go; a wish for "the third anchor" hasn't come up.
+- **M3c's c2 is built** (2026-10-07, 282 tests): boolean operations.
+  `Command::Boolean { nodes, how }` (`ink-doc/src/boolean.rs`), and
+  `path_op`'s `union`, `subtract`, `intersect` and `exclude`. The
+  first node named takes the result (made a `<path>`) and keeps its
+  place, paint and id; the others are deleted. Each shape counts where
+  it shows (through its groups' transforms) and by its own fill rule.
+  - The work is `ink-geom`'s, three files: `meet.rs` (where two
+    segments cross, touch, or share a stretch), `wind.rs` (how often an
+    outline winds round a point, by the curves themselves; and
+    `Path::area`, exact), `combine.rs` (cut every outline where it
+    meets another, keep the cut edges that have the result on one side
+    only, join them into loops). **Nothing is flattened:** a cut arc is
+    an arc of the same ellipse, a cut curve the same curve, and cuts
+    that didn't end up mattering are joined again.
+  - **How it's proven** (all in `cargo test --workspace`, about 30 s):
+    `ink-geom/tests/combine.rs` puts 3000 pairs of shapes, 6000 pairs
+    where one is a result of the other, and 500 threes through all
+    four operations: some 600 000 places are each in the result
+    exactly when they should be, and the four results' exact areas
+    add up. `ink-render/tests/combine.rs` draws 2000 pairs against
+    the renderer clipping one shape by the other (the worst pixel is
+    a quarter of a pixel out, which is what a clip is out by).
+    `ink-doc/tests/corpus.rs` makes every shape of every corpus file
+    one with the next: 3037 pairs, 10 112 results, none refused.
+  - **What makes it hold** (each found by a test above, each a rule
+    now): a part cut from an arc carries the arc's own ellipse
+    (`Piece`'s private `arc`: worked out again from its ends, a half
+    turn's centre lands a hundred-millionth away); two segments *meet*
+    only where they truly cross or touch, or where an end of one lies
+    on the other (two that only run close stay two lines, and a
+    crossing too fine to home in on is found by which side each end
+    of the close stretch is on); and what's filled either side of an
+    edge is looked up from the place along it with the most room, a
+    quarter of the way to its nearest neighbour.
+  - One tolerance, `TOL` in `combine.rs`: a billionth of the shapes'
+    size counts as the same place. When outlines can't be told apart
+    even so, the Command is refused (`Tangled`) rather than guessed;
+    no test has made it happen since the rules above.
+  - A loop of the result thinner than the file can write (half a unit
+    in the last decimal) is left out: two shapes drawn to abut whose
+    numbers overlap by a rounding leave no seam. Shapes that only
+    *nearly* share a side are still two sides: nothing is snapped.
+  - A group left empty by the shapes taken out of it stays (tidy is
+    M3e's). `batch` no longer reports a node that a later step of the
+    same batch took out again.
 
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.

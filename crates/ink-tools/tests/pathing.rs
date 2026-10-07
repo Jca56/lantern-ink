@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{data, ok, refused, server, text};
+use common::{data, ok, picture, refused, server, text};
 use ink_tools::Ink;
 use lntrn_data::Doc;
 use lntrn_mcp::Server;
@@ -211,8 +211,52 @@ fn shapes_become_paths_and_paths_turn_round() {
         (r#""node_ids":["N5"],"op":"reverse""#, "N5 is a <g>, which has no direction to turn round: only a path does (to_path makes a shape one)"),
         (r#""node_ids":["N6"],"op":"reverse""#, "N6's path data can't all be read, so it can't be taken point by point: set its d to path data that reads first"),
         (r#""node_ids":[],"op":"reverse""#, "\"node_ids\" is empty: name at least one node"),
-        (r#""node_ids":["N2"],"op":"weld""#, "op is to_path or reverse, not \"weld\""),
+        (r#""node_ids":["N2"],"op":"weld""#, "op is to_path, reverse, union, subtract, intersect or exclude, not \"weld\""),
     ] {
         assert_eq!(refused(&mut s, "path_op", &format!(r#"{{"doc_id":"d1",{args}}}"#)), says);
     }
+}
+
+#[test]
+fn shapes_are_made_one() {
+    let (mut s, _) = server("boolean");
+    ok(&mut s, "doc_new", "{}");
+    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<rect id='card' x='2' y='2' width='14' height='14' rx='2' fill='#ffc800'/><circle id='bite' cx='16' cy='16' r='5'/><g transform='translate(1 1)'><rect id='bar' x='0' y='6' width='22' height='2'/></g><g id='g'/>"}"##);
+    let before = text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#)).to_owned();
+    // A bite out of the card: the card keeps its paint and its corners,
+    // and takes the circle's arc; the circle is gone.
+    let bitten = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N2","N3"],"op":"subtract"}"#);
+    assert_eq!(text(&bitten), "Done: N2 <path id=\"card\"> is the result at 2,2 14×14; N3 was taken into it and deleted.");
+    assert_eq!((bitten.path("structuredContent.node_ids[0]").and_then(Doc::as_str), bitten.path("structuredContent.removed[0]").and_then(Doc::as_str)), (Some("N2"), Some("N3")));
+    assert_eq!(node(&mut s, "N2"), "<path id='card' d='M4 2 H14 A2 2 0 0 1 16 4 V11 A5 5 0 0 0 11 16 H4 A2 2 0 0 1 2 14 V4 A2 2 0 0 1 4 2 Z' fill='#ffc800'/>");
+    assert_eq!(refused(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#), "no node N3 in this document (doc_info lists its nodes)");
+    // It draws: yellow in the card, nothing where the bite was.
+    let (_, image) = picture(&ok(&mut s, "doc_preview", r#"{"doc_id":"d1","max_edge":96,"background":"none"}"#));
+    assert_eq!((image.pixel(24, 24), image.pixel(60, 60)[3]), ([255, 200, 0, 255], 0));
+    // With a shape under a group's move: where it shows is what counts.
+    let barred = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N2","N5"],"op":"exclude"}"#);
+    assert_eq!(text(&barred), "Done: N2 <path id=\"card\"> is the result at 1,2 22×14; N5 was taken into it and deleted.");
+    assert!(node(&mut s, "N2").contains("M16 9 V7 H23 V9 Z"), "the bar's end, past the card, a unit to the right of its own numbers");
+    // One step each, and back to the byte.
+    assert_eq!(text(&ok(&mut s, "history_undo", r#"{"doc_id":"d1","steps":2}"#)), "Undid 2 steps: \"path_op\" (Claude), \"path_op\" (Claude). Now 1 can be undone and 2 redone.");
+    assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#)), before);
+    // Three at once, the one kept in a group: written in its coordinates.
+    let all = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N5","N2","N3"],"op":"union"}"#);
+    assert_eq!(text(&all), "Done: N5 <path id=\"bar\"> is the result at 1,2 22×19; N2, N3 were taken into it and deleted.");
+    assert_eq!(node(&mut s, "N5"), "<path id='bar' d='M0 6 H1 V3 A2 2 0 0 1 3 1 H13 A2 2 0 0 1 15 3 V6 H22 V8 H15 V10 A5 5 0 0 1 20 15 A5 5 0 0 1 15 20 A5 5 0 0 1 10 15 H3 A2 2 0 0 1 1 13 V8 H0 Z'/>");
+    ok(&mut s, "history_undo", r#"{"doc_id":"d1"}"#);
+    for (args, says) in [
+        (r#""node_ids":["N3","N5"],"op":"intersect""#, "the shapes don't overlap anywhere, so nothing would be left: nothing was changed"),
+        (r#""node_ids":["N3","N6"],"op":"union""#, "N6 is a <g>: only shapes (paths, rects, circles, ellipses, polygons) can be combined; for a group, name the shapes in it"),
+        (r#""node_ids":["N3"],"op":"subtract""#, "that takes two shapes or more: the first is kept, and the others are taken from it, or met with it (a union of one shape makes its outline simple, where it crosses itself)"),
+        (r#""node_ids":["N3","N3"],"op":"union""#, "N3 is named twice: a shape is combined with others, not with itself"),
+    ] {
+        assert_eq!(refused(&mut s, "path_op", &format!(r#"{{"doc_id":"d1",{args}}}"#)), says);
+    }
+    // In a batch, on what its steps made: what one step takes into
+    // another isn't told of as new.
+    let steps = r#"[{"tool":"node_add","args":{"element":"circle","attrs":{"cx":4,"cy":4,"r":3}},"as":"a"},{"tool":"node_add","args":{"element":"circle","attrs":{"cx":7,"cy":4,"r":3}},"as":"b"},{"tool":"path_op","args":{"node_ids":["@a","@b"],"op":"intersect"}}]"#;
+    let ran = ok(&mut s, "batch", &format!(r#"{{"doc_id":"d1","preview":false,"steps":{steps}}}"#));
+    assert_eq!(text(&ran), "Ran 3 steps on d1 as one undo step (history_undo undoes all of them). New nodes: N7. Named: @a = N7. Made and taken out again on the way: N8.");
+    assert_eq!(node(&mut s, "N7"), "<path d=\"M7 4 A3 3 0 0 1 5.5 6.598 A3 3 0 0 1 4 4 A3 3 0 0 1 5.5 1.402 A3 3 0 0 1 7 4 Z\"/>", "a lens of four arcs");
 }

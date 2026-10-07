@@ -133,15 +133,22 @@ fn batch(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
     }
     let applied = ctx.core.apply(id, &Command::Batch(commands), Actor::Claude, "batch").map_err(refused)?;
     debug_assert!(ctx.core.doc(id).is_ok_and(|d| d.to_svg() == scratch.to_svg()), "the batch ran differently from its dry run");
+    // What a later step took out again (a shape combined into another)
+    // isn't there to be told of.
+    let (made, unmade): (Vec<NodeId>, Vec<NodeId>) = applied.created.iter().partition(|node| scratch.get(**node).is_some());
+    named.retain(|(_, node)| made.contains(node));
     let mut text = format!("Ran {} steps on {id} as one undo step (history_undo undoes all of them).", steps.len());
-    if !applied.created.is_empty() {
-        text += &format!(" New nodes: {}.", applied.created.iter().map(NodeId::to_string).collect::<Vec<_>>().join(", "));
+    if !made.is_empty() {
+        text += &format!(" New nodes: {}.", made.iter().map(NodeId::to_string).collect::<Vec<_>>().join(", "));
     }
     if !named.is_empty() {
         text += &format!(" Named: {}.", named.iter().map(|(label, node)| format!("@{label} = {node}")).collect::<Vec<_>>().join(", "));
     }
+    if !unmade.is_empty() {
+        text += &format!(" Made and taken out again on the way: {}.", unmade.iter().map(NodeId::to_string).collect::<Vec<_>>().join(", "));
+    }
     let mut m = Map::new();
-    m.insert("node_ids", Doc::List(applied.created.iter().map(|n| n.to_string().into()).collect()));
+    m.insert("node_ids", Doc::List(made.iter().map(|n| n.to_string().into()).collect()));
     let mut by_name = Map::new();
     for (label, node) in &named {
         by_name.insert(label.as_str(), node.to_string().into());

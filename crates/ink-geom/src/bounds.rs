@@ -8,6 +8,7 @@ use lntrn_math::{Rect, Vec2};
 use crate::affine::Affine;
 use crate::arc::{Centered, Shape, shape};
 use crate::path::{Path, Seg};
+use crate::piece::Piece;
 
 /// A box that grows to hold the points it's given.
 struct Grow(Option<Rect>);
@@ -81,43 +82,66 @@ impl Path {
         let mut grow = Grow(None);
         for sub in self.subpaths.iter().filter(|s| !s.segs.is_empty() || s.closed) {
             grow.add(t.apply(sub.start));
-            // Where the pen is: in the path's own coordinates (an arc is
-            // worked out there), and through `t` (a Bézier's control
-            // points go through with it).
             let mut at = sub.start;
             for seg in &sub.segs {
-                let from = t.apply(at);
-                match *seg {
-                    Seg::Line { .. } => {}
-                    Seg::Quad { c, to } => {
-                        let (c, to) = (t.apply(c), t.apply(to));
-                        let d = from - c * 2.0 + to;
-                        for (num, den) in [(from.x - c.x, d.x), (from.y - c.y, d.y)] {
-                            let at = num / den;
-                            if den != 0.0 && at > 0.0 && at < 1.0 {
-                                grow.add(quad_at(from, c, to, at));
-                            }
-                        }
-                    }
-                    Seg::Cubic { c1, c2, to } => {
-                        let (c1, c2, to) = (t.apply(c1), t.apply(c2), t.apply(to));
-                        // The derivative, a quadratic, per axis.
-                        let (a, b, c) = (to - c2 * 3.0 + c1 * 3.0 - from, (c2 - c1 * 2.0 + from) * 2.0, c1 - from);
-                        for at in roots(a.x, b.x, c.x).into_iter().chain(roots(a.y, b.y, c.y)).flatten() {
-                            grow.add(cubic_at(from, c1, c2, to, at));
-                        }
-                    }
-                    Seg::Arc { ref arc, to } => {
-                        if let Shape::Arc(centered) = shape(at, arc, to) {
-                            arc_extremes(&centered, t, &mut grow);
-                        }
-                    }
-                }
-                grow.add(t.apply(seg.to()));
+                reach(at, seg, t, &mut grow);
                 at = seg.to();
             }
         }
         grow.0.filter(|r| r.min.is_finite() && r.max.is_finite())
+    }
+}
+
+/// Grow a box to hold the segment `seg` drawn from `at`, seen through
+/// `t`: its end, and wherever it turns back in x or in y on the way.
+/// `at` is in the path's own coordinates (an arc is worked out there);
+/// a Bézier's control points go through `t` with it.
+fn reach(at: Vec2, seg: &Seg, t: &Affine, grow: &mut Grow) {
+    let from = t.apply(at);
+    match *seg {
+        Seg::Line { .. } => {}
+        Seg::Quad { c, to } => {
+            let (c, to) = (t.apply(c), t.apply(to));
+            let d = from - c * 2.0 + to;
+            for (num, den) in [(from.x - c.x, d.x), (from.y - c.y, d.y)] {
+                let at = num / den;
+                if den != 0.0 && at > 0.0 && at < 1.0 {
+                    grow.add(quad_at(from, c, to, at));
+                }
+            }
+        }
+        Seg::Cubic { c1, c2, to } => {
+            let (c1, c2, to) = (t.apply(c1), t.apply(c2), t.apply(to));
+            // The derivative, a quadratic, per axis.
+            let (a, b, c) = (to - c2 * 3.0 + c1 * 3.0 - from, (c2 - c1 * 2.0 + from) * 2.0, c1 - from);
+            for at in roots(a.x, b.x, c.x).into_iter().chain(roots(a.y, b.y, c.y)).flatten() {
+                grow.add(cubic_at(from, c1, c2, to, at));
+            }
+        }
+        Seg::Arc { ref arc, to } => {
+            if let Shape::Arc(centered) = shape(at, arc, to) {
+                arc_extremes(&centered, t, grow);
+            }
+        }
+    }
+    grow.add(t.apply(seg.to()));
+}
+
+impl Piece {
+    /// The smallest box holding all of it.
+    pub fn bounds(&self) -> Rect {
+        let mut grow = Grow(None);
+        grow.add(self.from);
+        match self.centered() {
+            // By the ellipse the piece is on, not one worked out again
+            // from its ends.
+            Some(arc) => {
+                arc_extremes(&arc, &Affine::IDENTITY, &mut grow);
+                grow.add(self.to());
+            }
+            None => reach(self.from, &self.seg, &Affine::IDENTITY, &mut grow),
+        }
+        grow.0.unwrap_or(Rect::new(self.from, self.from))
     }
 }
 

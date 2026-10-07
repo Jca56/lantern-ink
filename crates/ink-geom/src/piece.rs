@@ -11,11 +11,25 @@ use lntrn_math::Vec2;
 use crate::arc::{Centered, Shape, shape};
 use crate::path::{ArcTo, Seg};
 
-/// A segment, and the point it's drawn from.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// A segment, and the point it's drawn from. Made with [`Piece::new`].
+#[derive(Clone, Copy, Debug)]
 pub struct Piece {
     pub from: Vec2,
     pub seg: Seg,
+    /// An arc's ellipse and the angles it runs between: worked out
+    /// once, from the piece as it was given, and handed on to every
+    /// part cut from it. Worked out again from a part's own ends, a
+    /// half turn's middle lands a hundred-millionth of its size away
+    /// (the ends say so little about it), and the part is no longer
+    /// on the line it was cut from.
+    arc: Option<Centered>,
+}
+
+/// The same segment from the same point.
+impl PartialEq for Piece {
+    fn eq(&self, other: &Piece) -> bool {
+        self.from == other.from && self.seg == other.seg
+    }
 }
 
 fn lerp(a: Vec2, b: Vec2, t: f64) -> Vec2 {
@@ -24,7 +38,14 @@ fn lerp(a: Vec2, b: Vec2, t: f64) -> Vec2 {
 
 impl Piece {
     pub fn new(from: Vec2, seg: Seg) -> Piece {
-        Piece { from, seg }
+        let arc = match seg {
+            Seg::Arc { ref arc, to } => match shape(from, arc, to) {
+                Shape::Arc(c) => Some(c),
+                _ => None,
+            },
+            _ => None,
+        };
+        Piece { from, seg, arc }
     }
 
     /// Where it ends.
@@ -34,14 +55,15 @@ impl Piece {
 
     /// Its arc as a centre and a sweep, when it's an arc that draws one
     /// (not a point, and not the straight line a radius of nothing is).
-    fn centered(&self) -> Option<Centered> {
-        match self.seg {
-            Seg::Arc { ref arc, to } => match shape(self.from, arc, to) {
-                Shape::Arc(c) => Some(c),
-                _ => None,
-            },
-            _ => None,
-        }
+    pub(crate) fn centered(&self) -> Option<Centered> {
+        self.arc
+    }
+
+    /// An arc's ellipse and how far round it goes: the centre, the two
+    /// radii it's drawn with, and its sweep in radians (positive the
+    /// way x turns to y). `None` for what isn't an arc that draws one.
+    pub fn round(&self) -> Option<(Vec2, f64, f64, f64)> {
+        self.centered().map(|c| (c.c, c.rx, c.ry, c.delta))
     }
 
     /// The point `t` of the way along it, 0 to 1: a curve's own
@@ -91,14 +113,13 @@ impl Piece {
                 (Seg::Cubic { c1: a, c2: lerp(a, b, t), to: mid }, Seg::Cubic { c1: lerp(b, c, t), c2: c, to })
             }
             Seg::Arc { arc, to } => {
-                // Each part with the radii it's drawn with (ones too
-                // small to reach have grown), and the long way round
-                // only if its own share of the sweep is.
-                let part = |share: f64| match self.centered() {
-                    Some(c) => ArcTo { rx: c.rx, ry: c.ry, large: (c.delta * share).abs() > PI, ..arc },
-                    None => arc,
-                };
-                (Seg::Arc { arc: part(t), to: mid }, Seg::Arc { arc: part(1.0 - t), to })
+                let Some(c) = self.arc else { return (Piece::new(self.from, Seg::Arc { arc, to: mid }), Piece::new(mid, Seg::Arc { arc, to })) };
+                // Each part on the same ellipse, with the radii it's
+                // drawn with (ones too small to reach have grown), and
+                // the long way round only if its own share of the
+                // sweep is.
+                let part = |from: Vec2, to: Vec2, theta: f64, delta: f64| Piece { from, seg: Seg::Arc { arc: ArcTo { rx: c.rx, ry: c.ry, large: delta.abs() > PI, ..arc }, to }, arc: Some(Centered { theta, delta, ..c }) };
+                return (part(self.from, mid, c.theta, c.delta * t), part(mid, to, c.theta + c.delta * t, c.delta * (1.0 - t)));
             }
         };
         (Piece::new(self.from, first), Piece::new(mid, second))
@@ -106,11 +127,12 @@ impl Piece {
 
     /// The part of it from `t0` to `t1`.
     pub fn part(&self, t0: f64, t1: f64) -> Piece {
-        let (_, rest) = self.split(t0);
-        if t0 >= 1.0 {
-            return rest;
+        match (t0 <= 0.0, t1 >= 1.0) {
+            (true, true) => *self,
+            (true, false) => self.split(t1).0,
+            (false, true) => self.split(t0).1,
+            (false, false) => self.split(t0).1.split((t1 - t0) / (1.0 - t0)).0,
         }
-        rest.split((t1 - t0) / (1.0 - t0)).0
     }
 
     /// The same line, drawn from its other end.
@@ -122,7 +144,7 @@ impl Piece {
             Seg::Cubic { c1, c2, .. } => Seg::Cubic { c1: c2, c2: c1, to },
             Seg::Arc { arc, .. } => Seg::Arc { arc: ArcTo { sweep: !arc.sweep, ..arc }, to },
         };
-        Piece::new(self.to(), seg)
+        Piece { from: self.to(), seg, arc: self.arc.map(|c| Centered { theta: c.theta + c.delta, delta: -c.delta, ..c }) }
     }
 
     /// The `t` of the point on it nearest `p`.
@@ -141,7 +163,47 @@ impl Piece {
             let (a, b) = (lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0);
             if far(a) <= far(b) { hi = b } else { lo = a }
         }
-        (lo + hi) * 0.5
+        self.foot(p, (lo + hi) * 0.5)
+    }
+
+    /// The `t` near `near` where the piece passes `p` square on (the
+    /// foot of the line dropped from `p`), found as finely as numbers
+    /// go; `near` itself where there's none to find (an end is nearest).
+    pub(crate) fn foot(&self, p: Vec2, near: f64) -> f64 {
+        // Where the way to `p` is square to the way it's heading.
+        let lean = |t: f64| (self.at(t) - p).dot(self.heading(t));
+        let (mut t, mut best) = (near, self.at(near).distance_squared(p));
+        for _ in 0..6 {
+            const H: f64 = 1e-6;
+            let (a, b) = ((t - H).max(0.0), (t + H).min(1.0));
+            let slope = (lean(b) - lean(a)) / (b - a);
+            let next = (t - lean(t) / slope).clamp(0.0, 1.0);
+            let far = self.at(next).distance_squared(p);
+            if !(slope.is_finite() && slope != 0.0) || far > best {
+                break;
+            }
+            (t, best) = (next, far);
+        }
+        t
+    }
+
+    /// How far it strays, at most, from the straight line between its
+    /// ends: nothing for a line, and never less than it truly does.
+    pub fn bulge(&self) -> f64 {
+        let off = |c: Vec2| {
+            let along = self.to() - self.from;
+            let share = if along.length_squared() > 0.0 { ((c - self.from).dot(along) / along.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+            c.distance(self.from + along * share)
+        };
+        match self.seg {
+            Seg::Line { .. } => 0.0,
+            Seg::Quad { c, .. } => off(c),
+            Seg::Cubic { c1, c2, .. } => off(c1).max(off(c2)),
+            // A circle's arc stands off its chord by 1 - cos of half
+            // its sweep; an ellipse's by no more than its longer radius
+            // times that.
+            Seg::Arc { .. } => self.centered().map_or(0.0, |c| c.rx.max(c.ry) * (1.0 - (c.delta.abs() * 0.5).min(PI).cos())),
+        }
     }
 }
 

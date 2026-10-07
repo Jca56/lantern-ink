@@ -20,6 +20,7 @@
 //! [`refs`] (what a `url(#…)` points at).
 
 mod clip;
+mod boolean;
 pub mod color;
 mod command;
 mod document;

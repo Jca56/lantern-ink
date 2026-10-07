@@ -3,7 +3,7 @@
 //! Command names its nodes, carries all it needs, and applies whole or
 //! not at all.
 
-use ink_geom::Affine;
+use ink_geom::{Affine, Combine};
 
 use crate::document::Document;
 use crate::edit::Place;
@@ -73,6 +73,10 @@ pub enum Command {
     /// Set the path `node`'s whole outline. An anchor given the id of
     /// one the path has is that anchor still.
     SetPath { node: NodeId, runs: Vec<NewRun> },
+    /// Make the shapes `nodes` one by what their fills cover: the first
+    /// takes the result as its outline and keeps its place and paint,
+    /// the others are removed ([`crate::boolean`]).
+    Boolean { nodes: Vec<NodeId>, how: Combine },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -257,6 +261,11 @@ impl Document {
                 let (changed, made) = self.set_path(*node, runs)?;
                 applied.note(if changed { vec![*node] } else { Vec::new() });
                 applied.anchors.extend(made);
+            }
+            Command::Boolean { nodes, how } => {
+                let removed = self.combine(nodes, *how)?;
+                applied.note(nodes[..1].to_vec());
+                applied.removed.extend(removed);
             }
             Command::Batch(commands) => {
                 if depth >= MAX_BATCH_DEPTH {

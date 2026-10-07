@@ -5,13 +5,14 @@
 use ink_core::ink_doc::outline::AnchorId;
 use ink_core::ink_doc::pathedit::{Along, PathEdit};
 use ink_core::ink_doc::paths::{NewAnchor, NewRun};
+use ink_core::ink_doc::geometry::page_bounds;
 use ink_core::ink_doc::{Document, Kind};
 use ink_core::{Applied, Command, NodeId};
-use ink_geom::Vec2;
+use ink_geom::{Combine, Vec2};
 use lntrn_data::{Doc, Map};
 use lntrn_mcp::{Reply, ToolError, fail, schema};
 
-use crate::describe::{anchors, tag};
+use crate::describe::{anchors, rect, tag};
 use crate::input::{In, common, refused_edit};
 use crate::tools::{Entry, edit};
 
@@ -56,7 +57,7 @@ pub(super) fn tools() -> Vec<Entry> {
         edit(
             "path_op",
             "Path operation",
-            "Make paths of what's there. to_path: each shape (a rect, a circle, an ellipse, a line, a polyline, a polygon) becomes a <path> that draws the same outline, a rounded corner still an arc, with everything else about it as it was. reverse: each path runs the other way.",
+            "Work on whole outlines. to_path: each shape (a rect, a circle, an ellipse, a line, a polyline, a polygon) becomes a <path> that draws the same outline, a rounded corner still an arc, with everything else about it as it was. reverse: each path runs the other way. union, subtract, intersect and exclude make several shapes one, by what their fills cover wherever each shows in the drawing: union is what any of them covers, intersect what all of them do, subtract the first less the others, exclude what an odd number cover (two shapes less their overlap). The first node named takes the result as its outline (a <path> now) and keeps its place, its paint and its id; the others are deleted. Curves stay the curves they were, cut where the outlines cross: nothing is flattened. A union of one shape makes its outline simple where it crosses itself.",
             op_schema,
             lntrn_mcp::Kind::Set,
             op,
@@ -309,7 +310,7 @@ fn outlined(doc: &Document, applied: &Applied) -> Reply {
 }
 
 fn op_schema() -> Doc {
-    common::edit(&["node_ids", "op"], vec![("node_ids", schema::list(common::node_id("A node"), "The shapes or paths")), ("op", schema::one_of(&["to_path", "reverse"], "What to do"))])
+    common::edit(&["node_ids", "op"], vec![("node_ids", schema::list(common::node_id("A node"), "The shapes or paths; for union, subtract, intersect and exclude, the one to keep first")), ("op", schema::one_of(&["to_path", "reverse", "union", "subtract", "intersect", "exclude"], "What to do"))])
 }
 
 fn op(doc: &Document, input: &In) -> Result<Command, ToolError> {
@@ -325,7 +326,11 @@ fn op(doc: &Document, input: &In) -> Result<Command, ToolError> {
             }
             Ok(Command::Batch(nodes.into_iter().map(|node| Command::EditPath { node, edits: vec![PathEdit::Reverse { anchor: None }] }).collect()))
         }
-        other => fail(format!("op is to_path or reverse, not \"{other}\"")),
+        "union" => Ok(Command::Boolean { nodes, how: Combine::Union }),
+        "subtract" => Ok(Command::Boolean { nodes, how: Combine::Subtract }),
+        "intersect" => Ok(Command::Boolean { nodes, how: Combine::Intersect }),
+        "exclude" => Ok(Command::Boolean { nodes, how: Combine::Exclude }),
+        other => fail(format!("op is to_path, reverse, union, subtract, intersect or exclude, not \"{other}\"")),
     }
 }
 
@@ -336,5 +341,12 @@ fn operated(doc: &Document, applied: &Applied) -> Reply {
     let said: Vec<String> = applied.changed.iter().filter_map(|id| doc.get(*id)).map(|n| format!("{} {}", n.id, tag(n))).collect();
     let mut m = Map::new();
     m.insert("node_ids", Doc::List(applied.changed.iter().map(|id| id.to_string().into()).collect()));
-    Reply::text(format!("Done: {} (node_info lists a path's anchors).", said.join(", "))).data(Doc::Map(m))
+    if applied.removed.is_empty() {
+        return Reply::text(format!("Done: {} (node_info lists a path's anchors).", said.join(", "))).data(Doc::Map(m));
+    }
+    // Shapes made one: where the one that's left shows now.
+    let at = applied.changed.first().and_then(|id| page_bounds(doc).get(id).map(rect)).map_or(String::new(), |at| format!(" at {at}"));
+    let gone: Vec<String> = applied.removed.iter().map(NodeId::to_string).collect();
+    m.insert("removed", Doc::List(gone.iter().map(|id| id.as_str().into()).collect()));
+    Reply::text(format!("Done: {} is the result{at}; {} {} taken into it and deleted.", said.join(", "), gone.join(", "), if gone.len() == 1 { "was" } else { "were" })).data(Doc::Map(m))
 }

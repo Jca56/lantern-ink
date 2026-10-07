@@ -274,6 +274,22 @@ name the anchors its `d` has: a closed run's last anchor, written
 where its first is with only the closing line between them, is the
 first.
 
+**Boolean operations** (M3c) are one Command, `Boolean { nodes, how }`
+(union, subtract, intersect, exclude): the first node takes the result
+as its outline and keeps its place and paint, the others are removed.
+Each shape is what its own fill rule fills, where it shows; the work
+is done in the first node's coordinates, where the result is written.
+`ink-geom` does it on the curves themselves (`meet.rs`, `wind.rs`,
+`combine.rs`): every outline is cut where it meets another, each cut
+edge is kept if the result is on one side of it and not the other
+(by how the outlines wind round a point just to either side), and the
+kept edges are joined into loops with the result on their left all
+the way round, so the result fills the same by either rule. A cut
+piece of an arc is an arc of the same ellipse and a cut piece of a
+curve the same curve: nothing is flattened, and a circle that comes
+through untouched comes back the circle it was. §10 says how it's
+tested.
+
 **A gradient in a shape's own coordinates goes with the shape**
 (`settle.rs`, since M3b) when it is that shape's alone: into the
 gradient's own numbers when they're plain and all it has been through
@@ -511,7 +527,7 @@ carries over; only the differences and the tool list are new here.
 |---|---|
 | Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox) |
 | Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
-| Paths | `path_set`§, `path_edit`§ (anchors and handles), `path_op`§ (to path and reverse so far; boolean ops, outline stroke and simplify to come) (§ = built in M3c) |
+| Paths | `path_set`§, `path_edit`§ (anchors and handles), `path_op`§ (to path, reverse, and the boolean ops: union, subtract, intersect, exclude; outline stroke and simplify to come) (§ = built in M3c) |
 | Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`‡, `gradient_set`‡, `clip_set`‡, `filter_set`‡ (‡ = built in M3b) |
 | Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
 | Queries | `doc_query`† (what's at a point; a node's bounds are `node_info`'s) |
@@ -608,6 +624,16 @@ As LS3 §7, to the letter where it can be:
   only the bytes of what it touched differ.
 - **Geometry:** flattening tolerance, exact areas, stroke joins and caps,
   boolean ops, hit tests, as CPU unit tests.
+- **Boolean operations** (as built in M3c) are proven three ways, none
+  by eye. Thousands of pairs of shapes set on a grid (so that they
+  share sides, corners and touches far more than chance would), the
+  results fed back in, and every neighbouring pair of shapes in the
+  corpus: each result is checked point by point (a place is in it
+  exactly when the operation says so of the shapes, by counting
+  windings), to the last digit (the four operations' exact areas add
+  up as they must), and against the renderer, which draws one shape
+  clipped by the other and knows nothing of how the results were
+  made.
 - **Render goldens:** fixed documents to RGBA, exact (pure CPU). Agreement
   with `lntrn-svg` and, when present, `rsvg-convert`, each test declaring
   its tolerance (D22).
@@ -628,7 +654,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (anchors and editing built 2026-10-07; boolean ops, outline and simplify to come), **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (anchors, editing and boolean ops built 2026-10-07; outline and simplify to come), **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 

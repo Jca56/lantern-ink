@@ -238,3 +238,74 @@ fn a_whole_outline_is_set_and_the_anchors_named_keep_their_ids() {
     d.apply(&Command::SetPath { node: N, runs: vec![] }).unwrap();
     assert_eq!(d.node(N).unwrap().attr("d"), Some(""));
 }
+
+mod boolean {
+    use ink_doc::{Command, DocError, DocId, Document, NodeId};
+    use ink_geom::Combine;
+
+    const N: fn(u64) -> NodeId = NodeId;
+
+    fn doc(body: &str) -> Document {
+        Document::parse(DocId(1), &format!("<svg viewBox=\"0 0 24 24\">\n{body}\n</svg>\n")).unwrap()
+    }
+
+    fn combined(body: &str, nodes: &[u64], how: Combine) -> Result<String, String> {
+        let mut d = doc(body);
+        let applied = d.apply(&Command::Boolean { nodes: nodes.iter().map(|n| N(*n)).collect(), how }).map_err(|e| e.to_string())?;
+        assert_eq!((applied.changed, applied.removed), (vec![N(nodes[0])], nodes[1..].iter().map(|n| N(*n)).collect::<Vec<_>>()));
+        Ok(d.to_svg().lines().skip(1).take_while(|l| *l != "</svg>").collect::<Vec<_>>().join("\n"))
+    }
+
+    #[test]
+    fn the_first_shape_takes_the_result_and_the_others_go() {
+        let body = "  <rect id=\"a\" x=\"2\" y=\"2\" width=\"10\" height=\"10\" fill=\"#ffc800\"/>\n  <circle id=\"b\" cx=\"12\" cy=\"12\" r=\"5\" stroke=\"red\"/>";
+        // A rect is made a path to take it: where its numbers were, with
+        // its paint and its id; the circle's arc is an arc still.
+        assert_eq!(combined(body, &[2, 3], Combine::Union).unwrap(), "  <path id=\"a\" d=\"M2 2 H12 V7 A5 5 0 0 1 17 12 A5 5 0 0 1 12 17 A5 5 0 0 1 7 12 H2 Z\" fill=\"#ffc800\"/>");
+        assert_eq!(combined(body, &[2, 3], Combine::Subtract).unwrap(), "  <path id=\"a\" d=\"M2 2 H12 V7 A5 5 0 0 0 7 12 H2 Z\" fill=\"#ffc800\"/>");
+        assert_eq!(combined(body, &[2, 3], Combine::Intersect).unwrap(), "  <path id=\"a\" d=\"M12 7 V12 H7 A5 5 0 0 1 12 7 Z\" fill=\"#ffc800\"/>");
+        // The other way about, the circle is the one kept.
+        assert_eq!(combined(body, &[3, 2], Combine::Subtract).unwrap(), "  <path id=\"b\" d=\"M17 12 A5 5 0 0 1 12 17 A5 5 0 0 1 7 12 H12 V7 A5 5 0 0 1 17 12 Z\" stroke=\"red\"/>");
+    }
+
+    #[test]
+    fn each_shape_is_where_it_shows_however_it_got_there() {
+        // The second is under a group's move and has a scale of its
+        // own: on the page it's the square from 6,6 to 14,14. The
+        // result is written in the first one's coordinates, which are
+        // moved too.
+        let body = "  <rect id=\"a\" transform=\"translate(2 2)\" width=\"8\" height=\"8\"/>\n  <g transform=\"translate(6 6)\">\n    <rect id=\"b\" transform=\"scale(2)\" width=\"4\" height=\"4\"/>\n  </g>";
+        assert_eq!(combined(body, &[2, 4], Combine::Intersect).unwrap(), "  <path id=\"a\" transform=\"translate(2 2)\" d=\"M8 4 V8 H4 V4 Z\"/>\n  <g transform=\"translate(6 6)\">\n  </g>");
+        assert_eq!(combined(body, &[4, 2], Combine::Intersect).unwrap(), "  <g transform=\"translate(6 6)\">\n    <path id=\"b\" transform=\"scale(2)\" d=\"M0 0 H2 V2 H0 Z\"/>\n  </g>");
+    }
+
+    #[test]
+    fn a_shape_is_what_its_rule_fills_and_one_alone_is_made_simple() {
+        // A ring by the rule its group gives it: the band crosses the
+        // ring's two sides, not its hole.
+        let ring = "  <g fill-rule=\"evenodd\">\n    <path id=\"ring\" d=\"M2 2 H12 V12 H2 Z M5 5 H9 V9 H5 Z\"/>\n  </g>\n  <rect id=\"band\" x=\"0\" y=\"6\" width=\"24\" height=\"2\"/>";
+        assert_eq!(combined(ring, &[3, 4], Combine::Intersect).unwrap(), "  <g fill-rule=\"evenodd\">\n    <path id=\"ring\" d=\"M12 6 V8 H9 V6 Z M2 8 V6 H5 V8 Z\"/>\n  </g>");
+        // A bow tie, united with nothing: two triangles.
+        assert_eq!(combined("  <polygon points=\"2,2 12,12 12,2 2,12\"/>", &[2], Combine::Union).unwrap(), "  <path d=\"M2 2 L7 7 L2 12 Z M12 12 L7 7 L12 2 Z\"/>");
+    }
+
+    #[test]
+    fn what_cannot_be_combined_says_why() {
+        let body = "  <rect id=\"a\" width=\"4\" height=\"4\"/>\n  <rect id=\"far\" x=\"10\" width=\"4\" height=\"4\"/>\n  <g id=\"g\"/>\n  <path id=\"bad\" d=\"M0 0 L5 5 X\"/>\n  <rect id=\"flat\" transform=\"scale(0)\" width=\"4\" height=\"4\"/>\n  <rect id=\"over\" x=\"-1\" y=\"-1\" width=\"9\" height=\"9\"/>";
+        for (nodes, how, says) in [
+            (&[2u64, 3][..], Combine::Intersect, "the shapes don't overlap anywhere, so nothing would be left: nothing was changed"),
+            (&[2, 7], Combine::Subtract, "the others cover all of the first shape, so nothing would be left: nothing was changed (node_delete takes shapes out)"),
+            (&[2, 4], Combine::Union, "N4 is a <g>: only shapes (paths, rects, circles, ellipses, polygons) can be combined; for a group, name the shapes in it"),
+            (&[2, 5], Combine::Union, "N5's path data can't all be read, so there's no saying what it covers: set its d to path data that reads first"),
+            (&[6, 2], Combine::Union, "N6's transform squashes it flat, so nothing can be worked out in its coordinates: give it a transform that can be undone first"),
+            (&[2, 2], Combine::Union, "N2 is named twice: a shape is combined with others, not with itself"),
+            (&[2], Combine::Subtract, "that takes two shapes or more: the first is kept, and the others are taken from it, or met with it (a union of one shape makes its outline simple, where it crosses itself)"),
+            (&[], Combine::Union, "there's nothing to combine: name the shapes"),
+        ] {
+            assert_eq!(combined(body, nodes, how), Err(says.to_owned()), "{nodes:?} {how:?}");
+        }
+        let mut d = doc(body);
+        assert_eq!(d.apply(&Command::Boolean { nodes: vec![N(2), N(99)], how: Combine::Union }), Err(DocError::NoSuchNode(N(99))));
+        assert!(d.get(N(2)).is_some_and(|n| n.name == "rect"), "nothing of a refused one is left");
+    }
+}
