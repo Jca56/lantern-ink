@@ -8,6 +8,8 @@ mod docs;
 mod groups;
 mod history;
 mod nodes;
+mod page;
+mod query;
 
 use ink_core::ink_doc::Document;
 use ink_core::{Actor, Applied, Command, Core, DocId};
@@ -52,6 +54,8 @@ pub(crate) fn all() -> Vec<Entry> {
     tools.extend(nodes::tools());
     tools.extend(arrange::tools());
     tools.extend(groups::tools());
+    tools.extend(query::tools());
+    tools.extend(page::tools());
     tools.extend(history::tools());
     tools
 }

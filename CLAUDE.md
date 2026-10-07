@@ -111,11 +111,12 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   exact; groups pass it down), D14 (a property is written where the node
   has it) and D15 (three decimals) are decided; D18 and D19 wait for
   their slices.
-- **M3a, so far** (2026-10-06): `Command::Transform`, `Duplicate`,
+- **M3a is built** (2026-10-06): `Command::Transform`, `Duplicate`,
   `Group`, `Ungroup`, and `Move` keeping a node where it shows; the tools
   `node_transform`, `node_align`, `node_duplicate`, `node_group`,
-  `node_ungroup` (22 tools in all). **Still to come in M3a:**
-  `node_info`, `doc_set`, `doc_query` (which needs hit tests).
+  `node_ungroup`, `node_info`, `doc_query` and `doc_set` (25 tools in
+  all, 202 tests). **M3b (paint) is next.** A fresh session's tools are
+  the new binary's; M3a has had no done-test in one yet.
   - Where a transform is written is `ink-doc/src/settle.rs`, and its
     rules are ARCHITECTURE §3.4. Its done-test draws the corpus:
     `cargo test --release -p ink-render --test settle` (and `report`, or
@@ -125,8 +126,15 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - `ink-geom` writes an arc's radii as finely as it takes to keep the
     arc where it was (`data.rs`): one near a half turn is pulled flat
     by its ends being rounded, by twenty times what was rounded away.
-  - `ink:decimals` on the root sets a document's precision (D15); only
-    `node_set` writes it so far.
+  - `ink:decimals` on the root sets a document's precision (D15);
+    `doc_set` writes it, and declares `xmlns:ink` where it's missing.
+  - What's at a point is `ink-doc/src/hit.rs` (`hit::at`), on
+    `ink-geom`'s `Path::contains` and `Path::distance`: front to back,
+    through transforms and clip paths, as the renderer would draw it.
+    M4's Pointer tool is meant to use the same.
+  - `doc_set` with `content: "fit"` puts the root through the transform
+    from the old viewBox to the new: how a 500-unit Boxy icon becomes a
+    24-unit one in one step.
   - **Not yet:** a shape painted by a gradient in its own coordinates
     (`userSpaceOnUse`, 18 corpus files) keeps even a move in its
     `transform`, until M3b can move the gradient with it. `ToPath` and

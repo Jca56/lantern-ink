@@ -9,6 +9,45 @@ use crate::color;
 use crate::length::{number, numbers, unit};
 use crate::node::Node;
 
+/// The properties a node takes from the group it's in when it doesn't
+/// say them itself.
+pub const INHERITED: [&str; 34] = [
+    "fill",
+    "fill-opacity",
+    "fill-rule",
+    "stroke",
+    "stroke-width",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "stroke-miterlimit",
+    "stroke-dasharray",
+    "stroke-dashoffset",
+    "stroke-opacity",
+    "color",
+    "visibility",
+    "paint-order",
+    "marker",
+    "marker-start",
+    "marker-mid",
+    "marker-end",
+    "clip-rule",
+    "cursor",
+    "pointer-events",
+    "shape-rendering",
+    "text-rendering",
+    "image-rendering",
+    "font-family",
+    "font-size",
+    "font-style",
+    "font-weight",
+    "font-variant",
+    "font-stretch",
+    "letter-spacing",
+    "word-spacing",
+    "text-anchor",
+    "direction",
+];
+
 /// One `name: value` of a `style` attribute.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Decl<'a> {

@@ -28,6 +28,7 @@ pub mod filter;
 mod foreign;
 pub mod geometry;
 pub mod gradient;
+pub mod hit;
 mod id;
 mod kind;
 mod layout;

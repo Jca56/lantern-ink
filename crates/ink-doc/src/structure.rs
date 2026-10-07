@@ -13,47 +13,8 @@ use crate::kind::Kind;
 use crate::length::unit;
 use crate::node::{Child, Content, Element, prefix};
 use crate::settle::{self, Edit};
-use crate::style::prop;
+use crate::style::{INHERITED, prop};
 use crate::value::Precision;
-
-/// The properties a node takes from the group it's in when it doesn't
-/// say them itself: what must be said on it when its group goes.
-const INHERITED: [&str; 34] = [
-    "fill",
-    "fill-opacity",
-    "fill-rule",
-    "stroke",
-    "stroke-width",
-    "stroke-linecap",
-    "stroke-linejoin",
-    "stroke-miterlimit",
-    "stroke-dasharray",
-    "stroke-dashoffset",
-    "stroke-opacity",
-    "color",
-    "visibility",
-    "paint-order",
-    "marker",
-    "marker-start",
-    "marker-mid",
-    "marker-end",
-    "clip-rule",
-    "cursor",
-    "pointer-events",
-    "shape-rendering",
-    "text-rendering",
-    "image-rendering",
-    "font-family",
-    "font-size",
-    "font-style",
-    "font-weight",
-    "font-variant",
-    "font-stretch",
-    "letter-spacing",
-    "word-spacing",
-    "text-anchor",
-    "direction",
-];
 
 /// What only a group can hold for what's in it, and how to say so.
 const EFFECTS: [(&str, &str); 3] = [("filter", "a filter"), ("clip-path", "a clip path"), ("mask", "a mask")];

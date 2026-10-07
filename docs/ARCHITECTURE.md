@@ -212,7 +212,7 @@ enum  Child { Node(NodeId), Text(String) /* text, comments, CDATA, as written */
 - **Ink's own extras** are attributes in an `ink:` namespace that other
   programs ignore: `ink:locked`, `ink:label`, guides on the root (D19),
   and `ink:decimals` on the root, which is D15's "settable per document"
-  (read since M3a; nothing sets it yet but `node_set`).
+  (since M3a; `doc_set` sets it).
   The root declares `xmlns:ink` in a document Ink made, in one it took
   over from another editor (D25), and from the first time an `ink:`
   attribute is needed; a file from elsewhere is otherwise left unstamped.
@@ -246,6 +246,8 @@ that need them, in M2 and M3.
 `value.rs` (numbers, points, path data and transforms as text, at the
 document's `Precision`) and `props.rs` (a property set where the node
 has it, D14); `shape.rs` is the typed view of a shape's own numbers.
+`SetViewBox` and `SetSize` are `doc_set`, over `SetAttr` on the root.
+What's at a point (§4.1's `hit`) is `hit.rs`.
 
 **Where a transform is written** (D13, `settle.rs`). A node put through
 a transform looks exactly as SVG says it would with that transform on
@@ -428,12 +430,12 @@ carries over; only the differences and the tool list are new here.
 
 | Group | Tools |
 |---|---|
-| Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set` (viewBox, size) |
-| Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
+| Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox) |
+| Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
 | Paths | `path_set`, `path_edit` (anchors and handles), `path_op` (boolean ops, outline stroke, simplify, reverse, to path) |
 | Paint | `gradient_add`, `gradient_set`, `clip_set`, `filter_set` |
 | Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
-| Queries | `doc_query` (what's at a point, bounds of nodes) |
+| Queries | `doc_query`† (what's at a point; a node's bounds are `node_info`'s) |
 | History | `history_undo`\*, `history_redo`\*, `batch`\* |
 
 ---
@@ -547,7 +549,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms, **b** paint, **c** paths, **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint, **c** paths, **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 

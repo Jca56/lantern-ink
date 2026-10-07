@@ -17,7 +17,7 @@ fn the_tool_list_is_fixed_and_fits_claude_codes_limits() {
     let list = json::parse(&out[0]).unwrap();
     let tools = list.path("result.tools").and_then(Doc::as_list).unwrap();
     let names: Vec<&str> = tools.iter().filter_map(|t| t.get("name").and_then(Doc::as_str)).collect();
-    assert_eq!(names, ["doc_new", "doc_open", "doc_list", "doc_info", "doc_source", "doc_preview", "doc_save", "doc_export", "doc_close", "node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "history_undo", "history_redo", "batch"]);
+    assert_eq!(names, ["doc_new", "doc_open", "doc_list", "doc_info", "doc_source", "doc_preview", "doc_save", "doc_export", "doc_close", "node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "node_info", "doc_query", "doc_set", "history_undo", "history_redo", "batch"]);
     for t in tools {
         let name = t.get("name").and_then(Doc::as_str).unwrap();
         assert!(t.get("description").and_then(Doc::as_str).is_some_and(|d| d.len() <= 2048), "{name}'s description is too long");
@@ -188,7 +188,7 @@ fn a_batch_is_one_step_with_names_between_its_steps() {
     assert!(text(&ok(&mut s, "doc_info", r#"{"doc_id":"d1"}"#)).contains("1 nodes. Undo: 0."));
     for (steps, says) in [
         (r#"[]"#, "a batch holds 1 to 200 steps, not 0"),
-        (r#"[{"tool":"doc_save","args":{}}]"#, "step 1: doc_save can't go in a batch; only edits can (node_add, node_add_svg, node_set, node_move, node_delete, node_transform, node_align, node_duplicate, node_group, node_ungroup)"),
+        (r#"[{"tool":"doc_save","args":{}}]"#, "step 1: doc_save can't go in a batch; only edits can (node_add, node_add_svg, node_set, node_move, node_delete, node_transform, node_align, node_duplicate, node_group, node_ungroup, doc_set)"),
         (r#"[{"tool":"node_add","args":{"element":"g","preview":true}}]"#, "step 1 (node_add): preview goes on the batch, not on a step"),
         (r#"[{"tool":"node_add","args":{"element":"g","doc_id":"d2"}}]"#, "step 1 (node_add): a batch works on one drawing, d1"),
         (r#"[{"tool":"node_add","args":{"element":"g","into":"@nobody"}}]"#, "step 1 (node_add): \"@nobody\": no earlier step of this batch is named \"nobody\" (name one with \"as\")"),

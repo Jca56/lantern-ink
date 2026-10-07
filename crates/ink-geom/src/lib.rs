@@ -13,6 +13,8 @@
 //! - [`Path::bounds`]: the exact box around a path.
 //! - [`Path::transformed`]: a path through a transform, its segments
 //!   still the kinds they were.
+//! - [`Path::contains`] and [`Path::distance`]: whether a point is in a
+//!   path's fill, and how far it is from its line.
 
 mod affine;
 mod arc;
@@ -20,6 +22,7 @@ mod bounds;
 mod dash;
 mod data;
 mod flatten;
+mod hit;
 mod map;
 pub mod number;
 mod path;
