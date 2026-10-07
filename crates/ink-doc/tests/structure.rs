@@ -76,7 +76,7 @@ fn a_group_goes_and_what_was_in_it_looks_as_it_did() {
     assert_eq!((applied.removed.clone(), applied.moved.clone(), applied.changed.clone()), (ids(&[2]), ids(&[3, 4, 5]), ids(&[3, 4])));
     assert_eq!(
         d.to_svg(),
-        format!("{OPEN}\n  <rect width=\"4\" height=\"4\" fill=\"blue\" x=\"2\" y=\"3\" stroke=\"#000\" stroke-width=\"2\" display=\"none\"/>\n  <text transform=\"translate(2 3)\" fill=\"red\" stroke=\"#000\" stroke-width=\"2\" display=\"none\">hi</text>\n  <title>two</title>\n  <path/>\n</svg>")
+        format!("{OPEN}\n  <rect width=\"4\" height=\"4\" fill=\"blue\" x=\"2\" y=\"3\" stroke=\"#000\" stroke-width=\"2\" display=\"none\"/>\n  <text x=\"2\" y=\"3\" fill=\"red\" stroke=\"#000\" stroke-width=\"2\" display=\"none\">hi</text>\n  <title>two</title>\n  <path/>\n</svg>")
     );
     // A stroke scaled along with its shape is the shape's own, and the
     // group's isn't said over it.

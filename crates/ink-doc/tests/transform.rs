@@ -217,11 +217,37 @@ fn a_group_passes_it_down_when_everything_in_it_can_take_it() {
     let shadowed = r#"<filter id="s"><feDropShadow/></filter><g filter="url(#s)"><path d="M4 14 H12"/></g>"#;
     assert!(through(shadowed, &[4], shift(2.0, 3.0)).ends_with(r#"<g filter="url(#s)"><path d="M6 17 H14"/></g>"#));
     assert!(through(shadowed, &[4], grow(2.0, 2.0)).ends_with(r#"<g filter="url(#s)" transform="scale(2)"><path d="M4 14 H12"/></g>"#));
-    // Nor is anything passed to what can't take it: words, pictures,
-    // and what Ink doesn't know.
-    for held in ["<text>hi</text>", r##"<use href="#a"/>"##, "<image/>", "<mystery/>", r#"<path d="M0 0H4" clip-path="url(#c)"/>"#] {
+    // Nor is anything passed to what can't take it: pictures, and what
+    // Ink doesn't know.
+    for held in [r##"<use href="#a"/>"##, "<image/>", "<mystery/>", r#"<path d="M0 0H4" clip-path="url(#c)"/>"#] {
         assert_eq!(through(&format!("<g>{held}<path d=\"M4 14 H12\"/></g>"), &[2], shift(2.0, 3.0)), format!("<g transform=\"translate(2 3)\">{held}<path d=\"M4 14 H12\"/></g>"));
     }
+}
+
+#[test]
+fn a_text_takes_a_move_into_where_it_starts() {
+    assert_eq!(through(r#"<text x="4" y="9">hi</text>"#, &[2], shift(2.0, 3.0)), r#"<text x="6" y="12">hi</text>"#);
+    assert_eq!(through("<text>hi</text>", &[2], shift(2.0, 3.0)), r#"<text x="2" y="3">hi</text>"#, "it started at 0 where it didn't say");
+    assert_eq!(through(r#"<text y="9px">hi</text>"#, &[2], shift(2.0, 0.0)), r#"<text y="9px" x="2">hi</text>"#, "what didn't change is as the file had it");
+    // Every line of it that says where it starts goes too.
+    let lines = r#"<text x="4" y="9">a<tspan x="4" dy="1.2em">b</tspan><tspan y="30">c<tspan x="1 2">d</tspan></tspan></text>"#;
+    assert_eq!(through(lines, &[2], shift(2.0, 3.0)), r#"<text x="6" y="12">a<tspan x="6" dy="1.2em">b</tspan><tspan y="33">c<tspan x="3 4">d</tspan></tspan></text>"#);
+    // A group passes a move down to its text, and a move its text had
+    // is taken in with the new one.
+    assert_eq!(through(r#"<g><text>hi</text><path d="M4 14 H12"/></g>"#, &[2], shift(2.0, 3.0)), r#"<g><text x="2" y="3">hi</text><path d="M6 17 H14"/></g>"#);
+    assert_eq!(through(r#"<text x="4" transform="translate(1 1)">hi</text>"#, &[2], shift(2.0, 3.0)), r#"<text x="7" y="4">hi</text>"#);
+    // A turn or a scale is still its transform: text is set upright,
+    // at its own size.
+    assert_eq!(through(r#"<text x="4" y="9">hi</text>"#, &[2], grow(2.0, 2.0)), r#"<text x="4" y="9" transform="scale(2)">hi</text>"#);
+    assert_eq!(through(r#"<text x="4" y="9">hi</text>"#, &[2], turn(90.0, 4.0, 9.0)), r#"<text x="4" y="9" transform="rotate(90 4 9)">hi</text>"#);
+    // So is a move, where a number can't be added to what it says, or
+    // its paint would stay behind.
+    assert_eq!(through(r#"<text x="50%" y="9">hi</text>"#, &[2], shift(2.0, 3.0)), r#"<text x="50%" y="9" transform="translate(2 3)">hi</text>"#);
+    assert_eq!(through(r#"<text x="4">a<tspan x="1em">b</tspan></text>"#, &[2], shift(2.0, 0.0)), r#"<text x="4" transform="translate(2 0)">a<tspan x="1em">b</tspan></text>"#, "all of it or none");
+    let fixed = r##"<linearGradient id="page" gradientUnits="userSpaceOnUse"/><text fill="url(#page)">hi</text>"##;
+    assert!(through(fixed, &[3], shift(2.0, 3.0)).ends_with(r##"<text fill="url(#page)" transform="translate(2 3)">hi</text>"##));
+    let across = r##"<linearGradient id="box"/><text>hi<tspan fill="url(#box)">!</tspan></text>"##;
+    assert!(through(across, &[3], shift(2.0, 3.0)).ends_with(r##"<text x="2" y="3">hi<tspan fill="url(#box)">!</tspan></text>"##), "one across its box goes where it goes");
 }
 
 #[test]

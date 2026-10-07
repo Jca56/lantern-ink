@@ -32,7 +32,7 @@ fn a_node_says_everything_about_itself() {
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#)).contains("\nShows nowhere itself: it's something others use, or words about the picture.\nUsed by: N8 <rect id=\"pane\">."));
     // A text shows where its glyphs are (the test font's h and i at
     // size 10, through the group's move).
-    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N9"}"#)).contains("From the groups above: stroke=\"#12100e\" (N7), stroke-width=\"2\" (N7)\nShows at 3,-4 7×7 in the drawing's coordinates (strokes aside)."));
+    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N9"}"#)).contains("From the groups above: stroke=\"#12100e\" (N7), stroke-width=\"2\" (N7)\nSays \"hi\", set in Ink Test 10.\nShows at 3,-4 7×7 in the drawing's coordinates (strokes aside)."));
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N11"}"#)).contains("\nShows nowhere (not drawn yet)."));
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N1"}"#)).starts_with("N1 <svg>, the drawing's root; 10 inside."));
     // A long value is cut, and says where to read it whole.
@@ -126,7 +126,8 @@ fn a_text_says_its_words_and_shows_where_its_glyphs_are() {
     assert_eq!(at(&mut s, 5.0, 8.0), "At 5,8, front to back: N3 <text id=\"label\"> (its fill), in N2.");
     assert_eq!(at(&mut s, 26.0, 8.5), "Nothing is drawn at 26,8.5.", "the hole in the o");
     assert_eq!(at(&mut s, 24.0, 8.5), "At 24,8.5, front to back: N3 <text id=\"label\"> (its fill), in N2.", "a span's glyphs are its text's");
-    // A text lines up by its box like anything else.
+    // A text lines up by its box like anything else, and takes the move
+    // into where it starts.
     ok(&mut s, "node_align", r#"{"doc_id":"d1","node_ids":["N3"],"x":"left","to":"page"}"#);
-    assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N3"}"#)).lines().next(), Some("<text id='label' x='2' y='12' fill='#223' transform=\"translate(-3 0)\">"));
+    assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N3"}"#)).lines().next(), Some("<text id='label' x='-1' y='12' fill='#223'>"));
 }

@@ -115,6 +115,18 @@ pub fn add(data: Vec<u8>) -> Result<(), String> {
     engine().load_font_data(data).map_err(|e| e.to_string())
 }
 
+/// What `family` is called on this machine: a named one's own name,
+/// and for a generic one the family it stands for.
+pub fn called(family: &Family) -> String {
+    let (sans, mono) = NAMES.get().map_or((SANS, MONO), |(sans, mono)| (sans.as_str(), mono.as_str()));
+    let standing = |wanted: &str, kind: &str| if has(wanted) { wanted.to_owned() } else { format!("this machine's {kind} font ({wanted} isn't installed)") };
+    match family {
+        Family::Sans => standing(sans, "sans"),
+        Family::Mono => standing(mono, "monospace"),
+        Family::Named(name) => name.clone(),
+    }
+}
+
 /// The family a name in a `font-family` list stands for on this
 /// machine: one of the generic names, or a family that's installed.
 /// `None` for one that isn't: the next in the list gets its turn.

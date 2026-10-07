@@ -37,6 +37,7 @@ mod id;
 mod kind;
 mod layout;
 pub mod length;
+pub mod lettering;
 mod node;
 pub mod outline;
 pub mod pathedit;

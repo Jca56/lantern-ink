@@ -58,9 +58,10 @@ pub(crate) fn undrawn(doc: &Document, node: &Node) -> Option<String> {
 /// The most of a text's words one line quotes.
 const MAX_WORDS: usize = 40;
 
-/// What a text says, in quotes, cut short if it's long.
+/// What a text says, in quotes, cut short if it's long: its lines
+/// with a stroke between them.
 pub(crate) fn words(doc: &Document, node: &Node) -> String {
-    let said = text::said(doc, node);
+    let said = text::lines(doc, node).join(" / ");
     match said.char_indices().nth(MAX_WORDS) {
         Some((cut, _)) => format!("\"{}…\"", &said[..cut]),
         None => format!("\"{said}\""),

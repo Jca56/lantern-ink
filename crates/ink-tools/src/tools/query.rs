@@ -86,6 +86,9 @@ fn info(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
     if !handed.is_empty() {
         lines.push(format!("From the groups above: {}", handed.join(", ")));
     }
+    if node.kind == NodeKind::Text {
+        lines.push(format!("Says {}, {}.", crate::describe::words(doc, node), super::text::set_in(doc, node)));
+    }
     let boxes = page_bounds(doc);
     lines.push(match (boxes.get(&id), undrawn(doc, node)) {
         (_, Some(why)) => format!("Shows nowhere ({why})."),

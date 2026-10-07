@@ -9,6 +9,7 @@ use crate::document::Document;
 use crate::edit::Place;
 use crate::error::{DocError, invalid};
 use crate::id::NodeId;
+use crate::lettering::{LEADING, Span};
 use crate::node::{Content, Element};
 use crate::outline::AnchorId;
 use crate::pathedit::PathEdit;
@@ -88,6 +89,11 @@ pub enum Command {
     /// outline within `tolerance` of where it was. Corners stay, and
     /// no anchor moves.
     Simplify { nodes: Vec<NodeId>, tolerance: f64 },
+    /// Make the text `node` say `lines`, each a row of stretches with
+    /// whatever lettering or paint each sets for itself
+    /// ([`crate::lettering`]): everything that was in it goes. Lines
+    /// are set `leading` ems apart (`None`: 1.2).
+    SetText { node: NodeId, lines: Vec<Vec<Span>>, leading: Option<f64> },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -296,6 +302,16 @@ impl Document {
                     if self.simplify(id, *tolerance)? {
                         applied.note(vec![id]);
                     }
+                }
+            }
+            Command::SetText { node, lines, leading } => {
+                let was = self.markup(*node)?;
+                let (made, gone) = self.set_text(*node, lines, leading.unwrap_or(LEADING))?;
+                // The same words again, written the same, are no change.
+                if self.markup(*node)? != was {
+                    applied.note(vec![*node]);
+                    applied.created.extend(made);
+                    applied.removed.extend(gone);
                 }
             }
             Command::Batch(commands) => {

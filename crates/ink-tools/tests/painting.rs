@@ -195,3 +195,59 @@ fn nodes_are_given_shadows_and_blurs() {
         assert_eq!(refused(&mut s, "filter_set", &format!(r#"{{"doc_id":"d1",{args}}}"#)), says);
     }
 }
+
+/// Text, over the wire: made, changed, moved, and asked about. Set in
+/// the tests' own font: at size 10 a capital is a box 4 by 7 standing
+/// on the line a unit in from its pen, and each letter moves the pen 6.
+#[test]
+fn text_is_added_set_and_asked_about() {
+    let (mut s, _) = server("text");
+    ok(&mut s, "doc_new", r#"{"width":100,"height":60}"#);
+    let added = ok(&mut s, "text_add", r##"{"doc_id":"d1","text":"HH","x":10,"y":20,"font":"No Such Font, Ink Test","size":10,"fill":"#223"}"##);
+    assert_eq!(text(&added), "Added N2 <text> \"HH\" at 11,13 10×7, set in Ink Test 10 (No Such Font not installed here).");
+    assert_eq!(data(&added, "node_id"), "N2");
+    let source = |s: &mut _| text(&ok(s, "doc_source", r#"{"doc_id":"d1","node_id":"N2"}"#)).to_owned();
+    assert_eq!(source(&mut s), "<text x=\"10\" y=\"20\" font-family=\"No Such Font, Ink Test\" font-size=\"10\" fill=\"#223\">HH</text>");
+    // Lines and stretches with styles of their own are spans: each line
+    // starts back at x, a line further down.
+    let set = ok(&mut s, "text_set", r##"{"doc_id":"d1","node_id":"N2","runs":[{"text":"H "},{"text":"H\nHH","fill":"#c33","bold":true}],"anchor":"middle","line_height":1.5}"##);
+    assert_eq!(text(&set), "Set. Now: N2 <text> \"H H / HH\" at 3.5,13 13.5×22, set in Ink Test 10 (No Such Font not installed here) and Ink Test bold 10 (No Such Font not installed here).");
+    assert_eq!(source(&mut s), "<text x=\"10\" y=\"20\" font-family=\"No Such Font, Ink Test\" font-size=\"10\" fill=\"#223\" text-anchor=\"middle\">H <tspan fill=\"#c33\" font-weight=\"bold\">H</tspan><tspan x=\"10\" dy=\"1.5em\"><tspan fill=\"#c33\" font-weight=\"bold\">HH</tspan></tspan></text>");
+    // Lettering alone leaves the words as they are.
+    let bigger = ok(&mut s, "text_set", r#"{"doc_id":"d1","node_id":"N2","size":20,"italic":false,"letter_spacing":1}"#);
+    assert!(text(&bigger).contains("set in Ink Test 20"), "{}", text(&bigger));
+    assert!(source(&mut s).contains("font-size=\"20\" fill=\"#223\" text-anchor=\"middle\" font-style=\"normal\" letter-spacing=\"1\">H <tspan"));
+    // A move goes into its x and y, and its lines'.
+    ok(&mut s, "node_transform", r#"{"doc_id":"d1","node_ids":["N2"],"move":[5,-2]}"#);
+    assert!(source(&mut s).starts_with("<text x=\"15\" y=\"18\"") && source(&mut s).contains("<tspan x=\"15\" dy=\"1.5em\">"));
+    // It says what it is when asked.
+    let info = text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N2"}"#)).to_owned();
+    assert!(info.contains("\nSays \"H H / HH\", set in Ink Test 20 (No Such Font not installed here) and Ink Test bold 20 (No Such Font not installed here).\nShows at "), "{info}");
+    // One step back at a time.
+    ok(&mut s, "history_undo", r#"{"doc_id":"d1","steps":3}"#);
+    assert_eq!(source(&mut s), "<text x=\"10\" y=\"20\" font-family=\"No Such Font, Ink Test\" font-size=\"10\" fill=\"#223\">HH</text>");
+    // In a batch, with a name for later steps.
+    let batch = ok(&mut s, "batch", r#"{"doc_id":"d1","steps":[{"tool":"text_add","args":{"text":"I","x":50,"y":40,"font":"Ink Test"},"as":"label"},{"tool":"text_set","args":{"node_id":"@label","text":"II","bold":true}}]}"#);
+    assert!(text(&batch).contains("N6"), "{}", text(&batch));
+    assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N6"}"#)), "<text x=\"50\" y=\"40\" font-family=\"Ink Test\" font-weight=\"bold\">II</text>");
+
+    for (tool, args, says) in [
+        ("text_add", r#""x":1,"y":2"#, "give the words: text (one style) or runs (several)"),
+        ("text_add", r#""x":1,"y":2,"text":"a","runs":[{"text":"b"}]"#, "give text (one style) or runs (several), not both"),
+        ("text_add", r#""x":1,"y":2,"runs":[{"fill":"red"}]"#, "each of \"runs\" needs its \"text\""),
+        ("text_add", r#""x":1,"y":2,"runs":[{"text":"a","colour":"red"}]"#, "a run has no \"colour\": it takes text, fill, bold, italic, font and size"),
+        ("text_add", r#""x":1,"y":2,"text":"a","font":" ""#, "\"font\" is empty: name a family (font_list says which are installed)"),
+        ("text_set", r#""node_id":"N2""#, "say what to set: text or runs, or font, size, bold, italic, fill, anchor, letter_spacing"),
+        ("text_set", r#""node_id":"N2","line_height":2"#, "line_height goes with text or runs: it's written into the lines they make"),
+        ("text_set", r#""node_id":"N1","text":"a""#, "N1 is a <svg>, not a <text>: text_add makes a text, and node_style paints anything"),
+    ] {
+        assert_eq!(refused(&mut s, tool, &format!(r#"{{"doc_id":"d1",{args}}}"#)), says, "{tool} {args}");
+    }
+    assert_eq!(text(&ok(&mut s, "text_set", r#"{"doc_id":"d1","node_id":"N2","text":"HH"}"#)), "Nothing changed: it said that already, lettered that way.");
+
+    // The fonts here: the tests' own is among them.
+    let fonts = ok(&mut s, "font_list", r#"{"query":"ink te"}"#);
+    assert!(text(&fonts).starts_with("Here sans-serif is ") && text(&fonts).ends_with("have \"ink te\" in their name: Ink Test."), "{}", text(&fonts));
+    assert!(text(&ok(&mut s, "font_list", r#"{"query":"no such font anywhere"}"#)).contains("has \"no such font anywhere\" in its name."));
+    assert!(text(&ok(&mut s, "font_list", "{}")).contains(" families are installed: "));
+}

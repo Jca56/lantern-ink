@@ -26,6 +26,8 @@
 //! - **A group passes it down** to what's in it when everything there
 //!   can take it without being left a transform it didn't have, and
 //!   keeps it as its own `transform` otherwise.
+//! - **A text takes a move** into its `x` and `y` and its lines'
+//!   (`lettered.rs`); a turn or a scale stays its `transform`.
 
 use std::collections::HashMap;
 
@@ -45,6 +47,7 @@ use crate::value::Precision;
 use crate::viewport::Viewport;
 
 mod drawn;
+mod lettered;
 
 /// One change to make.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -198,6 +201,7 @@ impl<'a> Settle<'a> {
         match node.kind {
             kind if kind.is_shape() => self.shape(node, to, inherited),
             Kind::G | Kind::A | Kind::Switch => self.group(node, to, inherited),
+            Kind::Text => self.text(node, to, inherited),
             _ => Some(to).filter(|t| !self.p.same(t, &Affine::IDENTITY)),
         }
     }

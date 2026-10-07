@@ -228,9 +228,48 @@ pub fn said(doc: &Document, text: &Node) -> String {
     gather(doc, text, Vec2::ZERO).chars.iter().map(|c| c.0).collect()
 }
 
+/// What `text` says, a line at a time: a new line is wherever an
+/// element in it says where it starts (`x` or `y`), which is how SVG
+/// breaks one.
+pub fn lines(doc: &Document, text: &Node) -> Vec<String> {
+    let g = gather(doc, text, Vec2::ZERO);
+    let mut breaks: Vec<usize> = g.starts.iter().filter(|start| start.at > 0 && (start.x.is_some() || start.y.is_some())).map(|start| start.at).collect();
+    breaks.sort_unstable();
+    breaks.dedup();
+    breaks.push(g.chars.len());
+    let mut from = 0;
+    breaks.into_iter().map(|to| g.chars[std::mem::replace(&mut from, to)..to].iter().map(|c| c.0).collect()).collect()
+}
+
 /// Why `text` can't be set, if it can't.
 pub fn unset(doc: &Document, text: &Node) -> Option<Unset> {
     gather(doc, text, Vec2::ZERO).unset
+}
+
+/// A font some of a text is set in.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Lettered {
+    /// The family, as this machine calls it.
+    pub family: String,
+    pub bold: bool,
+    pub italic: bool,
+    pub size: f64,
+    /// Families asked for ahead of it that aren't installed here.
+    pub missing: Vec<String>,
+}
+
+/// The fonts `text` is set in, in the order they first come.
+pub fn lettered(doc: &Document, text: &Node) -> Vec<Lettered> {
+    let mut all: Vec<Lettered> = Vec::new();
+    for piece in &gather(doc, text, Vec2::ZERO).pieces {
+        let face = piece.font.face();
+        let missing = piece.font.families.iter().take_while(|name| crate::fonts::family(name).is_none()).cloned().collect();
+        let set = Lettered { family: crate::fonts::called(&face.family), bold: face.bold, italic: face.italic, size: piece.font.size, missing };
+        if !all.contains(&set) {
+            all.push(set);
+        }
+    }
+    all
 }
 
 /// How `run`'s glyphs are painted: `style` (what `text` itself is drawn
@@ -373,6 +412,20 @@ pub(crate) mod tests {
         let (plain, on_path) = (d.node(NodeId(2)).unwrap(), d.node(NodeId(6)).unwrap());
         assert_eq!((said(&d, plain).as_str(), unset(&d, plain)), ("Hop on & in", None));
         assert_eq!((said(&d, on_path).as_str(), unset(&d, on_path)), ("round we go", Some(Unset::OnPath)));
+        assert_eq!(lines(&d, plain), ["Hop on & in"]);
+        let three = Document::parse(DocId(1), r#"<svg><text x="1" y="2">one<tspan x="1" dy="1.2em">two <tspan fill="red">red</tspan></tspan><tspan y="9">three</tspan><tspan dx="1">!</tspan></text><text/></svg>"#).unwrap();
+        assert_eq!(lines(&three, three.node(NodeId(2)).unwrap()), ["one", "two red", "three!"], "a nudge isn't a new line");
+        assert_eq!(lines(&three, three.node(NodeId(7)).unwrap()), [""]);
+    }
+
+    #[test]
+    fn a_text_says_which_fonts_it_ended_up_in() {
+        test_fonts();
+        let d = Document::parse(DocId(1), r#"<svg><text font-family="No Such Font, 'Ink Test', serif" font-size="10">a<tspan font-weight="bold" font-size="20">b</tspan><tspan>c</tspan></text></svg>"#).unwrap();
+        let fonts = lettered(&d, d.node(NodeId(2)).unwrap());
+        assert_eq!(fonts.len(), 2, "a span lettered as its text is no new font: {fonts:?}");
+        assert_eq!(fonts[0], Lettered { family: "Ink Test".into(), bold: false, italic: false, size: 10.0, missing: vec!["No Such Font".into()] });
+        assert_eq!((fonts[1].bold, fonts[1].size), (true, 20.0));
     }
 
     #[test]

@@ -379,14 +379,31 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - A heart or an emoji comes back from `lntrn-text` as a picture
     (its fallback order puts the colour font first): `fonts::shape`
     asks again in families that draw outlines. Ink draws no pictures.
-  - **Not yet:** a text moved by `node_transform` keeps a
-    `transform` (d2 puts a move in its `x` and `y`); a missing font
-    gives way without a word (d2's tools say which font was used);
-    `clip_set` still takes shapes only, though a clip path with a
-    text in it is drawn.
+  - **Not yet:** `clip_set` still takes shapes only, though a clip
+    path with a text in it is drawn.
   - **Found on the way:** LUI2's `lntrn-text/src/engine.rs` is 545
     lines (it was 541 before `mod glyphs;` went in): past its 500, told
     to Alva.
+
+- **M3d's d2 is built** (2026-10-07, 331 tests): `Command::SetText`
+  (`ink-doc/src/lettering.rs`) and the tools `text_add`, `text_set`
+  and `font_list` (36 tools in all).
+  - Lines are `<tspan>`s back at the text's `x`, `dy` ems down; a
+    stretch with its own paint or lettering is a `<tspan>`; an empty
+    line is the space before the next. `SetText` replaces everything
+    in the text.
+  - **A text takes a move into its `x` and `y`**, and its lines'
+    (`settle/lettered.rs`): all of them or none. A turn or a scale
+    stays its `transform`; so does a move when a position is `50%` or
+    `2em`, or its paint would stay behind.
+  - A family that isn't installed is written as asked and reported:
+    `text::lettered` says which font each part of a text ended up in,
+    and the tools' replies and `node_info` pass it on.
+  - `text_set` doesn't move a text: `node_transform` and `node_align`
+    do, since they know its lines.
+  - `ink` is registered with Claude Code on genforge too (2026-10-07,
+    user scope, `alwaysLoad`, `mcp__ink` allowed), as on Alva's other
+    machine.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

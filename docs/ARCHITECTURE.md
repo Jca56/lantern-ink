@@ -258,6 +258,10 @@ drawing's `<defs>`, made as the root's first child if there isn't one;
 `SetGradient` is `gradient_set`, over `SetAttr`, `Delete` and `Insert`
 on the gradient and its stops.
 
+**As built in M3d:** `SetText` (`lettering.rs`, §5.5); `Transform`
+puts a text's move into its `x` and `y`. `TextToPath` is M3d's last
+piece.
+
 **As built in M3c:** `ToPath`, and the path work as two Commands on
 one model: `EditPath { node, edits }` and `SetPath { node, runs }`.
 A path is read as an `Outline` (`outline.rs`): runs of anchors, each
@@ -590,9 +594,29 @@ shape's.
   `x`, `y`, `dx`, `dy`), text set top to bottom, text stretched to a
   length. Not read yet: the `font` shorthand, `text-decoration`,
   `baseline-shift`, `direction`.
-- **A text still keeps a move as a `transform`** (it has no numbers
-  `settle.rs` knows how to write). That, the text tools and saying
-  which font a text ended up in come with M3d's next piece.
+- **A text takes a move into its numbers** (`settle/lettered.rs`,
+  M3d's second piece): its `x` and `y`, and those of every `<tspan>`
+  in it that says where it starts, all of them or none. A turn or a
+  scale stays its `transform` (text is set upright, at its own size),
+  and so does a move where a position can't have a number added to it
+  (`50%`, `2em`) or the text's paint would stay behind (a gradient laid
+  out in the page's coordinates, a clip path others use).
+- **`SetText` gives a text its words** (`ink-doc/src/lettering.rs`):
+  lines, each a row of stretches with whatever each sets for itself.
+  SVG has no line breaks, so each line after the first is a `<tspan>`
+  back at the text's `x`, `dy` ems further down (so it keeps up with
+  the font's size); a stretch with paint or lettering of its own is a
+  `<tspan>` saying so; an empty line is the space before the next.
+  White space that would collapse (at a line's end, two in a row) puts
+  `xml:space="preserve"` on the text. Everything that was in the text
+  is replaced.
+- **The tools** (`ink-tools/src/tools/text.rs`): `text_add` makes a
+  `<text>` at a baseline's start, `text_set` changes what one says and
+  how all of it is lettered, `font_list` names the families installed
+  and what the generic names stand for. A family that isn't installed
+  is written as asked (another machine may have it) and reported: the
+  reply, and `node_info`, say which font each part ended up in and
+  which of the families asked for aren't here (`text::lettered`).
 - **Tests set text in fonts of their own** (`tests/fonts/`, family
   "Ink Test", made by `ink-doc/tests/font.rs`, which holds the files to
   what it makes): boxes for letters and a ring for an `o`, 1000 units
@@ -644,7 +668,7 @@ carries over; only the differences and the tool list are new here.
 | Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
 | Paths | `path_set`§, `path_edit`§ (anchors and handles), `path_op`§ (to path, reverse, the boolean ops union, subtract, intersect and exclude, outline stroke, simplify) (§ = built in M3c) |
 | Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`‡, `gradient_set`‡, `clip_set`‡, `filter_set`‡ (‡ = built in M3b) |
-| Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
+| Text | `text_add`¶, `text_set`¶, `font_list`¶, `text_to_path` (¶ = built in M3d) |
 | Queries | `doc_query`† (what's at a point; a node's bounds are `node_info`'s) |
 | History | `history_undo`\*, `history_redo`\*, `batch`\* |
 
@@ -766,9 +790,9 @@ As LS3 §7, to the letter where it can be:
   Alva's.** Nothing in this project ever captures the screen.
 - **Determinism:** no wall clock or randomness in a Command; fonts named
   in the file, a missing one reported rather than silently swapped
-  (the reporting comes with M3d's text tools: until then one that's
-  missing gives way without a word, §5.5). Tests set text in fonts of
-  their own (`tests/fonts/`).
+  (it gives way to the next family named, and the text tools and
+  `node_info` say which font was used and which weren't here, §5.5).
+  Tests set text in fonts of their own (`tests/fonts/`).
 
 ---
 
@@ -779,7 +803,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (its renderer built 2026-10-07), **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (its renderer and its tools built 2026-10-07; text to paths to go), **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 

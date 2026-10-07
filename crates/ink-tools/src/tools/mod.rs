@@ -14,6 +14,7 @@ mod page;
 mod paths;
 mod query;
 mod style;
+mod text;
 
 use ink_core::ink_doc::Document;
 use ink_core::{Actor, Applied, Command, Core, DocId};
@@ -62,6 +63,7 @@ pub(crate) fn all() -> Vec<Entry> {
     tools.extend(gradients::tools());
     tools.extend(effects::tools());
     tools.extend(paths::tools());
+    tools.extend(text::tools());
     tools.extend(query::tools());
     tools.extend(page::tools());
     tools.extend(history::tools());
