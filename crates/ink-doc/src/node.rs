@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use crate::id::NodeId;
 use crate::kind::Kind;
+use crate::outline::Anchored;
 use crate::sheet::Said;
 use crate::xml::escape::unescape;
 
@@ -192,6 +193,9 @@ pub struct Node {
     /// count for more last (`None`: nothing). Worked out from the rules
     /// and the tree, never written to the file ([`crate::sheet`]).
     pub(crate) ruled: Option<Arc<[Said]>>,
+    /// A path's anchors' ids, in order ([`crate::outline`], D18): kept
+    /// here, never written.
+    pub(crate) anchors: Option<Arc<Anchored>>,
 }
 
 /// What a [`Node`] holds, in order.

@@ -24,6 +24,7 @@ fn a_node_says_everything_about_itself() {
             "Its own numbers are under, nearest first: N7 transform=\"translate(2 3)\".",
             "Uses: fill → N3 <linearGradient id=\"glow\">; clip-path → N5 <clipPath id=\"left\">; style → nothing (no element has id=\"nothing\").",
             "Used by: N11 <use>.",
+            "No anchors of its own: path_edit (or path_op to_path) makes it a path that has.",
         ]
     );
     assert_eq!((info.path("structuredContent.parent").and_then(Doc::as_str), info.path("structuredContent.attrs.x").and_then(Doc::as_str), info.path("structuredContent.uses[1]").and_then(Doc::as_str)), (Some("N7"), Some("4"), Some("N5")));

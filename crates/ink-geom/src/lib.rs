@@ -13,6 +13,8 @@
 //! - [`Path::bounds`]: the exact box around a path.
 //! - [`Path::transformed`]: a path through a transform, its segments
 //!   still the kinds they were.
+//! - [`Piece`]: one segment with where it starts, to cut in two, walk
+//!   backwards and find the nearest point of.
 //! - [`Path::contains`] and [`Path::distance`]: whether a point is in a
 //!   path's fill, and how far it is from its line.
 
@@ -26,6 +28,7 @@ mod hit;
 mod map;
 pub mod number;
 mod path;
+mod piece;
 mod stroke;
 
 pub use affine::{Affine, Axes};
@@ -33,6 +36,7 @@ pub use data::Parsed;
 pub use flatten::Polyline;
 pub use lntrn_math::{Rect, Vec2};
 pub use path::{ArcTo, Path, Seg, Subpath};
+pub use piece::{Piece, circle_through};
 pub use stroke::{Cap, Join, Stroke, stroke};
 
 /// Which parts of a path that crosses itself are inside it.

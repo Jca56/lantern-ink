@@ -10,6 +10,9 @@ use crate::edit::Place;
 use crate::error::{DocError, invalid};
 use crate::id::NodeId;
 use crate::node::{Content, Element};
+use crate::outline::AnchorId;
+use crate::pathedit::PathEdit;
+use crate::paths::NewRun;
 use crate::settle;
 use crate::xml::parse::parse_fragment;
 
@@ -61,6 +64,15 @@ pub enum Command {
     /// for what a `<style>` rule gives it, in its `style` to outvote the
     /// rule.
     SetStyle { nodes: Vec<NodeId>, set: Vec<(String, Option<String>)> },
+    /// Make each of the shapes `nodes` a `<path>` that draws the same
+    /// outline. A path is left as it is.
+    ToPath { nodes: Vec<NodeId> },
+    /// Edit the path `node` by its anchors, each edit in turn. A shape
+    /// that isn't a path yet is made one first.
+    EditPath { node: NodeId, edits: Vec<PathEdit> },
+    /// Set the path `node`'s whole outline. An anchor given the id of
+    /// one the path has is that anchor still.
+    SetPath { node: NodeId, runs: Vec<NewRun> },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -76,6 +88,8 @@ pub struct Applied {
     pub removed: Vec<NodeId>,
     /// Nodes now somewhere else.
     pub moved: Vec<NodeId>,
+    /// Anchors a path edit made (the node they're in is in `changed`).
+    pub anchors: Vec<AnchorId>,
 }
 
 impl Applied {
@@ -223,6 +237,26 @@ impl Document {
             Command::SetStyle { nodes, set } => {
                 let changed = self.set_style(nodes, set)?;
                 applied.note(changed);
+            }
+            Command::ToPath { nodes } => {
+                if nodes.is_empty() {
+                    return invalid("there's nothing to make a path of: name at least one shape");
+                }
+                for &id in nodes {
+                    if self.make_path(id)? {
+                        applied.note(vec![id]);
+                    }
+                }
+            }
+            Command::EditPath { node, edits } => {
+                let (changed, made) = self.edit_path(*node, edits)?;
+                applied.note(if changed { vec![*node] } else { Vec::new() });
+                applied.anchors.extend(made);
+            }
+            Command::SetPath { node, runs } => {
+                let (changed, made) = self.set_path(*node, runs)?;
+                applied.note(if changed { vec![*node] } else { Vec::new() });
+                applied.anchors.extend(made);
             }
             Command::Batch(commands) => {
                 if depth >= MAX_BATCH_DEPTH {

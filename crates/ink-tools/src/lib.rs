@@ -19,23 +19,24 @@ use crate::tools::{Ctx, Entry};
 
 /// What the model reads up front (Claude Code keeps 2048 chars).
 pub const INSTRUCTIONS: &str = "Lantern Ink: make and edit SVG drawings, headless in this server (ids like d1). \
-A drawing is its SVG file's own tree: elements (nodes \"N3\") with their attributes exactly as the file writes them. \
+A drawing is its SVG file's own tree: elements (nodes \"N3\") with their attributes as the file writes them. \
 What you don't change is saved as it was. \
 Conventions: an attribute's numbers are in the element's own coordinates (inside its groups' transforms), y down; \
 paint is any SVG paint (\"#rrggbb\", \"none\", \"url(#id)\"); later in the file is further up the picture. \
 Address everything by the ids results return: doc \"d1\", node \"N3\"; they never change while a drawing is open; \
 an element's own id=\"…\" is just an attribute. \
-Make things with node_add (one element and its attributes) or node_add_svg (markup as you'd write it); \
+Make things with node_add (one element, its attributes) or node_add_svg (markup as you'd write it); \
 change them with node_set (any attribute; null takes one off), node_style (paint, set where it will show), \
-gradient_add (a gradient to paint with), clip_set (cut to a shape), filter_set (a shadow, a blur), \
-node_move (the stacking order, or into a group) and node_delete. \
+gradient_add (a gradient), clip_set (cut to a shape), filter_set (a shadow, a blur), \
+node_move (stacking order, or into a group) and node_delete. \
 Move, scale, turn and flip things with node_transform, and line them up with node_align: both work in the drawing's coordinates \
-whatever groups a node is in, and write the change into its own numbers where those can say it. \
+whatever groups a node is in. \
+Reshape a path by its anchors with path_edit and path_set (node_info lists them, \"A3\"); path_op makes a shape a path. \
 node_duplicate copies; node_group and node_ungroup make and dissolve groups. \
-Look things up with doc_info (every node, front to back, and where it shows), node_info (all about one), \
+Look things up with doc_info (every node, front to back, with its box), node_info (all about one), \
 doc_query (what's at a point) and doc_source (the markup); doc_set sets the page. \
 Workflow: doc_new or doc_open, then edit, then doc_preview to look (at milestones, not after every call; \
-renderer \"lantern\" shows how Lantern's apps will draw it at icon sizes), then doc_save (.svg) or doc_export (a picture). \
+renderer \"lantern\": as Lantern's apps draw it at icon sizes), then doc_save (.svg) or doc_export (a picture). \
 Use batch for many edits: one undo step, all or nothing; name what a step makes with \"as\" and refer to it as \"@name\". \
 Every edit is undoable (history_undo). Refused calls say how to fix them. \
 Not drawn yet (but kept): <text>, <use>, <image>, masks, patterns, the rarer filter steps. \

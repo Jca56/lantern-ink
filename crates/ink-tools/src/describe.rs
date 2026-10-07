@@ -4,8 +4,9 @@
 use std::collections::HashMap;
 
 use ink_core::ink_doc::geometry::page_bounds;
+use ink_core::ink_doc::outline::Link;
 use ink_core::ink_doc::style::prop;
-use ink_core::ink_doc::{Document, Kind, Node, Viewport};
+use ink_core::ink_doc::{Document, Kind, Node, Precision, Viewport};
 use ink_core::{Actor, Core, DocId, NodeId};
 use ink_geom::{Rect, number};
 use lntrn_data::{Doc, Map};
@@ -189,6 +190,80 @@ impl Listing<'_> {
             self.tree(child, depth + 1);
         }
     }
+}
+
+/// The most anchors of a path spelled out.
+const MAX_ANCHORS: usize = 48;
+
+/// A path's anchors, run by run, in its own coordinates: each with its
+/// id, where it is, its handles (as offsets from it), and what joins it
+/// to the next. As lines for the model, and as data. `None` for what
+/// isn't a path whose data all reads.
+pub(crate) fn anchors(doc: &Document, node: &Node) -> Option<(String, Map)> {
+    let outline = doc.outline(node.id)?;
+    let decimals = Precision::of(doc).decimals;
+    let pt = |p: ink_geom::Vec2| format!("{},{}", number::format(p.x, decimals), number::format(p.y, decimals));
+    let total: usize = outline.runs.iter().map(|run| run.anchors.len()).sum();
+    let (mut lines, mut listed, mut data) = (Vec::new(), 0usize, Vec::new());
+    for (r, run) in outline.runs.iter().enumerate() {
+        lines.push(format!("  Run {} of {}, {}, {} anchor{}:", r + 1, outline.runs.len(), if run.closed { "closed" } else { "open" }, run.anchors.len(), if run.anchors.len() == 1 { "" } else { "s" }));
+        for (i, anchor) in run.anchors.iter().enumerate() {
+            // Its handles: the control points of what comes in and
+            // what goes out, from where it is.
+            let out = run.links.get(i).filter(|_| run.next(i).is_some()).and_then(|link| match link {
+                Link::Cubic { c1, .. } => Some(*c1 - anchor.at),
+                Link::Quad { c } => Some(*c - anchor.at),
+                _ => None,
+            });
+            let into = run.prev(i).and_then(|p| match run.links[p] {
+                Link::Cubic { c2, .. } => Some(c2 - anchor.at),
+                Link::Quad { c } => Some(c - anchor.at),
+                _ => None,
+            });
+            let mut m = Map::new();
+            m.insert("id", anchor.id.to_string().into());
+            m.insert("run", Doc::Int(r as i64 + 1));
+            m.insert("at", Doc::List(vec![anchor.at.x.into(), anchor.at.y.into()]));
+            for (key, handle) in [("in", into), ("out", out)] {
+                if let Some(h) = handle.filter(|h| h.length() > 0.0) {
+                    m.insert(key, Doc::List(vec![h.x.into(), h.y.into()]));
+                }
+            }
+            data.push(Doc::Map(m));
+            listed += 1;
+            if listed > MAX_ANCHORS {
+                continue;
+            }
+            let mut line = format!("    {} at {}", anchor.id, pt(anchor.at));
+            for (name, handle) in [("in", into), ("out", out)] {
+                if let Some(h) = handle.filter(|h| h.length() > 0.0) {
+                    line += &format!("  {name} {}", pt(h));
+                }
+            }
+            line += &match (run.links.get(i).filter(|_| run.next(i).is_some()), run.next(i)) {
+                (Some(link), Some(next)) => {
+                    let kind = match link {
+                        Link::Line => "a line".to_owned(),
+                        Link::Quad { .. } => "a curve (one control point)".to_owned(),
+                        Link::Cubic { .. } => "a curve".to_owned(),
+                        Link::Arc { arc } => format!("an arc of radii {} {}", number::format(arc.rx, decimals), number::format(arc.ry, decimals)),
+                    };
+                    format!("  then {kind} to {}", run.anchors[next].id)
+                }
+                _ => "  (the end)".to_owned(),
+            };
+            lines.push(line);
+        }
+    }
+    if listed > MAX_ANCHORS {
+        lines.push(format!("    … and {} more (doc_source shows its d)", listed - MAX_ANCHORS));
+    }
+    if total == 0 {
+        lines.push("  (no anchors: it draws nothing)".to_owned());
+    }
+    let mut m = Map::new();
+    m.insert("anchors", Doc::List(data));
+    Some((lines.join("\n"), m))
 }
 
 /// A document's file as a name to call it by.

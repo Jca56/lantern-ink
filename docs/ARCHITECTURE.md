@@ -257,6 +257,23 @@ drawing's `<defs>`, made as the root's first child if there isn't one;
 `SetGradient` is `gradient_set`, over `SetAttr`, `Delete` and `Insert`
 on the gradient and its stops.
 
+**As built in M3c:** `ToPath`, and the path work as two Commands on
+one model: `EditPath { node, edits }` and `SetPath { node, runs }`.
+A path is read as an `Outline` (`outline.rs`): runs of anchors, each
+joined to the next by a line, a quadratic, a cubic or an arc, whichever
+the file had. `PathEdit` (`pathedit.rs`) is the edits: move, set
+handles, add (the path keeping its shape), delete, bend, straighten,
+smooth, corner, close, break, join, reverse; so §3.4's `Reverse`,
+`Join` and `Break` are edits, not Commands of their own. A shape that
+isn't a path is made one by its first edit. Anchors have ids (D18):
+on the node, from the document's counter, kept whenever a path's data
+changes without its layout changing, and never written to the file.
+An outline is settled before it's written (`Outline::settle`) into
+what its path data reads back as, so the ids beside a path always
+name the anchors its `d` has: a closed run's last anchor, written
+where its first is with only the closing line between them, is the
+first.
+
 **A gradient in a shape's own coordinates goes with the shape**
 (`settle.rs`, since M3b) when it is that shape's alone: into the
 gradient's own numbers when they're plain and all it has been through
@@ -494,7 +511,7 @@ carries over; only the differences and the tool list are new here.
 |---|---|
 | Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox) |
 | Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
-| Paths | `path_set`, `path_edit` (anchors and handles), `path_op` (boolean ops, outline stroke, simplify, reverse, to path) |
+| Paths | `path_set`§, `path_edit`§ (anchors and handles), `path_op`§ (to path and reverse so far; boolean ops, outline stroke and simplify to come) (§ = built in M3c) |
 | Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`‡, `gradient_set`‡, `clip_set`‡, `filter_set`‡ (‡ = built in M3b) |
 | Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
 | Queries | `doc_query`† (what's at a point; a node's bounds are `node_info`'s) |
@@ -611,7 +628,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths, **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (anchors and editing built 2026-10-07; boolean ops, outline and simplify to come), **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 
@@ -644,7 +661,7 @@ the foundation; the rest wait for their milestone.
 | D15 | Numbers Ink writes | ✅ **Decided 2026-10-06, as recommended:** three decimals, trailing zeros dropped, settable per document | M3 |
 | D16 | Coordinates Claude and the GUI speak | ✅ **Decided 2026-10-06, revising my first recommendation:** attributes are as the file writes them (the node's own coordinates, as in any SVG), which is also what `node_add_svg`'s raw markup means; what's reported back is where things show in the document's coordinates (§3.3) | M2 |
 | D17 | Pen tool | Click points, bend the segments after (your May preference); no click-drag handles while placing. Still what you want? | M4 |
-| D18 | Path anchors' addresses | Stable ids kept beside the path in memory (`A3`), so a selection survives a point being added; not written to the file | M3 |
+| D18 | Path anchors' addresses | ✅ **Decided 2026-10-07, as recommended:** stable ids kept beside the path in memory (`A3`), so a selection survives a point being added; not written to the file. The alternative was a place in the path (run 1, anchor 3), which every add and delete renumbers | M3 |
 | D19 | Ink's own attributes | `xmlns:ink="urn:lantern:ink"`; `ink:locked`, `ink:label`, guides on the root. Nothing else until something needs it | M3 |
 | D20 | What "done" means for the window | Ink replaces Boxy SVG for Lantern's icons. I'm inferring Boxy from the `bx:` marks in 107 files; the checklist gets written with you at M4's start | M4 |
 | D21 | SVG features | §5.2's list for v1; `<use>`, masks, patterns, images and markers when something needs them. M1 draws what `lntrn-svg` does; text, `<style>` rules and blur follow in M3 | M1, then as needed |

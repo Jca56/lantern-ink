@@ -101,11 +101,12 @@ impl FromStr for NodeId {
 pub(crate) struct Counters {
     node: u64,
     rev: u64,
+    anchor: u64,
 }
 
 impl Default for Counters {
     fn default() -> Self {
-        Self { node: 1, rev: 1 }
+        Self { node: 1, rev: 1, anchor: 1 }
     }
 }
 
@@ -116,6 +117,11 @@ impl Counters {
 
     pub fn rev(&mut self) -> u64 {
         bump(&mut self.rev)
+    }
+
+    /// The next anchor of a path ([`crate::outline`]).
+    pub fn anchor(&mut self) -> crate::outline::AnchorId {
+        crate::outline::AnchorId(bump(&mut self.anchor))
     }
 }
 

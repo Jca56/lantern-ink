@@ -109,8 +109,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   `<style>` rules), **c** paths (anchors, editing, boolean ops), **d**
   text, **e** tidy. D13 (bake a move into the geometry whenever that's
   exact; groups pass it down), D14 (a property is written where the node
-  has it) and D15 (three decimals) are decided; D18 and D19 wait for
-  their slices.
+  has it), D15 (three decimals) and D18 (anchors have stable ids) are
+  decided; D19 waits for its slice.
 - **M3a is built** (2026-10-06): `Command::Transform`, `Duplicate`,
   `Group`, `Ungroup`, and `Move` keeping a node where it shows; the tools
   `node_transform`, `node_align`, `node_duplicate`, `node_group`,
@@ -135,8 +135,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - `doc_set` with `content: "fit"` puts the root through the transform
     from the old viewBox to the new: how a 500-unit Boxy icon becomes a
     24-unit one in one step.
-  - **Not yet:** `ToPath` and `SetGeometry` have no Command: nothing
-    needs them before M3c's path tools and M4's handles.
+  - **Not yet:** `SetGeometry` has no Command: nothing needs it before
+    M4's handles. (`ToPath` came with M3c.)
 
 - **M3b (paint) is under way**, in four pieces, the renderer first
   (Alva's order, 2026-10-06): **b1** the renderer, **b2** styles
@@ -171,11 +171,10 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     be shared, but can't paint a line with no height.
   - Alva, 2026-10-07: for the rest of M3b each finished piece is
     committed once it's tested and deployed, without asking first.
-    (That was for M3b: from M3c on, commits are asked for again.)
+    (That was for M3b. She said the same of M3c: see there.)
 - **M3b is built** (2026-10-07, 232 tests, 30 tools): its last piece,
   b4, is `Command::SetClip` (`ink-doc/src/clip.rs`) and the tools
-  `clip_set` and `filter_set`. **M3c (paths) is next**; D18 (anchor
-  ids) is Alva's to decide at its start.
+  `clip_set` and `filter_set`.
   - A clip path that is one node's alone now moves with it too
     (Alva, 2026-10-07; ARCHITECTURE §3.4), so a clipped group passes a
     move down. What a node is drawn with, and what that lets its
@@ -190,6 +189,50 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Ungroup still refuses** a group with a filter, a clip path, a
     mask or an opacity over several children unless told to drop them.
     M4's window will want a friendlier answer.
+
+- **M3c (paths) is under way**, in three pieces (Alva's order,
+  2026-10-07): **c1** anchors and editing, **c2** boolean ops, **c3**
+  outline stroke and simplify. Her calls the same day: **D18, anchors
+  have stable ids** (`A3`), kept in memory and never written; **boolean
+  ops keep the real curves** (crossings found, segments cut and kept;
+  no flattening to polygons), proven by drawing each result against the
+  renderer clipping one shape by the other over thousands of pairs; and
+  **each finished piece is committed once it's tested and deployed,
+  without asking first** ("M3c path editing", "M3c boolean ops", "M3c
+  outline and simplify"), telling her after.
+- **M3c's c1 is built** (2026-10-07, 257 tests, 33 tools):
+  `Command::ToPath`, `EditPath` and `SetPath`, and the tools `path_set`,
+  `path_edit` and `path_op` (`to_path`, `reverse`; the boolean ops,
+  outline and simplify join `path_op` in c2 and c3).
+  - A path is edited as an `Outline` (`ink-doc/src/outline.rs`): runs
+    of anchors, and what joins each to the next (a line, a curve, an
+    arc: the segment kinds the file had are the ones it keeps). The
+    edits are `PathEdit` (`pathedit.rs`); the Commands are `paths.rs`.
+    One segment at a time is `ink-geom`'s `Piece` (split, part, nearest
+    point), which c2's boolean ops are meant to stand on too.
+  - **Anchor ids** live on the node (`Node::anchors`), are handed out
+    by the document's counter (never reused, undo or not), and are
+    kept whenever a path's `d` changes without its layout changing
+    (the same runs of as many anchors): a transform, a `node_set` of
+    `d`, an undo. A copy gets its own. `node_info` lists them.
+  - **The anchors kept beside a path are the ones its written `d`
+    reads back as** (`Outline::settle`, run by `set_outline`): a
+    closed run given its first anchor again at its end (or one a
+    rounding away from it) has it once, as the file would say. Without
+    that the path came back with every id new. A test writes 4000
+    awkward outlines and reads each back
+    (`whatever_outline_is_written…` in `outline.rs`).
+  - `path_edit`'s edits can name the anchor they make (`as`) for later
+    edits of the same call: the tool learns the id by making the edits
+    on a copy (`Document::anchors_made`), which a Command making the
+    same edits of the same document is sure to match.
+  - An edit rewrites the whole `d` in Ink's writing (absolute, spaced,
+    to the document's decimals): the file's own relative commands
+    don't survive a path edit. Everything else about the element does.
+  - Anchors can't be named before they exist: in a `batch`, a path
+    made by an earlier step has ids the call can't know yet (only
+    `as` names inside one `path_edit`). `path_set` gives a whole
+    outline in one go; a wish for "the third anchor" hasn't come up.
 
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.

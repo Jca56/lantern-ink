@@ -170,7 +170,7 @@ impl Document {
         }
         let id = self.next.node();
         let kind = self.kind_of(parent, &el.name, el.attrs.iter().map(|a| (a.name.as_str(), a.value.as_str())));
-        let node = Node { id, rev: self.next.rev(), parent, name: el.name, kind, attrs: el.attrs, children: Vec::new(), written: el.written, ruled: None };
+        let node = Node { id, rev: self.next.rev(), parent, name: el.name, kind, attrs: el.attrs, children: Vec::new(), written: el.written, ruled: None, anchors: None };
         self.nodes.insert(id, Arc::new(node));
         let mut children = Vec::with_capacity(el.children.len());
         for content in el.children {
@@ -181,6 +181,7 @@ impl Document {
         }
         // Nothing else holds the node yet: this copies nothing.
         Arc::make_mut(self.nodes.get_mut(&id).expect("just put in")).children = children;
+        self.reanchor(id);
         Ok(id)
     }
 
@@ -194,6 +195,7 @@ impl Document {
                 let rev = self.next.rev();
                 let node = Arc::make_mut(self.nodes.get_mut(&id).expect("listed"));
                 (node.kind, node.rev) = (kind, rev);
+                self.reanchor(id);
             }
         }
     }

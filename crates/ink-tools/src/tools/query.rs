@@ -6,12 +6,12 @@ use ink_core::ink_doc::geometry::page_bounds;
 use ink_core::ink_doc::hit::{self, Part};
 use ink_core::ink_doc::refs::{Ids, named as names};
 use ink_core::ink_doc::style::{INHERITED, prop};
-use ink_core::ink_doc::{Document, Node};
+use ink_core::ink_doc::{Document, Kind as NodeKind, Node};
 use ink_geom::Vec2;
 use lntrn_data::{Doc, Map};
 use lntrn_mcp::{Kind, Reply, Tool, ToolError, fail, schema};
 
-use crate::describe::{n, rect, tag, undrawn};
+use crate::describe::{anchors, n, rect, tag, undrawn};
 use crate::input::{In, common, refused, refused_edit};
 use crate::tools::{Ctx, Direct, Entry, Handler};
 
@@ -116,7 +116,17 @@ fn info(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
         let more = users.len().saturating_sub(MAX_USERS);
         lines.push(format!("Used by: {}{}.", said.join(", "), if more > 0 { format!(", and {more} more") } else { String::new() }));
     }
+    // A path's anchors, to edit it by; a shape is told how to get some.
     let mut m = Map::new();
+    match anchors(doc, node) {
+        Some((said, data)) => {
+            lines.push(format!("Anchors, in its own coordinates (path_edit takes these ids):\n{said}"));
+            m = data;
+        }
+        None if node.kind.is_shape() && node.kind != NodeKind::Path => lines.push("No anchors of its own: path_edit (or path_op to_path) makes it a path that has.".to_owned()),
+        None if node.kind == NodeKind::Path => lines.push("Its path data can't all be read, so it has no anchors to edit it by.".to_owned()),
+        None => {}
+    }
     m.insert("node_id", id.to_string().into());
     m.insert("element", node.name.as_str().into());
     m.insert("parent", above.first().map_or(Doc::Null, |p| p.id.to_string().into()));

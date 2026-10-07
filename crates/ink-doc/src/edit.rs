@@ -104,6 +104,9 @@ impl Document {
         if name == "xmlns" || name.starts_with("xmlns:") {
             self.rekind(id);
         }
+        if name == "d" {
+            self.reanchor(id);
+        }
         Ok(true)
     }
 

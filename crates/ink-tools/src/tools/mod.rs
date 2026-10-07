@@ -11,6 +11,7 @@ mod groups;
 mod history;
 mod nodes;
 mod page;
+mod paths;
 mod query;
 mod style;
 
@@ -60,6 +61,7 @@ pub(crate) fn all() -> Vec<Entry> {
     tools.extend(style::tools());
     tools.extend(gradients::tools());
     tools.extend(effects::tools());
+    tools.extend(paths::tools());
     tools.extend(query::tools());
     tools.extend(page::tools());
     tools.extend(history::tools());
