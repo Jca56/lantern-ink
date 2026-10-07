@@ -3,6 +3,7 @@
 //! step, and a step a batch can hold.
 
 use ink_core::ink_doc::geometry::page_bounds;
+use ink_core::ink_doc::style::prop;
 use ink_core::ink_doc::{Document, Element, Precision, elements};
 use ink_core::{Applied, Command, NodeId};
 use lntrn_data::{Doc, Map};
@@ -131,12 +132,11 @@ fn set(doc: &Document, input: &In) -> Result<Command, ToolError> {
     Ok(Command::Batch(sets))
 }
 
-/// The properties `node` sets both as an attribute and in its `style`,
-/// where the style wins.
+/// The attributes of `node` that don't show: ones its `style` or a
+/// `<style>` rule says otherwise about, and so outvotes.
 fn overridden(doc: &Document, id: NodeId) -> Vec<String> {
     let Some(node) = doc.get(id) else { return Vec::new() };
-    let Some(style) = node.attr("style") else { return Vec::new() };
-    style.split(';').filter_map(|decl| decl.split_once(':')).map(|(name, _)| name.trim().to_owned()).filter(|name| node.attr(name).is_some()).collect()
+    node.attrs.iter().filter(|a| a.name != "style" && prop(node, &a.name).is_some_and(|shows| shows != a.value.trim())).map(|a| a.name.clone()).collect()
 }
 
 fn changed(doc: &Document, applied: &Applied) -> Reply {
@@ -147,7 +147,7 @@ fn changed(doc: &Document, applied: &Applied) -> Reply {
     let mut text = format!("Set. It's now {}.", about(doc, id, &boxes));
     let shadowed = overridden(doc, id);
     if !shadowed.is_empty() {
-        text += &format!(" Note: its style=\"…\" also sets {}, and a style wins over the attribute of the same name (set \"style\" too, or take that part out of it).", shadowed.join(", "));
+        text += &format!(" Note: its style=\"…\" (or a <style> rule) also sets {}, and that wins over the attribute of the same name: node_style sets a property where it will show.", shadowed.join(", "));
     }
     let mut m = Map::new();
     m.insert("node_id", id.to_string().into());

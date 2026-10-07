@@ -161,6 +161,12 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     against `rsvg-convert`: `cargo test -p ink-render --test golden
     against_rsvg -- --ignored --nocapture`.
 
+- **M3b's b2 is built** (2026-10-07, 221 tests): `Command::SetStyle`
+  (`ink-doc/src/styling.rs`) and the `node_style` tool (26 tools). A
+  property's name is one SVG has (a near miss is refused with the name
+  it was near), and its value is checked where Ink draws with it.
+  **b3 (gradients) is next.**
+
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.
 - **The corpus** is `tests/corpus/` (144 SVGs from the Lantern projects;

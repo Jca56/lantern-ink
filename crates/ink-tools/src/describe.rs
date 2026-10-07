@@ -86,6 +86,34 @@ fn attributes(node: &Node) -> String {
     out
 }
 
+/// The paint `node` gives itself, each part led by two spaces: its
+/// fill, its stroke and how wide, its opacity. Nothing for what it
+/// leaves to the groups above.
+fn paint(node: &Node) -> String {
+    let mut said = String::new();
+    if let Some(fill) = prop(node, "fill") {
+        said += &format!("  fill {fill}");
+    }
+    if let Some(stroke) = prop(node, "stroke") {
+        said += &format!("  stroke {stroke}");
+        if let Some(width) = prop(node, "stroke-width") {
+            said += &format!(" {width}");
+        }
+    } else if let Some(width) = prop(node, "stroke-width") {
+        said += &format!("  stroke-width {width}");
+    }
+    if let Some(opacity) = prop(node, "opacity") {
+        said += &format!("  opacity {opacity}");
+    }
+    said
+}
+
+/// The same, as a phrase: `fill #ffc800, stroke #000 2`.
+pub(crate) fn painted(node: &Node) -> String {
+    let said = paint(node);
+    if said.is_empty() { "no fill, stroke or opacity of its own".to_owned() } else { said.trim_start().replace("  ", ", ") }
+}
+
 /// One line about a node: its id, what it is, the paint it gives itself
 /// (or, for a definition, its attributes), and where it shows.
 fn node_line(node: &Node, bounds: Option<&Rect>) -> String {
@@ -99,18 +127,7 @@ fn node_line(node: &Node, bounds: Option<&Rect>) -> String {
             line += &format!(" {attrs}");
         }
     } else {
-        if let Some(fill) = prop(node, "fill") {
-            line += &format!("  fill {fill}");
-        }
-        if let Some(stroke) = prop(node, "stroke") {
-            line += &format!("  stroke {stroke}");
-            if let Some(width) = prop(node, "stroke-width") {
-                line += &format!(" {width}");
-            }
-        }
-        if let Some(opacity) = prop(node, "opacity") {
-            line += &format!("  opacity {opacity}");
-        }
+        line += &paint(node);
         if node.attr("transform").is_some() {
             line += "  transformed";
         }

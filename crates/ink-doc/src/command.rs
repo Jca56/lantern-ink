@@ -45,6 +45,13 @@ pub enum Command {
     /// transform on it; it goes into the node's own numbers where they
     /// can say so, and into its `transform` where they can't (D13).
     Transform { nodes: Vec<NodeId>, by: Affine },
+    /// Set how `nodes` are painted: each of `set` is a property and what
+    /// it's set to (`None` takes it off). A property is one SVG has,
+    /// and its value is checked where Ink draws with it. Each is written
+    /// where its node has it (D14): in its `style`, as an attribute, or,
+    /// for what a `<style>` rule gives it, in its `style` to outvote the
+    /// rule.
+    SetStyle { nodes: Vec<NodeId>, set: Vec<(String, Option<String>)> },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -191,6 +198,10 @@ impl Document {
             }
             Command::Transform { nodes, by } => {
                 let changed = self.make(&settle::plan(self, nodes, by)?)?;
+                applied.note(changed);
+            }
+            Command::SetStyle { nodes, set } => {
+                let changed = self.set_style(nodes, set)?;
                 applied.note(changed);
             }
             Command::Batch(commands) => {

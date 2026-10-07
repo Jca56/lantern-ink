@@ -41,6 +41,7 @@ mod shape;
 pub mod sheet;
 mod structure;
 pub mod style;
+pub mod styling;
 pub mod transform;
 pub mod value;
 mod viewport;

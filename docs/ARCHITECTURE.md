@@ -249,6 +249,10 @@ has it, D14); `shape.rs` is the typed view of a shape's own numbers.
 `SetViewBox` and `SetSize` are `doc_set`, over `SetAttr` on the root.
 What's at a point (§4.1's `hit`) is `hit.rs`.
 
+**As built in M3b:** `SetStyle` (`styling.rs`): properties by SVG's own
+names, each value checked where Ink draws with it, set on any number
+of nodes, each written where its node has it (D14).
+
 **Where a transform is written** (D13, `settle.rs`). A node put through
 a transform looks exactly as SVG says it would with that transform on
 it, so:
@@ -462,7 +466,7 @@ carries over; only the differences and the tool list are new here.
 | Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox) |
 | Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
 | Paths | `path_set`, `path_edit` (anchors and handles), `path_op` (boolean ops, outline stroke, simplify, reverse, to path) |
-| Paint | `gradient_add`, `gradient_set`, `clip_set`, `filter_set` |
+| Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`, `gradient_set`, `clip_set`, `filter_set` (‡ = built in M3b) |
 | Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
 | Queries | `doc_query`† (what's at a point; a node's bounds are `node_info`'s) |
 | History | `history_undo`\*, `history_redo`\*, `batch`\* |
