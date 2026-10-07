@@ -104,8 +104,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     binary to `~/.lantern/bin/lantern-ink-mcp.new` and `mv` it over.
   - `~/.lantern/bin/lantern-ink` is the May 2026 iced prototype's
     binary, not ours: left alone until M4's window takes the name.
-- **M3 (operations) is under way** (a, b and c built; d text under
-  way, e tidy to go), in five slices, in the order Alva
+- **M3 (operations) is under way** (a, b, c and d built; e tidy to
+  go), in five slices, in the order Alva
   chose 2026-10-06: **a** structure and transforms, **b** paint (styles,
   gradients, clips, filters; the renderer learns `feGaussianBlur` and
   `<style>` rules), **c** paths (anchors, editing, boolean ops), **d**
@@ -404,6 +404,27 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - `ink` is registered with Claude Code on genforge too (2026-10-07,
     user scope, `alwaysLoad`, `mcp__ink` allowed), as on Alva's other
     machine.
+
+- **M3d's d3 is built** (2026-10-07, 335 tests, 37 tools), and with it
+  **M3d is built**: `Command::TextToPath` (`ink-doc/src/outlined.rs`)
+  and the tool `text_to_path`. **M3e (tidy) is next**, then M3's
+  done-test in a fresh session.
+  - A text painted one way becomes one `<path>` in its place (its id
+    and paint kept); one whose spans paint for themselves becomes a
+    `<g>` of paths. What only letters read is taken off.
+  - A text set in another font than it asks for is refused unless
+    `as_drawn`: its paths would be the other font's for good. (Alva
+    hasn't been asked about this guard: it follows "a missing font is
+    reported, not silently swapped".)
+  - **What it changes, and can't help:** a box with the text in it
+    gets tighter (cells before, outlines after), so a gradient across
+    the text or a group's glow region shifts a little. Proven by
+    drawing: `cargo test -p ink-render --test text -- --nocapture`
+    (13 of the 19 corpus files unchanged to 0.002 levels; the casino,
+    arcade and cyberpunk folders 0.04 to 0.20 apart).
+  - **For the DE's icons:** the 19 corpus icons with `<text>` show no
+    words in Lantern's apps (`lntrn-svg` draws none). `text_to_path`
+    is the fix, but those icons live in other projects: Alva's to say.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

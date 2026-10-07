@@ -245,6 +245,16 @@ fn text_is_added_set_and_asked_about() {
     }
     assert_eq!(text(&ok(&mut s, "text_set", r#"{"doc_id":"d1","node_id":"N2","text":"HH"}"#)), "Nothing changed: it said that already, lettered that way.");
 
+    // Made paths, a text is its letters' outlines: one path where it's
+    // lettered one way, a group where its spans paint for themselves.
+    assert_eq!(refused(&mut s, "text_to_path", r#"{"doc_id":"d1","node_ids":["N2"]}"#), "N2 asks for No Such Font, which isn't installed here, so it's drawn in Ink Test instead: paths made of it would be that font's for good. Say so to make them anyway");
+    let pathed = ok(&mut s, "text_to_path", r#"{"doc_id":"d1","node_ids":["N2","N6"],"as_drawn":true}"#);
+    assert_eq!(text(&pathed), "Made paths. Now: N2 <path> at 11,13 10×7; N6 <path> at 50.8,28.8 8×11.2.");
+    assert_eq!(source(&mut s), "<path d=\"M11 20 V13 H15 V20 Z M17 20 V13 H21 V20 Z\" fill=\"#223\"/>");
+    assert_eq!(text(&ok(&mut s, "history_undo", r#"{"doc_id":"d1"}"#)), "Undid 1 step: \"text_to_path\" (Claude). Now 2 can be undone and 1 redone.");
+    assert_eq!(source(&mut s), "<text x=\"10\" y=\"20\" font-family=\"No Such Font, Ink Test\" font-size=\"10\" fill=\"#223\">HH</text>");
+    assert_eq!(refused(&mut s, "text_to_path", r#"{"doc_id":"d1","node_ids":["N1"]}"#), "N1 is a <svg>: only a <text> has letters to make paths of (a shape is made a path by its own tool)");
+
     // The fonts here: the tests' own is among them.
     let fonts = ok(&mut s, "font_list", r#"{"query":"ink te"}"#);
     assert!(text(&fonts).starts_with("Here sans-serif is ") && text(&fonts).ends_with("have \"ink te\" in their name: Ink Test."), "{}", text(&fonts));

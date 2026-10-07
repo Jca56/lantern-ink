@@ -37,6 +37,15 @@ pub(super) fn tools() -> Vec<Entry> {
             set,
             said,
         ),
+        edit(
+            "text_to_path",
+            "Text to paths",
+            "Make texts into paths that draw what they draw: the outlines of their letters, as they're set here. So the words look the same on a machine without their fonts, and in Lantern's apps, which draw no <text> at all. A text lettered and painted one way becomes one <path> in its place, with its id and its paint; one whose spans paint for themselves becomes a <g> of paths, each with its span's paint. Its words can't be changed afterwards (history_undo brings the text back). A text set in another font than it asks for (the one it names isn't installed here) is refused unless `as_drawn` is true: its paths would be the other font's for good. A gradient measured across the text's box is measured across its outlines' box afterwards, which is a little tighter.",
+            to_path_schema,
+            Kind::Set,
+            to_path,
+            pathed,
+        ),
         Entry {
             spec: Tool {
                 name: "font_list",
@@ -88,6 +97,38 @@ fn set_schema() -> Doc {
     let mut props = vec![("node_id", common::node_id("The <text>"))];
     props.extend(lettering_props());
     common::edit(&["node_id"], props)
+}
+
+fn to_path_schema() -> Doc {
+    common::edit(&["node_ids"], vec![("node_ids", schema::list(common::node_id("A <text>"), "The texts to make paths of")), ("as_drawn", schema::boolean("Make paths of a text even where it's set in another font than it asks for", false))])
+}
+
+fn to_path(doc: &Document, input: &In) -> Result<Command, ToolError> {
+    let nodes = input.nodes("node_ids")?;
+    for &id in &nodes {
+        doc.node(id).map_err(refused_edit)?;
+    }
+    Ok(Command::TextToPath { nodes, as_drawn: input.args.opt_bool("as_drawn")? == Some(true) })
+}
+
+/// What `text_to_path` says: each text as the path or the group it is
+/// now.
+fn pathed(doc: &Document, applied: &Applied) -> Reply {
+    let boxes = page_bounds(doc);
+    let now: Vec<String> = applied
+        .changed
+        .iter()
+        .filter_map(|id| doc.get(*id))
+        .map(|node| {
+            let inside = node.elements().count();
+            let held = if inside > 0 { format!(" of {inside} paths") } else { String::new() };
+            let place = boxes.get(&node.id).map_or(String::new(), |b| format!(" at {}", rect(b)));
+            format!("{} {}{held}{place}", node.id, tag(node))
+        })
+        .collect();
+    let mut m = Map::new();
+    m.insert("node_ids", Doc::List(applied.changed.iter().map(|id| id.to_string().into()).collect()));
+    Reply::text(format!("Made paths. Now: {}.", now.join("; "))).data(Doc::Map(m))
 }
 
 fn fonts_schema() -> Doc {

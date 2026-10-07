@@ -40,6 +40,7 @@ pub mod length;
 pub mod lettering;
 mod node;
 pub mod outline;
+mod outlined;
 pub mod pathedit;
 pub mod paths;
 mod props;

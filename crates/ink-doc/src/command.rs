@@ -94,6 +94,11 @@ pub enum Command {
     /// ([`crate::lettering`]): everything that was in it goes. Lines
     /// are set `leading` ems apart (`None`: 1.2).
     SetText { node: NodeId, lines: Vec<Vec<Span>>, leading: Option<f64> },
+    /// Make each of the texts `nodes` paths that draw what it draws
+    /// ([`crate::outlined`]): one path, or a group of them where its
+    /// spans paint for themselves. A text set in another font than it
+    /// asks for is refused unless `as_drawn`.
+    TextToPath { nodes: Vec<NodeId>, as_drawn: bool },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -310,6 +315,17 @@ impl Document {
                 // The same words again, written the same, are no change.
                 if self.markup(*node)? != was {
                     applied.note(vec![*node]);
+                    applied.created.extend(made);
+                    applied.removed.extend(gone);
+                }
+            }
+            Command::TextToPath { nodes, as_drawn } => {
+                if nodes.is_empty() {
+                    return invalid("there's nothing to make paths of: name at least one text");
+                }
+                for &id in nodes {
+                    let (made, gone) = self.text_to_path(id, *as_drawn)?;
+                    applied.note(vec![id]);
                     applied.created.extend(made);
                     applied.removed.extend(gone);
                 }
