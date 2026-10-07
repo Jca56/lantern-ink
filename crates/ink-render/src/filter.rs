@@ -1,14 +1,21 @@
-//! Drop shadows: a blurred, offset, tinted copy of a layer's alpha laid
-//! under it, in linear light as filters work. Fitting a filter to an
-//! element (its region and shadows, in the picture's px) is here too.
+//! Filters: a chain of stages run on a layer's pixels (ARCHITECTURE
+//! §5.1). Each stage works on the layer as it was drawn, on its shape
+//! alone, or on what an earlier stage made, in linear light unless the
+//! filter says otherwise. Fitting a filter to an element (its region
+//! and its stages, in the picture's px) is here too.
 
-use ink_doc::filter::Filter;
+use ink_doc::filter::{Curve, Effect, Filter, Input, Operator};
 use ink_doc::gradient::Units;
 use ink_doc::length::Length;
 use ink_geom::{Affine, Rect, Vec2};
 
+use self::blend::{composite, encoded, light, over, transfer};
+use self::blur::{blur, shifted};
 use crate::paint::{Rgba, rgba};
 use crate::raster::Pixel;
+
+mod blend;
+mod blur;
 
 /// One shadow, in the picture's px.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -24,16 +31,49 @@ impl Shadow {
     /// How far from a pixel this shadow looks, px: what a band needs of
     /// the rows beyond it to get the shadow right.
     pub fn reach(&self) -> f64 {
-        self.offset.x.abs().max(self.offset.y.abs()) + 3.0 * self.sigma.0.max(self.sigma.1) as f64 + 3.0
+        self.offset.x.abs().max(self.offset.y.abs()) + blur::reach(self.sigma)
+    }
+}
+
+/// One stage of a filter, in the picture's px. `linear`: worked out in
+/// linear light.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Stage {
+    Blur { of: Input, sigma: (f32, f32), linear: bool },
+    Offset { of: Input, by: Vec2, linear: bool },
+    Flood { color: Rgba },
+    Composite { top: Input, under: Input, op: Operator, linear: bool },
+    Merge { of: Vec<Input>, linear: bool },
+    Transfer { of: Input, curves: [Curve; 4], linear: bool },
+    Shadow { of: Input, shadow: Shadow, linear: bool },
+}
+
+impl Stage {
+    /// How far from a pixel this stage looks, px.
+    fn reach(&self) -> f64 {
+        match self {
+            Stage::Blur { sigma, .. } => blur::reach(*sigma),
+            Stage::Offset { by, .. } => by.x.abs().max(by.y.abs()) + 1.0,
+            Stage::Shadow { shadow, .. } => shadow.reach(),
+            _ => 0.0,
+        }
     }
 }
 
 /// A filter fitted to an element.
 #[derive(Clone, Debug)]
 pub(crate) struct Fitted {
-    pub shadows: Vec<Shadow>,
+    pub stages: Vec<Stage>,
     /// The region's corners in the picture: nothing shows outside them.
     pub region: [Vec2; 4],
+}
+
+impl Fitted {
+    /// How far from a pixel the whole chain looks, px: what a band
+    /// needs of the rows beyond it to get the filter right.
+    pub fn reach(&self) -> f64 {
+        self.stages.iter().map(Stage::reach).sum()
+    }
 }
 
 /// `filter` on an element whose box is `bbox` (in its own coordinates),
@@ -62,124 +102,110 @@ pub(crate) fn fit(filter: &Filter, bbox: Rect, ctm: &Affine, view: Vec2) -> Opti
     };
     // How long the transform makes a step across, and a step down.
     let (kx, ky) = (ctm.linear(Vec2::X).length(), ctm.linear(Vec2::Y).length());
-    let shadows = filter.shadows.iter().map(|s| Shadow { offset: ctm.linear(Vec2::new(s.dx * ux, s.dy * uy)), sigma: ((s.std.0 * ux * kx) as f32, (s.std.1 * uy * ky) as f32), color: rgba(s.color) }).collect();
-    Some(Fitted { shadows, region })
-}
-
-/// Put each of `shadows` under what `layer` (`w` × `h`) holds, in turn:
-/// the second is the shadow of the first's result.
-pub(crate) fn drop_shadows(layer: &mut [Pixel], w: usize, h: usize, shadows: &[Shadow]) {
-    for s in shadows {
-        if !(s.offset.is_finite() && s.sigma.0.is_finite() && s.sigma.1.is_finite()) || s.color[3] <= 0.0 {
-            continue;
-        }
-        let mut alpha: Vec<f32> = layer.iter().map(|p| p[3]).collect();
-        blur(&mut alpha, w, h, false, s.sigma.0);
-        blur(&mut alpha, w, h, true, s.sigma.1);
-        let alpha = shifted(&alpha, w, h, s.offset);
-        let [r, g, b, a] = s.color;
-        for (px, &cover) in layer.iter_mut().zip(&alpha) {
-            let k = a * cover;
-            if k > 0.0 {
-                *px = over(*px, [r * k, g * k, b * k, k]);
+    let sigma = |std: (f64, f64)| ((std.0 * ux * kx) as f32, (std.1 * uy * ky) as f32);
+    let offset = |dx: f64, dy: f64| ctm.linear(Vec2::new(dx * ux, dy * uy));
+    let stages = filter
+        .steps
+        .iter()
+        .map(|step| {
+            let linear = step.linear;
+            match &step.effect {
+                Effect::Blur { of, std } => Stage::Blur { of: *of, sigma: sigma(*std), linear },
+                Effect::Offset { of, dx, dy } => Stage::Offset { of: *of, by: offset(*dx, *dy), linear },
+                Effect::Flood { color } => Stage::Flood { color: rgba(*color) },
+                Effect::Composite { top, under, op } => Stage::Composite { top: *top, under: *under, op: *op, linear },
+                Effect::Merge { of } => Stage::Merge { of: of.clone(), linear },
+                Effect::Transfer { of, curves } => Stage::Transfer { of: *of, curves: curves.clone(), linear },
+                Effect::DropShadow { of, dx, dy, std, color } => Stage::Shadow { of: *of, shadow: Shadow { offset: offset(*dx, *dy), sigma: sigma(*std), color: rgba(*color) }, linear },
             }
-        }
+        })
+        .collect();
+    Some(Fitted { stages, region })
+}
+
+/// Run `stages` on what `layer` (`w` × `h`) holds: it becomes what the
+/// last of them made.
+pub(crate) fn apply(layer: &mut [Pixel], w: usize, h: usize, stages: &[Stage]) {
+    let mut made: Vec<Vec<Pixel>> = Vec::with_capacity(stages.len());
+    for stage in stages {
+        let pick = |input: &Input| -> Vec<Pixel> {
+            match input {
+                Input::Graphic => layer.to_vec(),
+                Input::Alpha => layer.iter().map(|p| [0.0, 0.0, 0.0, p[3]]).collect(),
+                Input::Step(k) => made.get(*k).cloned().unwrap_or_else(|| vec![[0.0; 4]; w * h]),
+                Input::Nothing => vec![[0.0; 4]; w * h],
+            }
+        };
+        let out = match stage {
+            Stage::Blur { of, sigma, linear } => {
+                let mut img = pick(of);
+                if sigma.0.is_finite() && sigma.1.is_finite() {
+                    planes(&mut img, *linear, |plane| {
+                        blur(plane, w, h, false, sigma.0);
+                        blur(plane, w, h, true, sigma.1);
+                    });
+                }
+                img
+            }
+            Stage::Offset { of, by, linear } => {
+                let mut img = pick(of);
+                if by.is_finite() {
+                    // Whole pixels mix nothing: no light to convert.
+                    let whole = by.x.fract() == 0.0 && by.y.fract() == 0.0;
+                    planes(&mut img, *linear && !whole, |plane| *plane = shifted(plane, w, h, *by));
+                }
+                img
+            }
+            Stage::Flood { color } => vec![[color[0] * color[3], color[1] * color[3], color[2] * color[3], color[3]]; w * h],
+            Stage::Composite { top, under, op, linear } => pick(top).into_iter().zip(pick(under)).map(|(a, b)| composite(a, b, *op, *linear)).collect(),
+            Stage::Merge { of, linear } => of.iter().fold(vec![[0.0; 4]; w * h], |under, input| pick(input).into_iter().zip(under).map(|(a, b)| over(a, b, *linear)).collect()),
+            Stage::Transfer { of, curves, linear } => pick(of).into_iter().map(|p| transfer(p, curves, *linear)).collect(),
+            Stage::Shadow { of, shadow, linear } => {
+                let mut img = pick(of);
+                cast(&mut img, w, h, shadow, *linear);
+                img
+            }
+        };
+        made.push(out);
+    }
+    if let Some(last) = made.pop() {
+        layer.copy_from_slice(&last);
     }
 }
 
-fn to_linear(v: f32) -> f32 {
-    if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
-}
-
-fn to_srgb(v: f32) -> f32 {
-    if v <= 0.003_130_8 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 }
-}
-
-/// `top` over `under` (both premultiplied sRGB), blended in linear light
-/// as filters are.
-fn over(top: Pixel, under: Pixel) -> Pixel {
-    if top[3] >= 1.0 {
-        return top;
-    }
-    if top[3] <= 0.0 {
-        return under;
-    }
-    let linear = |p: Pixel| [to_linear(p[0] / p[3]) * p[3], to_linear(p[1] / p[3]) * p[3], to_linear(p[2] / p[3]) * p[3], p[3]];
-    let (t, u) = (linear(top), linear(under));
-    let a = t[3] + u[3] * (1.0 - t[3]);
-    let ch = |i: usize| to_srgb(((t[i] + u[i] * (1.0 - t[3])) / a).clamp(0.0, 1.0)) * a;
-    [ch(0), ch(1), ch(2), a]
-}
-
-/// Blur `a` (`w` × `h`) along its rows, or down its columns, by a
-/// Gaussian of deviation `sigma` px. Past the edges there's nothing.
-fn blur(a: &mut [f32], w: usize, h: usize, down: bool, sigma: f32) {
-    if sigma < 1e-3 {
+/// Put `s` under what `layer` (`w` × `h`) holds: a blurred, offset,
+/// tinted copy of its shape.
+pub(crate) fn cast(layer: &mut [Pixel], w: usize, h: usize, s: &Shadow, linear: bool) {
+    if !(s.offset.is_finite() && s.sigma.0.is_finite() && s.sigma.1.is_finite()) || s.color[3] <= 0.0 {
         return;
     }
-    let (lines, len) = if down { (w, h) } else { (h, w) };
-    let at = |line: usize, i: usize| if down { i * w + line } else { line * w + i };
-    let mut src = vec![0.0f32; len];
-    let mut out = vec![0.0f32; len];
-    // Under 2 px, the Gaussian itself; from there, three box blurs come
-    // within a few percent of it (and cost the same however wide).
-    let kernel: Vec<f32> = if sigma < 2.0 {
-        let r = (sigma * 3.0).ceil() as i32;
-        let k: Vec<f32> = (-r..=r).map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp()).collect();
-        let sum: f32 = k.iter().sum();
-        k.iter().map(|v| v / sum).collect()
-    } else {
-        Vec::new()
-    };
-    // The box's width: an odd one sits on the pixel three times; an even
-    // one sits half a pixel left, half a pixel right, then one wider sits
-    // on it.
-    let d = ((sigma * 3.0 * (std::f32::consts::TAU).sqrt() / 4.0 + 0.5).floor() as usize).max(1);
-    let boxes: [(usize, usize); 3] = if d % 2 == 1 { [(d / 2, d / 2); 3] } else { [(d / 2, d / 2 - 1), (d / 2 - 1, d / 2), (d / 2, d / 2)] };
-    let mut sums = vec![0.0f64; len + 1];
-    for line in 0..lines {
-        for (i, v) in src.iter_mut().enumerate() {
-            *v = a[at(line, i)];
-        }
-        if kernel.is_empty() {
-            for (before, after) in boxes {
-                for i in 0..len {
-                    sums[i + 1] = sums[i] + src[i] as f64;
-                }
-                for (i, o) in out.iter_mut().enumerate() {
-                    let (lo, hi) = (i.saturating_sub(before), (i + after + 1).min(len));
-                    *o = ((sums[hi] - sums[lo]) / (before + after + 1) as f64) as f32;
-                }
-                std::mem::swap(&mut src, &mut out);
-            }
-        } else {
-            let r = kernel.len() / 2;
-            for (i, o) in out.iter_mut().enumerate() {
-                *o = kernel.iter().enumerate().filter_map(|(k, wt)| (i + k).checked_sub(r).and_then(|j| src.get(j)).map(|v| v * wt)).sum();
-            }
-            std::mem::swap(&mut src, &mut out);
-        }
-        for (i, v) in src.iter().enumerate() {
-            a[at(line, i)] = *v;
+    let mut alpha: Vec<f32> = layer.iter().map(|p| p[3]).collect();
+    blur(&mut alpha, w, h, false, s.sigma.0);
+    blur(&mut alpha, w, h, true, s.sigma.1);
+    let alpha = shifted(&alpha, w, h, s.offset);
+    let [r, g, b, a] = s.color;
+    for (px, &cover) in layer.iter_mut().zip(&alpha) {
+        let k = a * cover;
+        if k > 0.0 {
+            *px = over(*px, [r * k, g * k, b * k, k], linear);
         }
     }
 }
 
-/// `a` moved by `by` px, part pixels blended; what moves in from outside
-/// is nothing.
-fn shifted(a: &[f32], w: usize, h: usize, by: Vec2) -> Vec<f32> {
-    let (ix, iy) = (by.x.floor(), by.y.floor());
-    let (fx, fy) = ((by.x - ix) as f32, (by.y - iy) as f32);
-    let (ix, iy) = (ix as i64, iy as i64);
-    let get = |x: i64, y: i64| if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h { a[y as usize * w + x as usize] } else { 0.0 };
-    let mut out = vec![0.0f32; a.len()];
-    for y in 0..h {
-        for x in 0..w {
-            let (sx, sy) = (x as i64 - ix, y as i64 - iy);
-            out[y * w + x] = (get(sx, sy) * (1.0 - fx) + get(sx - 1, sy) * fx) * (1.0 - fy) + (get(sx, sy - 1) * (1.0 - fx) + get(sx - 1, sy - 1) * fx) * fy;
-        }
+/// Work `f` on each of `img`'s four channels as a plane of its own, in
+/// linear light if `linear`.
+fn planes(img: &mut [Pixel], linear: bool, mut f: impl FnMut(&mut Vec<f32>)) {
+    if linear {
+        img.iter_mut().for_each(|p| *p = light(*p));
     }
-    out
+    for c in 0..4 {
+        let mut plane: Vec<f32> = img.iter().map(|p| p[c]).collect();
+        f(&mut plane);
+        img.iter_mut().zip(&plane).for_each(|(p, v)| p[c] = *v);
+    }
+    if linear {
+        img.iter_mut().for_each(|p| *p = encoded(*p));
+    }
 }
 
 #[cfg(test)]
@@ -187,53 +213,6 @@ mod tests {
     use ink_doc::{DocId, Document, NodeId};
 
     use super::*;
-
-    fn spread(a: &[f32], w: usize) -> (f32, f32) {
-        let total: f32 = a.iter().sum();
-        let mean: f32 = a.iter().enumerate().map(|(i, v)| (i % w) as f32 * v).sum::<f32>() / total;
-        let var: f32 = a.iter().enumerate().map(|(i, v)| ((i % w) as f32 - mean).powi(2) * v).sum::<f32>() / total;
-        (total, var.sqrt())
-    }
-
-    #[test]
-    fn a_blur_is_a_gaussian_of_the_deviation_asked() {
-        for sigma in [0.6f32, 1.5, 2.0, 2.5, 3.0, 7.3] {
-            let (w, h) = (101, 3);
-            let mut a = vec![0.0f32; w * h];
-            a[w + 50] = 1.0;
-            blur(&mut a, w, h, false, sigma);
-            let (total, dev) = spread(&a[w..2 * w], w);
-            assert!((total - 1.0).abs() < 1e-4, "{sigma}: keeps what's there, {total}");
-            assert!((dev - sigma).abs() < sigma * 0.12 + 0.02, "{sigma}: spread {dev}");
-            assert!((a[w + 50 - 3] - a[w + 50 + 3]).abs() < 1e-6, "{sigma}: even both ways");
-            assert_eq!(a[50], 0.0, "{sigma}: rows stay apart");
-            // It reaches no further than a band is told it does.
-            let reach = Shadow { offset: Vec2::ZERO, sigma: (sigma, sigma), color: [0.0; 4] }.reach() as usize;
-            assert!(a[w..2 * w].iter().enumerate().all(|(i, v)| *v == 0.0 || i.abs_diff(50) <= reach), "{sigma}: past its reach");
-            // The same down the columns.
-            let mut b = vec![0.0f32; 3 * 101];
-            b[50 * 3 + 1] = 1.0;
-            blur(&mut b, 3, 101, true, sigma);
-            assert!((b[47 * 3 + 1] - a[w + 47]).abs() < 1e-6, "{sigma}");
-        }
-        // No blur, and one far wider than the picture.
-        let mut a = vec![0.0, 1.0, 0.0];
-        blur(&mut a, 3, 1, false, 0.0);
-        assert_eq!(a, vec![0.0, 1.0, 0.0]);
-        blur(&mut a, 3, 1, false, 1e9);
-        assert!(a.iter().all(|v| v.is_finite() && *v < 1e-6));
-    }
-
-    #[test]
-    fn a_shift_moves_part_pixels_too() {
-        let a = vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        assert_eq!(shifted(&a, 3, 3, Vec2::new(1.0, 1.0))[5], 1.0);
-        let half = shifted(&a, 3, 3, Vec2::new(0.5, 0.0));
-        assert_eq!((half[1], half[2]), (0.5, 0.5));
-        let back = shifted(&a, 3, 3, Vec2::new(-1.0, 0.25));
-        assert_eq!((back[0], back[3]), (0.75, 0.25));
-        assert!(shifted(&a, 3, 3, Vec2::new(1e12, -1e12)).iter().all(|v| *v == 0.0));
-    }
 
     #[test]
     fn a_shadow_goes_under_and_beside() {
@@ -247,25 +226,70 @@ mod tests {
             }
         }
         let shadow = Shadow { offset: Vec2::new(2.0, 2.0), sigma: (0.0, 0.0), color: [0.0, 0.0, 0.0, 0.6] };
-        drop_shadows(&mut layer, w, h, &[shadow]);
+        cast(&mut layer, w, h, &shadow, true);
         assert_eq!(layer[5 * w + 5], [1.0, 0.0, 0.0, 1.0], "the square is as it was");
         assert_eq!(layer[9 * w + 9], [0.0, 0.0, 0.0, 0.6], "its shadow shows past it");
         assert_eq!(layer[3 * w + 3], [0.0; 4]);
         // Blurred, the shadow fades outward.
         let mut soft = vec![[0.0f32; 4]; w * h];
         soft[6 * w + 6] = [1.0, 1.0, 1.0, 1.0];
-        drop_shadows(&mut soft, w, h, &[Shadow { offset: Vec2::ZERO, sigma: (1.0, 1.0), color: [1.0, 0.8, 0.0, 1.0] }]);
+        cast(&mut soft, w, h, &Shadow { offset: Vec2::ZERO, sigma: (1.0, 1.0), color: [1.0, 0.8, 0.0, 1.0] }, true);
         let (near, far) = (soft[6 * w + 7], soft[6 * w + 9]);
         assert!(near[3] > far[3] && far[3] > 0.0);
         assert!((near[0] / near[3] - 1.0).abs() < 1e-5 && (near[1] / near[3] - 0.8).abs() < 1e-5, "in the flood's colour");
     }
 
+    /// What `stages` make of one row of `pixels`.
+    fn run(pixels: &[Pixel], stages: &[Stage]) -> Vec<Pixel> {
+        let mut layer = pixels.to_vec();
+        apply(&mut layer, pixels.len(), 1, stages);
+        layer
+    }
+
+    const RED: Pixel = [1.0, 0.0, 0.0, 1.0];
+    const CLEAR: Pixel = [0.0; 4];
+    /// Half-covering green, premultiplied.
+    const HALF: Pixel = [0.0, 0.5, 0.0, 0.5];
+
     #[test]
-    fn part_clear_pixels_blend_in_linear_light() {
-        // Half white over black: mid grey in linear light is 188, not 128.
-        let out = over([0.5, 0.5, 0.5, 0.5], [0.0, 0.0, 0.0, 1.0]);
-        assert!((out[0] * 255.0 - 188.0).abs() < 1.0 && out[3] == 1.0, "{out:?}");
-        assert_eq!(over([0.0; 4], [0.1, 0.2, 0.3, 0.4]), [0.1, 0.2, 0.3, 0.4]);
+    fn a_chain_runs_each_stage_on_what_it_names() {
+        let row = [CLEAR, RED, CLEAR, CLEAR];
+        // The element's shape, moved one px: where it was is clear.
+        let moved = run(&row, &[Stage::Offset { of: Input::Alpha, by: Vec2::new(1.0, 0.0), linear: true }]);
+        assert_eq!(moved, [CLEAR, CLEAR, [0.0, 0.0, 0.0, 1.0], CLEAR]);
+        // A flood, kept where that moved shape is, under the element.
+        let stages = [
+            Stage::Offset { of: Input::Alpha, by: Vec2::new(1.0, 0.0), linear: false },
+            Stage::Flood { color: [0.0, 0.0, 1.0, 0.5] },
+            Stage::Composite { top: Input::Step(1), under: Input::Step(0), op: Operator::In, linear: false },
+            Stage::Merge { of: vec![Input::Step(2), Input::Graphic], linear: false },
+        ];
+        assert_eq!(run(&row, &stages), [CLEAR, RED, [0.0, 0.0, 0.5, 0.5], CLEAR]);
+        // What Ink has no picture of is clear; a step that isn't there
+        // too.
+        assert_eq!(run(&row, &[Stage::Merge { of: vec![Input::Nothing, Input::Step(7)], linear: true }]), [CLEAR; 4]);
+        assert_eq!(run(&row, &[]), row, "no stages, no change");
+    }
+
+    #[test]
+    fn a_blur_spreads_colour_in_linear_light() {
+        // White beside black, blurred: the pixel between them is mid
+        // grey in light, which is written 188, not 128.
+        let (white, black) = ([1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0]);
+        let row: Vec<Pixel> = (0..40).map(|i| if i < 20 { white } else { black }).collect();
+        let grey = |linear: bool| {
+            let out = run(&row, &[Stage::Blur { of: Input::Graphic, sigma: (2.0, 0.0), linear }]);
+            ((out[19][0] + out[20][0]) * 0.5 * 255.0, out[19][3])
+        };
+        let ((lit, alpha), (plain, _)) = (grey(true), grey(false));
+        assert!((lit - 188.0).abs() < 2.0 && (plain - 127.5).abs() < 1.0 && alpha > 0.999, "{lit} {plain}");
+        // It keeps what's there, and looks no further than it says.
+        let dot: Vec<Pixel> = (0..41).map(|i| if i == 20 { HALF } else { CLEAR }).collect();
+        let stage = Stage::Blur { of: Input::Graphic, sigma: (2.5, 0.0), linear: true };
+        let out = run(&dot, std::slice::from_ref(&stage));
+        assert!((out.iter().map(|p| p[3]).sum::<f32>() - 0.5).abs() < 1e-4);
+        assert!(out.iter().enumerate().all(|(i, p)| p[3] == 0.0 || (i.abs_diff(20) as f64) <= stage.reach()));
+        assert!(out.iter().all(|p| p[3] == 0.0 || (p[1] / p[3] - 1.0).abs() < 1e-3), "still green all through");
     }
 
     #[test]
@@ -279,18 +303,22 @@ mod tests {
         let near = |a: Vec2, b: (f64, f64)| (a.x - b.0).abs() < 1e-4 && (a.y - b.1).abs() < 1e-4;
         let (bbox, view) = (Rect::from_xywh(10.0, 20.0, 20.0, 40.0), Vec2::new(100.0, 100.0));
         let f = fit(&filter(2), bbox, &Affine::scale(2.0, 2.0), view).unwrap();
-        let s = f.shadows[0];
+        let shadow = |f: &Fitted| match f.stages.as_slice() {
+            [Stage::Shadow { of: Input::Graphic, shadow, linear: true }] => *shadow,
+            other => panic!("{other:?}"),
+        };
+        let s = shadow(&f);
         assert!(near(s.offset, (1.0, 1.6)) && near(Vec2::new(s.sigma.0 as f64, s.sigma.1 as f64), (1.2, 1.2)), "{s:?}");
-        assert_eq!((f.shadows.len(), s.color), (1, [0.0, 0.0, 0.0, 0.3]));
+        assert_eq!(s.color, [0.0, 0.0, 0.0, 0.3]);
         assert!(near(f.region[0], (12.0, 28.0)) && near(f.region[2], (72.0, 140.0)), "{:?}", f.region);
         // The defaults: 2 across, 2 down, 2 of blur, black; a tenth of
         // the box more all round.
         let f = fit(&filter(4), bbox, &Affine::IDENTITY, view).unwrap();
-        assert_eq!(f.shadows, vec![Shadow { offset: Vec2::new(2.0, 2.0), sigma: (2.0, 2.0), color: [0.0, 0.0, 0.0, 1.0] }]);
+        assert_eq!(shadow(&f), Shadow { offset: Vec2::new(2.0, 2.0), sigma: (2.0, 2.0), color: [0.0, 0.0, 0.0, 1.0] });
         assert!(near(f.region[0], (8.0, 16.0)) && near(f.region[2], (32.0, 64.0)), "{:?}", f.region);
         // Fractions of the box, in a region in user units.
         let f = fit(&filter(6), bbox, &Affine::IDENTITY, view).unwrap();
-        assert!(near(f.shadows[0].offset, (10.0, 0.0)) && near(Vec2::new(f.shadows[0].sigma.0 as f64, f.shadows[0].sigma.1 as f64), (2.0, 8.0)));
+        assert!(near(shadow(&f).offset, (10.0, 0.0)) && near(Vec2::new(shadow(&f).sigma.0 as f64, shadow(&f).sigma.1 as f64), (2.0, 8.0)));
         assert!(near(f.region[0], (1.0, 2.0)) && near(f.region[2], (31.0, 42.0)));
         // A box with no width has no region to show in.
         assert!(fit(&filter(2), Rect::from_xywh(0.0, 0.0, 0.0, 9.0), &Affine::IDENTITY, view).is_none());

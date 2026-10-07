@@ -16,7 +16,7 @@ use ink_doc::style::{Paint as Ink, Style, fill_rule, prop};
 use ink_doc::{Document, Kind, Node, geometry, transform};
 use ink_geom::{Affine, FillRule, Polyline, Rect, Vec2, stroke};
 
-use crate::filter::{self, Shadow};
+use crate::filter::{self, Stage};
 use crate::paint::{Paint, rgba};
 use crate::coverage::Shape;
 
@@ -45,8 +45,8 @@ pub(crate) enum Item<S> {
 pub(crate) struct Layer<S> {
     pub items: Vec<Item<S>>,
     pub opacity: f32,
-    /// Shadows cast by what's in it, laid under it.
-    pub shadows: Vec<Shadow>,
+    /// The filter run on it once it's drawn: its stages, in order.
+    pub filter: Vec<Stage>,
     /// Nothing of it shows outside this: a filter's region, the page.
     pub cut: Option<S>,
     pub clip: Option<Clip<S>>,
@@ -97,7 +97,7 @@ pub(crate) fn fitted(items: Vec<Item<Polys>>, fit: &impl Fn(Polys) -> Option<Sha
                     Some(clip) => Some(clip.fitted(fit)?),
                     None => None,
                 };
-                Some(Item::Layer(Layer { items: fitted(layer.items, fit), opacity: layer.opacity, shadows: layer.shadows, cut, clip }))
+                Some(Item::Layer(Layer { items: fitted(layer.items, fit), opacity: layer.opacity, filter: layer.filter, cut, clip }))
             }
         })
         .collect()
@@ -160,7 +160,7 @@ impl<'a> Builder<'a> {
             self.node(child, &style, 1.0, to_px, &mut items);
         }
         match cut {
-            Some(edge) => vec![Item::Layer(Layer { items, opacity: 1.0, shadows: Vec::new(), cut: Some((vec![edge.to_vec()], FillRule::NonZero)), clip: None })],
+            Some(edge) => vec![Item::Layer(Layer { items, opacity: 1.0, filter: Vec::new(), cut: Some((vec![edge.to_vec()], FillRule::NonZero)), clip: None })],
             None => items,
         }
     }
@@ -230,7 +230,7 @@ impl<'a> Builder<'a> {
         let apart = fitted.is_some() || clip.is_some() || (opacity < 1.0 && (node.elements().next().is_some() || (fills && strokes)));
         let layered = apart && self.open_layer();
         let alpha = if layered { alpha } else { alpha * opacity };
-        let own_reach = if layered { fitted.iter().flat_map(|f| &f.shadows).map(Shadow::reach).sum::<f64>() } else { 0.0 };
+        let own_reach = if layered { fitted.as_ref().map_or(0.0, |f| f.reach()) } else { 0.0 };
         self.reach += own_reach;
         self.furthest = self.furthest.max(self.reach);
 
@@ -261,11 +261,11 @@ impl<'a> Builder<'a> {
             },
             None => None,
         };
-        let (shadows, cut) = match fitted {
-            Some(f) => (f.shadows, Some((vec![f.region.to_vec()], FillRule::NonZero))),
+        let (filter, cut) = match fitted {
+            Some(f) => (f.stages, Some((vec![f.region.to_vec()], FillRule::NonZero))),
             None => (Vec::new(), None),
         };
-        out.push(Item::Layer(Layer { items: inside, opacity: opacity as f32, shadows, cut, clip }));
+        out.push(Item::Layer(Layer { items: inside, opacity: opacity as f32, filter, cut, clip }));
     }
 
     /// What `clip` (a `<clipPath>`) lets through, for an element drawn

@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use ink_doc::{DocId, Document, Viewport};
+use ink_doc::{DocId, Document, Kind, Viewport};
 use ink_render::{View, render};
 use lntrn_image::Image;
 
@@ -59,7 +59,17 @@ fn diff(a: &Image, b: &Image) -> Diff {
     Diff { mean: sum / (n * 4.0), worst, far: far as f64 / n }
 }
 
-/// Ink and `lntrn-svg` agree on every file (D22), as closely as two
+/// Whether `text` has in it what Ink draws and `lntrn-svg` doesn't:
+/// `<style>` rules, and filters that are more than drop shadows. On
+/// those files the two can't agree; `rsvg-convert` is what Ink is read
+/// against there (`third_opinion`).
+fn past_lntrn_svg(text: &str) -> bool {
+    let doc = Document::parse(DocId(1), text).unwrap();
+    doc.descendants(doc.root()).into_iter().filter_map(|id| doc.get(id)).any(|n| n.kind == Kind::Style || (n.kind == Kind::FilterPrimitive && !matches!(n.local(), "feDropShadow")))
+}
+
+/// Ink and `lntrn-svg` agree on every file both draw all of (D22), as
+/// closely as two
 /// renderers that anti-alias differently can: `lntrn-svg` samples 16
 /// heights in each pixel row, Ink takes exact areas, so an edge pixel
 /// can differ by a few levels while the picture as a whole doesn't. The
@@ -70,11 +80,18 @@ fn diff(a: &Image, b: &Image) -> Diff {
 /// (Ink measures along the true curve) and shadows thrown in from past
 /// the picture's edge (`lntrn-svg`, like `rsvg-convert`, has nothing
 /// there to throw).
+///
+/// Nine files are left out: the ones with blurs, glows and `<style>`
+/// rules, which Ink draws since M3b and `lntrn-svg` doesn't. Against
+/// `rsvg-convert` (2026-10-06, 256 px) Ink's eight with blurs are 0.27
+/// to 0.61 levels apart on average, where `lntrn-svg`'s are 0.63 to 9.3.
 #[test]
 fn ink_and_lntrn_svg_agree_on_every_file() {
+    let (beyond, both): (Vec<_>, Vec<_>) = corpus().into_iter().partition(|(_, text)| past_lntrn_svg(text));
+    assert_eq!(beyond.len(), 9, "the files lntrn-svg can't draw all of: {:?}", beyond.iter().map(|(name, _)| name).collect::<Vec<_>>());
     for (size, mean, far) in [(64, 1.25, 0.04), (256, 0.5, 0.015)] {
-        for (name, text) in corpus() {
-            let d = diff(&ink(&text, size), &lntrn_svg::render(&text, size).unwrap());
+        for (name, text) in &both {
+            let d = diff(&ink(text, size), &lntrn_svg::render(text, size).unwrap());
             assert!(d.mean <= mean, "{name} at {size} px: {:.3} levels apart on average", d.mean);
             assert!(d.far <= far, "{name} at {size} px: {:.2} % of its pixels are over 16 levels apart", d.far * 100.0);
         }

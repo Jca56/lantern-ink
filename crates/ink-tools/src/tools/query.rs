@@ -86,6 +86,17 @@ fn info(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
         [] => "No attributes.".to_owned(),
         attrs => format!("Attributes: {}", attrs.iter().map(|a| format!("{}=\"{}\"", a.name, shown(&a.value))).collect::<Vec<_>>().join(" ")),
     });
+    // What the drawing's <style> rules say of it: each property once,
+    // as the rule that counts for most has it.
+    let mut ruled: Vec<(&str, &str)> = Vec::new();
+    for said in node.rules().iter().rev().filter(|said| !said.name.is_empty()) {
+        if !ruled.iter().any(|(name, _)| *name == &*said.name) {
+            ruled.push((&said.name, &said.value));
+        }
+    }
+    if !ruled.is_empty() {
+        lines.push(format!("From <style> rules: {} (its own style=\"…\" outvotes these; its attributes don't)", ruled.iter().rev().map(|(name, value)| format!("{name}: {value}")).collect::<Vec<_>>().join("; ")));
+    }
     // What it's drawn with that it doesn't say itself: from the nearest
     // group above that does.
     let handed: Vec<String> = INHERITED.iter().filter(|name| prop(node, name).is_none()).filter_map(|name| above.iter().find_map(|a| prop(a, name).map(|v| format!("{name}=\"{v}\" ({})", a.id)))).collect();

@@ -328,8 +328,8 @@ current scale, paint, opacity, clip, filter, bounds; cached by
 - **Groups** that fade, clip or filter as one draw into a layer of their
   own, laid on when done.
 - **Clip paths**, nested, in either units.
-- **Filters:** `feDropShadow` and `feGaussianBlur` first (135 and 11 of
-  the corpus's files), in the colour space the file asks for.
+- **Filters:** chains of steps (§5.2), in the colour space the file
+  asks for.
 - **Text** through `lntrn-text`'s glyph outlines, filled like any path.
 - **Colour:** 8-bit sRGB, composited in sRGB as SVG does.
 
@@ -354,6 +354,35 @@ in the order something needs them (D21).
 **As built in M1:** everything in the table but `<text>`, `<style>`
 rules and `feGaussianBlur`, which is exactly what `lntrn-svg` draws.
 Those three come with M3's operations.
+
+**As built in M3b:** `<style>` rules, and filters as chains of steps.
+- **A filter is a chain** (`ink-doc/src/filter.rs`, drawn by
+  `ink-render/src/filter.rs`): each step works on the element as drawn,
+  on its shape alone, or on what an earlier step made (`in`, `in2`,
+  `result`), in linear light unless it says `sRGB`. The steps are the
+  seven the corpus uses: `feGaussianBlur`, `feOffset`, `feFlood`,
+  `feComposite` (all its operators), `feMerge`, `feComponentTransfer`
+  and `feDropShadow`. A filter with any other step, or with a step
+  given a region of its own, isn't taken up: its element draws
+  unfiltered rather than wrong. A filter works on what's inside its
+  region and shows nothing outside it; the region turns with its
+  element (`rsvg-convert` keeps it upright: the one place the two part).
+- **`<style>` rules** (`ink-doc/src/sheet.rs`): selectors made of
+  element names, `.class`, `#id` and `*`, alone or together, nested by
+  a space or `>`; anything else matches nothing, and `@` rules are
+  stepped over. What the rules say of each node is worked out when the
+  document is read and after every Command, and kept on the node (never
+  written), so `style::prop` answers from the node alone and everything
+  that reads a property sees the rules: the renderer, hit tests,
+  `Transform`. The order is CSS's: an attribute, then rules (by how much
+  they single out, then the later), then the node's own `style`, then a
+  rule's `!important`. So D14 has one more clause: a property a rule
+  gives a node is set in the node's `style`, the only place that
+  outvotes the rule.
+- `lntrn-svg` draws neither, so the nine corpus files with them are
+  left out of the agreement test and read against `rsvg-convert`
+  instead: the eight with blurs are 0.27 to 0.61 levels from it on
+  average at 256 px, where unfiltered they were 0.63 to 9.3.
 
 ### 5.3 Why the CPU (D7)
 - One renderer for the window, previews and exports: no "it looked

@@ -1,7 +1,10 @@
 //! Setting a property where the node has it (ARCHITECTURE §3.4, D14):
 //! in its `style` when that's where it is said (that one declaration is
 //! rewritten and the rest are kept), else as the attribute of its name,
-//! which is also where a property the node didn't have goes.
+//! which is also where a property the node didn't have goes. One that a
+//! `<style>` rule gives the node goes into its `style` all the same: a
+//! rule outvotes an attribute, and only the node's own style outvotes
+//! the rule.
 
 use crate::document::Document;
 use crate::error::DocError;
@@ -15,7 +18,14 @@ impl Document {
     pub(crate) fn set_prop(&mut self, id: NodeId, name: &str, value: Option<&str>) -> Result<bool, DocError> {
         let node = self.node(id)?;
         let Some(style) = node.attr("style").filter(|style| declarations(style).any(|d| d.name == name)) else {
-            return self.set_attr(id, name, value);
+            let ruled = node.ruled(name, false).is_some() || node.ruled(name, true).is_some();
+            let Some(value) = value.filter(|_| ruled) else { return self.set_attr(id, name, value) };
+            // Said after whatever its style says already.
+            let style = match node.attr("style").map(str::trim_end).filter(|s| !s.is_empty()) {
+                Some(said) => format!("{said}{} {name}: {value}", if said.ends_with(';') { "" } else { ";" }),
+                None => format!("{name}: {value}"),
+            };
+            return self.set_attr(id, "style", Some(&style));
         };
         match value {
             Some(value) => {
@@ -75,6 +85,29 @@ mod tests {
         // One it didn't have goes in as an attribute.
         assert_eq!(after(r#"style="fill:red""#, "stroke-width", Some("4")), r#"<path style="fill:red" stroke-width="4"/>"#);
         assert_eq!(doc(r#"style="fill:red""#).set_prop(N, "fill", Some("red")), Ok(false), "the same again changes nothing");
+    }
+
+    #[test]
+    fn what_a_rule_gives_is_outvoted_only_in_the_nodes_own_style() {
+        let ruled = |attrs: &str| {
+            let attrs = if attrs.is_empty() { String::new() } else { format!(" {attrs}") };
+            Document::parse(DocId(1), &format!("<svg><style>.a {{ fill: red; stroke-width: 2 }}</style><path class=\"a\"{attrs}/></svg>")).unwrap()
+        };
+        let after = |attrs: &str, name: &str, value: &str| {
+            let mut d = ruled(attrs);
+            assert!(d.set_prop(NodeId(3), name, Some(value)).unwrap());
+            d.restyle();
+            assert_eq!(prop(d.node(NodeId(3)).unwrap(), name), Some(value), "it now says so, whatever the rule says");
+            d.markup(NodeId(3)).unwrap()
+        };
+        assert_eq!(after("", "fill", "blue"), r#"<path class="a" style="fill: blue"/>"#);
+        assert_eq!(after(r#"fill="green" style="opacity: 0.5;""#, "stroke-width", "4"), r#"<path class="a" fill="green" style="opacity: 0.5; stroke-width: 4"/>"#);
+        // What no rule gives it is an attribute as ever; taken off, the
+        // rule is all that's left to say it.
+        assert_eq!(after("", "opacity", "0.5"), r#"<path class="a" opacity="0.5"/>"#);
+        let mut d = ruled(r#"style="fill: blue""#);
+        assert!(d.set_prop(NodeId(3), "fill", None).unwrap());
+        assert_eq!((d.markup(NodeId(3)).unwrap().as_str(), prop(d.node(NodeId(3)).unwrap(), "fill")), (r#"<path class="a"/>"#, Some("red")));
     }
 
     #[test]

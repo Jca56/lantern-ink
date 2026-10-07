@@ -46,3 +46,68 @@ fn the_kitchen_sink_as_a_small_icon() {
 fn the_kitchen_sink_enlarged_and_off_the_grid() {
     check("kitchen-sink.svg", "kitchen-sink-x2.7.png", |v| View::page(v, 2.7));
 }
+
+#[test]
+fn filters_and_rules_at_their_own_size() {
+    check("filters-and-rules.svg", "filters-and-rules.png", |v| View::page(v, 1.0));
+}
+
+#[test]
+fn filters_and_rules_enlarged_and_off_the_grid() {
+    check("filters-and-rules.svg", "filters-and-rules-x2.3.png", |v| View::page(v, 2.3));
+}
+
+/// The goldens' drawings as `rsvg-convert` draws them, if it's on this
+/// machine: how far Ink's picture of each is from its, and in which
+/// squares of the drawing. Read on 2026-10-06, `filters-and-rules.svg`
+/// is 0.34 levels apart on average with its last rect's `rotate` taken
+/// off, no pixel more than 11 out. With it on, that rect is where the
+/// two part ways: `rsvg-convert` keeps a filter's region upright where
+/// Ink turns it with its element, as the element's own coordinates say.
+/// `cargo test -p ink-render --test golden against_rsvg -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn against_rsvg() {
+    for svg in ["kitchen-sink.svg", "filters-and-rules.svg"] {
+        for scale in [1.0, 3.0] {
+            let text = std::fs::read_to_string(golden(svg)).unwrap();
+            let doc = Document::parse(DocId(1), &text).unwrap();
+            let viewport = Viewport::of(doc.node(doc.root()).unwrap());
+            let ours = render(&doc, &View::page(&viewport, scale)).unwrap();
+            let out = std::process::Command::new("rsvg-convert").arg("--zoom").arg(scale.to_string()).arg("--format").arg("png").arg(golden(svg)).output().expect("rsvg-convert");
+            let theirs: Image = lntrn_image::png::decode(&out.stdout).unwrap();
+            assert_eq!((ours.width, ours.height), (theirs.width, theirs.height));
+            let (mut sum, mut far, mut worst) = (0.0f64, 0usize, (0.0f64, 0usize));
+            for (i, (p, q)) in ours.rgba.chunks_exact(4).zip(theirs.rgba.chunks_exact(4)).enumerate() {
+                let d = (0..4).map(|c| (p[c] as f64 - q[c] as f64).abs()).fold(0.0, f64::max);
+                sum += d;
+                far += usize::from(d > 16.0);
+                if d > worst.0 {
+                    worst = (d, i);
+                }
+            }
+            let n = (ours.width * ours.height) as f64;
+            let (x, y) = (worst.1 % ours.width as usize, worst.1 / ours.width as usize);
+            // Where they differ, in squares of 20 user units: each
+            // square's average, when it's more than a level.
+            let (w, side) = (ours.width as usize, (20.0 * scale) as usize);
+            for cy in 0..ours.height as usize / side {
+                let row: Vec<String> = (0..w / side)
+                    .map(|cx| {
+                        let mut sum = 0.0;
+                        for y in cy * side..(cy + 1) * side {
+                            for x in cx * side..(cx + 1) * side {
+                                let i = (y * w + x) * 4;
+                                sum += (0..4).map(|c| (ours.rgba[i + c] as f64 - theirs.rgba[i + c] as f64).abs()).fold(0.0, f64::max);
+                            }
+                        }
+                        let mean = sum / (side * side) as f64;
+                        if mean > 1.0 { format!("{mean:5.1}") } else { "    .".to_owned() }
+                    })
+                    .collect();
+                println!("    {}", row.join(" "));
+            }
+            println!("{svg} x{scale}: {:.3} levels apart on average, {:.2} % over 16; worst {} at ({x}, {y}): ink {:?} rsvg {:?}", sum / n, far as f64 / n * 100.0, worst.0, &ours.rgba[worst.1 * 4..worst.1 * 4 + 4], &theirs.rgba[worst.1 * 4..worst.1 * 4 + 4]);
+        }
+    }
+}

@@ -48,6 +48,7 @@ impl Document {
         if doc.nodes[&doc.root].kind != Kind::Svg {
             return Err(DocError::NotSvg(format!("its root element is <{name}>, not an SVG's <svg>")));
         }
+        doc.restyle();
         Ok(doc)
     }
 
@@ -169,7 +170,7 @@ impl Document {
         }
         let id = self.next.node();
         let kind = self.kind_of(parent, &el.name, el.attrs.iter().map(|a| (a.name.as_str(), a.value.as_str())));
-        let node = Node { id, rev: self.next.rev(), parent, name: el.name, kind, attrs: el.attrs, children: Vec::new(), written: el.written };
+        let node = Node { id, rev: self.next.rev(), parent, name: el.name, kind, attrs: el.attrs, children: Vec::new(), written: el.written, ruled: None };
         self.nodes.insert(id, Arc::new(node));
         let mut children = Vec::with_capacity(el.children.len());
         for content in el.children {

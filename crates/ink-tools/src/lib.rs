@@ -36,7 +36,7 @@ Workflow: doc_new or doc_open, then edit, then doc_preview to look (at milestone
 renderer \"lantern\" shows how Lantern's apps will draw it at icon sizes), then doc_save (.svg) or doc_export (a picture). \
 Use batch for many edits: one undo step, all or nothing; name what a step makes with \"as\" and refer to it as \"@name\". \
 Every edit is undoable (history_undo). Refused calls say why and how to fix them. \
-Not drawn yet (but kept in the file): <text>, <use>, <image>, masks, patterns, <style> rules, filters other than feDropShadow. \
+Not drawn yet (but kept in the file): <text>, <use>, <image>, masks, patterns, and the rarer filter steps. \
 Unsaved drawings live only in this server process: save what matters.";
 
 /// Ink as an MCP server's host: a core, and the tools that work on it.

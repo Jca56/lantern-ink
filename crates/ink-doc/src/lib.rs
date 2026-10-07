@@ -38,6 +38,7 @@ mod props;
 pub mod refs;
 mod settle;
 mod shape;
+pub mod sheet;
 mod structure;
 pub mod style;
 pub mod transform;

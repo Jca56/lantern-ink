@@ -115,8 +115,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   `Group`, `Ungroup`, and `Move` keeping a node where it shows; the tools
   `node_transform`, `node_align`, `node_duplicate`, `node_group`,
   `node_ungroup`, `node_info`, `doc_query` and `doc_set` (25 tools in
-  all, 202 tests). **M3b (paint) is next.** A fresh session's tools are
-  the new binary's; M3a has had no done-test in one yet.
+  all). A fresh session's tools are the new binary's; M3a has had no
+  done-test in one yet.
   - Where a transform is written is `ink-doc/src/settle.rs`, and its
     rules are ARCHITECTURE §3.4. Its done-test draws the corpus:
     `cargo test --release -p ink-render --test settle` (and `report`, or
@@ -140,6 +140,26 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     `transform`, until M3b can move the gradient with it. `ToPath` and
     `SetGeometry` have no Command: nothing needs them before M3c's path
     tools and M4's handles.
+
+- **M3b (paint) is under way**, in four pieces, the renderer first
+  (Alva's order, 2026-10-06): **b1** the renderer, **b2** styles
+  (`SetStyle`, a `node_style` tool), **b3** gradients (`gradient_add`,
+  `gradient_set`; a user-space gradient moves with its shape, but one
+  that other shapes share is never touched: Alva's call), **b4** clips
+  and filters as tools (`clip_set`, `filter_set`).
+- **M3b's b1 is built** (2026-10-06, 217 tests): filters are chains of
+  steps and `<style>` rules are in the cascade (ARCHITECTURE §5.2).
+  - A filter's steps are read in `ink-doc/src/filter.rs` and run in
+    `ink-render/src/filter.rs` (`filter/blur.rs`, `filter/blend.rs`).
+    A plain drop shadow draws the bytes it did before: the kitchen-sink
+    goldens didn't change.
+  - What `<style>` rules say of a node is kept on the node
+    (`Node::rules`, `ink-doc/src/sheet.rs`) and worked out again after
+    every Command (`Document::restyle`); `style::prop` reads it. Nothing
+    else needs to know rules exist.
+  - A second golden, `filters-and-rules.svg`, and a report to read it
+    against `rsvg-convert`: `cargo test -p ink-render --test golden
+    against_rsvg -- --ignored --nocapture`.
 
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.

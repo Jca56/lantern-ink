@@ -7,9 +7,11 @@
 //! a document); a [`Node`] is one in a document, with its ID.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use crate::id::NodeId;
 use crate::kind::Kind;
+use crate::sheet::Said;
 use crate::xml::escape::unescape;
 
 /// A short piece of formatting, kept without allocating when it's one of
@@ -186,6 +188,10 @@ pub struct Node {
     pub attrs: Vec<Attr>,
     pub children: Vec<Child>,
     pub(crate) written: Written,
+    /// What the document's `<style>` rules say of it, the ones that
+    /// count for more last (`None`: nothing). Worked out from the rules
+    /// and the tree, never written to the file ([`crate::sheet`]).
+    pub(crate) ruled: Option<Arc<[Said]>>,
 }
 
 /// What a [`Node`] holds, in order.
@@ -201,6 +207,19 @@ impl Node {
     /// The value of the first attribute called `name`.
     pub fn attr(&self, name: &str) -> Option<&str> {
         find(&self.attrs, name)
+    }
+
+    /// What the document's `<style>` rules say its property `name` is:
+    /// the rule that counts for most. With `important`, only what a rule
+    /// marks `!important`; without, only what it doesn't.
+    pub fn ruled(&self, name: &str, important: bool) -> Option<&str> {
+        self.ruled.as_deref()?.iter().rev().find(|said| said.important == important && &*said.name == name).map(|said| &*said.value)
+    }
+
+    /// Everything the document's `<style>` rules say of it, the ones
+    /// that count for more last.
+    pub fn rules(&self) -> &[Said] {
+        self.ruled.as_deref().unwrap_or(&[])
     }
 
     /// Its name without any prefix.

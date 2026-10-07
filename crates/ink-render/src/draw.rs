@@ -6,7 +6,7 @@
 use ink_doc::{Document, Viewport};
 use ink_geom::Vec2;
 
-use crate::filter::drop_shadows;
+use crate::filter;
 use crate::coverage::Shape;
 use crate::raster::{Canvas, Pixel, to_bytes};
 use crate::scene::{Builder, Clip, Item, Polys, fitted};
@@ -98,11 +98,17 @@ fn draw(canvas: &mut Canvas, items: &[Item<Shape>], origin: Vec2) {
                 canvas.push_layer();
                 draw(canvas, &layer.items, origin);
                 let mut pixels = canvas.pop_layer();
-                if !layer.shadows.is_empty() {
-                    drop_shadows(&mut pixels, canvas.w, canvas.h, &layer.shadows);
+                let cut = layer.cut.as_ref().map(|cut| canvas.mask(cut));
+                if !layer.filter.is_empty() {
+                    // A filter works on what's inside its region, and
+                    // shows nothing outside it.
+                    if let Some(cut) = &cut {
+                        through(&mut pixels, cut);
+                    }
+                    filter::apply(&mut pixels, canvas.w, canvas.h, &layer.filter);
                 }
-                if let Some(cut) = &layer.cut {
-                    through(&mut pixels, &canvas.mask(cut));
+                if let Some(cut) = &cut {
+                    through(&mut pixels, cut);
                 }
                 if let Some(clip) = &layer.clip {
                     through(&mut pixels, &clip_mask(canvas, clip));
@@ -166,6 +172,19 @@ mod tests {
             assert!(scene.render_in_bands(band) == whole, "{band}-row bands");
         }
         assert!(scene.render() == whole);
+    }
+
+    #[test]
+    fn a_chain_of_filter_stages_is_the_same_in_any_bands() {
+        // A glow under a moved, blurred copy: three stages that each
+        // look past the band they're drawn in.
+        let glow = r##"<svg viewBox="0 0 40 40"><defs><filter id="f" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.5" result="soft"/><feOffset in="SourceGraphic" dx="3" dy="-2.5" result="moved"/><feGaussianBlur in="moved" stdDeviation="0.8 2"/><feMerge><feMergeNode in="soft"/><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><circle cx="20" cy="20" r="9" fill="#fa0" stroke="#08f" stroke-width="2" filter="url(#f)"/></svg>"##;
+        let scene = scene(glow, 96);
+        assert!(scene.margin > 0 && !scene.whole, "its stages reach {} px", scene.margin);
+        let whole = scene.render_in_bands(96);
+        for band in [1, 5, 32, 61] {
+            assert!(scene.render_in_bands(band) == whole, "{band}-row bands");
+        }
     }
 
     #[test]

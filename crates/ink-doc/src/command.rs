@@ -110,6 +110,8 @@ impl Document {
         let mut applied = Applied::default();
         work.run(command, &mut applied, 0)?;
         if !applied.is_nothing() {
+            // What its `<style>` rules say may be different now.
+            work.restyle();
             *self = work;
         }
         Ok(applied)

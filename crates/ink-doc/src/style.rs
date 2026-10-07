@@ -54,6 +54,8 @@ pub(crate) struct Decl<'a> {
     pub name: &'a str,
     /// What it's set to, any `!important` left off.
     pub value: &'a str,
+    /// Whether it said `!important`.
+    pub important: bool,
     /// Where in the style the declaration is written (what's between
     /// two `;`), and where in it that value is.
     pub at: std::ops::Range<usize>,
@@ -84,22 +86,23 @@ pub(crate) fn declarations(style: &str) -> impl Iterator<Item = Decl<'_>> {
             from = end + 1;
             let chunk = &style[at.clone()];
             let Some(colon) = chunk.find(':') else { continue };
-            let said = chunk[colon + 1..].trim_end();
-            let said = said.strip_suffix("!important").map_or(said, str::trim_end);
+            let all = chunk[colon + 1..].trim_end();
+            let said = all.strip_suffix("!important").map_or(all, str::trim_end);
             let lead = said.len() - said.trim_start().len();
             let start = at.start + colon + 1 + lead;
-            return Some(Decl { name: chunk[..colon].trim(), value: &said[lead..], value_at: start..start + said.len() - lead, at });
+            return Some(Decl { name: chunk[..colon].trim(), value: &said[lead..], important: said.len() < all.len(), value_at: start..start + said.len() - lead, at });
         }
         None
     })
 }
 
-/// A property of `node`: from its `style` attribute, which wins, or the
-/// attribute of that name. Of the same property twice in a `style`, the
-/// later one counts.
+/// A property of `node`, as CSS has it: from its `style` attribute,
+/// else what the document's `<style>` rules say of it, else the
+/// attribute of that name; a rule's `!important` outvotes them all. Of
+/// the same property twice in a `style`, the later one counts.
 pub fn prop<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
-    let styled = node.attr("style").and_then(|style| declarations(style).filter(|d| d.name == name).last().map(|d| d.value));
-    styled.or_else(|| node.attr(name).map(str::trim))
+    let styled = || node.attr("style").and_then(|style| declarations(style).filter(|d| d.name == name).last().map(|d| d.value));
+    node.ruled(name, true).or_else(styled).or_else(|| node.ruled(name, false)).or_else(|| node.attr(name).map(str::trim))
 }
 
 /// The id a `url(#id)` names, and what follows it.
