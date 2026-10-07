@@ -85,8 +85,19 @@ impl Core {
         Ok(Opened { doc: id, adopted })
     }
 
-    /// Open the file at `path`.
+    /// The open document whose file is `path`, by whatever name the
+    /// path gives it.
+    pub fn doc_at(&self, path: &Path) -> Option<DocId> {
+        let wanted = file::canonical(path);
+        self.docs.iter().find(|(_, open)| open.path.as_deref().is_some_and(|own| file::canonical(own) == wanted)).map(|(&id, _)| id)
+    }
+
+    /// Open the file at `path`. One that is open already is refused
+    /// ([`Core::doc_at`] finds it): a file has one document at a time.
     pub fn open_file(&mut self, path: &Path) -> Result<Opened, CoreError> {
+        if let Some(doc) = self.doc_at(path) {
+            return Err(CoreError::AlreadyOpen { path: path.to_owned(), doc });
+        }
         let opened = self.open_text(&file::read(path)?)?;
         let open = self.open_mut(opened.doc)?;
         // As opened, it's what's on disk: nothing to save until it's
@@ -151,10 +162,15 @@ impl Core {
     }
 
     /// Save `id` to `path`, or to its own file again. The file is the
-    /// document as Ink holds it, written whole or not at all.
+    /// document as Ink holds it, written whole or not at all. Another
+    /// open document's file is refused.
     pub fn save(&mut self, id: DocId, path: Option<&Path>) -> Result<PathBuf, CoreError> {
+        let own = self.open(id)?.path.clone();
+        let path = path.map(Path::to_owned).or(own).ok_or(CoreError::NoPath(id))?;
+        if let Some(doc) = self.doc_at(&path).filter(|&other| other != id) {
+            return Err(CoreError::AlreadyOpen { path, doc });
+        }
         let open = self.open_mut(id)?;
-        let path = path.map(Path::to_owned).or_else(|| open.path.clone()).ok_or(CoreError::NoPath(id))?;
         file::write(&path, open.doc.to_svg().as_bytes())?;
         (open.path, open.saved) = (Some(path.clone()), Some(open.history.stamp()));
         Ok(path)

@@ -44,7 +44,7 @@ fn main() {
     log.line("exit");
 }
 
-/// Clear previews older than a day: every run leaves one per drawing.
+/// Clear previews older than a day: every run leaves its newest.
 fn prune(dir: &Path, log: &Log) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     let old = |e: &std::fs::DirEntry| e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > PREVIEW_AGE);

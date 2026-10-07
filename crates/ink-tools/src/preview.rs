@@ -44,7 +44,8 @@ pub(crate) enum Renderer {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Options {
-    pub max_edge: u32,
+    /// The picture's longer side, if the call says ([`EDGE`] if not).
+    pub max_edge: Option<u32>,
     pub background: Background,
     pub format: Format,
     pub quality: u8,
@@ -55,10 +56,12 @@ pub(crate) struct Options {
 }
 
 pub(crate) const MAX_EDGE: u32 = 2000;
+/// A preview's longer side when the call doesn't say.
+const EDGE: u32 = 512;
 
 impl Default for Options {
     fn default() -> Self {
-        Options { max_edge: 512, background: Background::Checker, format: Format::Auto, quality: 82, max_bytes: 256 << 10, region: None, renderer: Renderer::Ink }
+        Options { max_edge: None, background: Background::Checker, format: Format::Auto, quality: 82, max_bytes: 256 << 10, region: None, renderer: Renderer::Ink }
     }
 }
 
@@ -100,7 +103,7 @@ impl Options {
             return fail("the lantern renderer shows the whole icon at its sizes: leave region out");
         }
         Ok(Options {
-            max_edge: a.opt_int("max_edge", 16, MAX_EDGE as i64)?.map_or(d.max_edge, |v| v as u32),
+            max_edge: a.opt_int("max_edge", 16, MAX_EDGE as i64)?.map(|v| v as u32),
             background,
             format,
             quality: a.opt_int("quality", 1, 100)?.map_or(d.quality, |v| v as u8),
@@ -184,7 +187,8 @@ pub(crate) fn preview(core: &Core, env: &Env, doc: DocId, o: &Options) -> Result
         return lantern(core, env, doc, o);
     }
     let viewport = core.viewport(doc).map_err(refused)?;
-    let edges: Vec<u32> = std::iter::once(o.max_edge).chain([768, 512, 256].into_iter().filter(|&e| e < o.max_edge)).collect();
+    let asked = o.max_edge.unwrap_or(EDGE);
+    let edges: Vec<u32> = std::iter::once(asked).chain([768, 512, 256].into_iter().filter(|&e| e < asked)).collect();
     // Each edge's encodings, in order; `None` is PNG. Auto tries PNG at
     // the asked size only: a lossless picture isn't worth shrinking for.
     let qualities = || std::iter::once(o.quality).chain([70, 60].into_iter().filter(|&q| q < o.quality)).map(Some);
@@ -200,7 +204,7 @@ pub(crate) fn preview(core: &Core, env: &Env, doc: DocId, o: &Options) -> Result
     'search: for (i, &edge) in edges.iter().enumerate() {
         let drawn = core.render(doc, &view(&viewport, o.region, edge)).map_err(refused)?;
         if i == 0 {
-            on_disk = keep(&drawn, &env.preview_path(doc));
+            on_disk = keep(&drawn, &env.next_preview(doc));
         }
         let flat = flatten(&drawn, o.background);
         for q in tries(i == 0) {
@@ -274,12 +278,17 @@ fn lantern(core: &Core, env: &Env, doc: DocId, o: &Options) -> Result<(Picture, 
         }
         x += icon.width + GAP;
     }
-    let on_disk = keep(&strip, &env.preview_path(doc));
+    let on_disk = keep(&strip, &env.next_preview(doc));
     let bytes = lntrn_image::encode_png(&flatten(&strip, o.background));
     let misses = lantern_misses(document);
     let missing = if misses.is_empty() { String::new() } else { format!(" lntrn-svg doesn't draw what this drawing has of: {}.", misses.join(", ")) };
     let sizes = ICON_SIZES.map(|s| s.to_string()).join(", ");
-    let note = format!("Lantern preview of {doc}: as lntrn-svg (what Lantern's apps show icons with) draws it at {sizes} px, left to right, each enlarged pixel for pixel to about {SHOWN} px; {}.{missing} {on_disk}", background_note(o.background));
+    // The strip is the size its icons make it, whatever was asked for.
+    let fixed = if o.max_edge.is_some() { " max_edge doesn't apply to it: the strip is always that size." } else { "" };
+    let note = format!(
+        "Lantern preview of {doc}: as lntrn-svg (what Lantern's apps show icons with) draws it at {sizes} px, left to right, each enlarged pixel for pixel to about {SHOWN} px, a strip {width}×{height}; {}.{fixed}{missing} {on_disk}",
+        background_note(o.background)
+    );
     Ok((Picture::png(&bytes), note))
 }
 

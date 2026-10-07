@@ -1,8 +1,21 @@
 //! Where files go and come from.
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use ink_core::DocId;
+
+/// How many of a run's previews stay on disk: its newest.
+const KEPT_PREVIEWS: usize = 32;
+
+/// The previews a run has written.
+#[derive(Debug, Default)]
+struct Shots {
+    count: u64,
+    /// The ones still on disk, the oldest first.
+    kept: VecDeque<PathBuf>,
+}
 
 #[derive(Clone, Debug)]
 pub struct Env {
@@ -13,11 +26,12 @@ pub struct Env {
     pub base: Option<PathBuf>,
     /// Tells this process's files from another's (its pid).
     pub tag: String,
+    shots: Arc<Mutex<Shots>>,
 }
 
 impl Env {
     pub fn new(previews: PathBuf, base: Option<PathBuf>, tag: impl Into<String>) -> Env {
-        Env { previews, base, tag: tag.into() }
+        Env { previews, base, tag: tag.into(), shots: Arc::default() }
     }
 
     /// `~/.lantern/cache/lantern-ink/previews/`, `CLAUDE_PROJECT_DIR` (or
@@ -41,9 +55,20 @@ impl Env {
         }
     }
 
-    /// Where `doc`'s latest preview goes.
-    pub(crate) fn preview_path(&self, doc: DocId) -> PathBuf {
-        self.previews.join(format!("{}-{doc}.png", self.tag))
+    /// Where `doc`'s next preview goes. Each has a file of its own,
+    /// numbered through the run, so a second look doesn't replace the
+    /// first; past the newest [`KEPT_PREVIEWS`], the oldest is removed.
+    pub(crate) fn next_preview(&self, doc: DocId) -> PathBuf {
+        let mut shots = self.shots.lock().unwrap_or_else(PoisonError::into_inner);
+        shots.count += 1;
+        let path = self.previews.join(format!("{}-{doc}-{}.png", self.tag, shots.count));
+        shots.kept.push_back(path.clone());
+        while shots.kept.len() > KEPT_PREVIEWS {
+            if let Some(oldest) = shots.kept.pop_front() {
+                let _ = std::fs::remove_file(oldest);
+            }
+        }
+        path
     }
 }
 
@@ -60,6 +85,14 @@ mod tests {
             assert_eq!(env.resolve("~/a.svg"), Path::new(&home).join("a.svg"));
         }
         assert_eq!(Env::new("/c".into(), None, "1").resolve("a.svg"), PathBuf::from("a.svg"));
-        assert_eq!(env.preview_path(DocId(3)), PathBuf::from("/cache/previews/77-d3.png"));
+    }
+
+    #[test]
+    fn each_preview_has_a_file_of_its_own() {
+        let env = Env::new("/cache/previews".into(), None, "77");
+        assert_eq!(env.next_preview(DocId(3)), PathBuf::from("/cache/previews/77-d3-1.png"));
+        assert_eq!(env.next_preview(DocId(1)), PathBuf::from("/cache/previews/77-d1-2.png"));
+        // A copy counts on from the same run.
+        assert_eq!(env.clone().next_preview(DocId(3)), PathBuf::from("/cache/previews/77-d3-3.png"));
     }
 }

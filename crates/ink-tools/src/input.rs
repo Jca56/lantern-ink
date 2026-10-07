@@ -108,6 +108,7 @@ pub(crate) fn attr_value(name: &str, value: &Doc) -> Result<Option<String>, Tool
 /// The schema pieces every tool shares.
 pub(crate) mod common {
     use super::*;
+    use lntrn_data::Map;
     use lntrn_mcp::schema::Props;
 
     pub fn doc_id() -> Doc {
@@ -120,6 +121,25 @@ pub(crate) mod common {
 
     pub fn path(desc: &str) -> Doc {
         schema::string(&format!("{desc}. Absolute, \"~/…\", or relative to the project directory"))
+    }
+
+    /// An attribute's value: a string or a number, and with `or_null`
+    /// null too (take the attribute off).
+    pub fn value(desc: &str, or_null: bool) -> Doc {
+        let types: &[&str] = if or_null { &["string", "number", "null"] } else { &["string", "number"] };
+        let mut m = Map::new();
+        m.insert("type", Doc::List(types.iter().map(|&t| t.into()).collect()));
+        m.insert("description", desc.into());
+        Doc::Map(m)
+    }
+
+    /// An object of whatever another schema says: a batch step's
+    /// arguments, which are its tool's.
+    pub fn any_object(desc: &str) -> Doc {
+        let mut m = Map::new();
+        m.insert("type", "object".into());
+        m.insert("description", desc.into());
+        Doc::Map(m)
     }
 
     /// Where a new or moved node goes: at most one of these; on top of

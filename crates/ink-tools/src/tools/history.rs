@@ -71,7 +71,7 @@ fn batch_schema() -> Doc {
         &["tool"],
         vec![
             ("tool", schema::one_of(&EDITS, "The edit")),
-            ("args", schema::map(schema::string("An argument"), "The tool's arguments, without doc_id")),
+            ("args", common::any_object("The tool's arguments, without doc_id")),
             ("as", schema::pattern("^[A-Za-z0-9_-]+$", "Name the node this step adds, for later steps' \"@name\"")),
         ],
     );

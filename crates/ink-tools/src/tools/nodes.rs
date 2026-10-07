@@ -57,7 +57,7 @@ fn check_element(name: &str) -> Result<(), ToolError> {
 }
 
 fn add_schema() -> Doc {
-    let mut props = vec![("element", schema::string("The element's SVG name: rect, circle, ellipse, line, polyline, polygon, path, g, …")), ("attrs", schema::map(schema::string("Its value: a string or a number"), "Its attributes, by name, as the file will write them"))];
+    let mut props = vec![("element", schema::string("The element's SVG name: rect, circle, ellipse, line, polyline, polygon, path, g, …")), ("attrs", schema::map(common::value("Its value: a string or a number", false), "Its attributes, by name, as the file will write them"))];
     props.extend(common::placement());
     common::edit(&["element"], props)
 }
@@ -120,7 +120,7 @@ fn added(doc: &Document, applied: &Applied) -> Reply {
 }
 
 fn set_schema() -> Doc {
-    common::edit(&["node_id", "attrs"], vec![("node_id", common::node_id("The node")), ("attrs", schema::map(schema::string("Its new value: a string or a number; null takes the attribute off"), "The attributes to set, by name"))])
+    common::edit(&["node_id", "attrs"], vec![("node_id", common::node_id("The node")), ("attrs", schema::map(common::value("Its new value: a string or a number; null takes the attribute off", true), "The attributes to set, by name"))])
 }
 
 fn set(_: &Document, input: &In) -> Result<Command, ToolError> {

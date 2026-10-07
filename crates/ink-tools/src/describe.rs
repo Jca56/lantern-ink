@@ -51,27 +51,69 @@ pub(crate) fn undrawn(node: &Node) -> Option<&'static str> {
     }
 }
 
-/// One line about a node: its id, what it is, the paint it gives itself,
-/// and where it shows.
+/// A definition: something others refer to, which is what its
+/// attributes say and shows nowhere itself.
+fn is_definition(kind: Kind) -> bool {
+    matches!(kind, Kind::LinearGradient | Kind::RadialGradient | Kind::Stop | Kind::Filter | Kind::FilterPrimitive | Kind::ClipPath | Kind::Mask | Kind::Pattern | Kind::Marker | Kind::Symbol)
+}
+
+/// Whether what a node of this kind holds is listed in the file's
+/// order: definitions and steps, where later isn't "on top".
+fn in_file_order(kind: Kind) -> bool {
+    matches!(kind, Kind::Defs | Kind::LinearGradient | Kind::RadialGradient | Kind::Filter | Kind::FilterPrimitive)
+}
+
+/// The longest attribute value, and all of a node's attributes, that
+/// one line spells out.
+const MAX_VALUE: usize = 40;
+const MAX_ATTRS: usize = 160;
+
+/// A node's attributes as it writes them, its `id` aside (that's said
+/// already): ` offset="0" stop-color="#ffc800"`.
+fn attributes(node: &Node) -> String {
+    let mut out = String::new();
+    for attr in node.attrs.iter().filter(|a| a.name != "id") {
+        if out.len() > MAX_ATTRS {
+            out += " …";
+            break;
+        }
+        let value = match attr.value.char_indices().nth(MAX_VALUE) {
+            Some((cut, _)) => format!("{}…", &attr.value[..cut]),
+            None => attr.value.clone(),
+        };
+        out += &format!(" {}=\"{value}\"", attr.name);
+    }
+    out
+}
+
+/// One line about a node: its id, what it is, the paint it gives itself
+/// (or, for a definition, its attributes), and where it shows.
 fn node_line(node: &Node, bounds: Option<&Rect>) -> String {
     let mut line = format!("{} {}", node.id, node.name);
     if let Some(id) = node.attr("id") {
         line += &format!(" #{id}");
     }
-    if let Some(fill) = prop(node, "fill") {
-        line += &format!("  fill {fill}");
-    }
-    if let Some(stroke) = prop(node, "stroke") {
-        line += &format!("  stroke {stroke}");
-        if let Some(width) = prop(node, "stroke-width") {
-            line += &format!(" {width}");
+    if is_definition(node.kind) {
+        let attrs = attributes(node);
+        if !attrs.is_empty() {
+            line += &format!(" {attrs}");
         }
-    }
-    if let Some(opacity) = prop(node, "opacity") {
-        line += &format!("  opacity {opacity}");
-    }
-    if node.attr("transform").is_some() {
-        line += "  transformed";
+    } else {
+        if let Some(fill) = prop(node, "fill") {
+            line += &format!("  fill {fill}");
+        }
+        if let Some(stroke) = prop(node, "stroke") {
+            line += &format!("  stroke {stroke}");
+            if let Some(width) = prop(node, "stroke-width") {
+                line += &format!(" {width}");
+            }
+        }
+        if let Some(opacity) = prop(node, "opacity") {
+            line += &format!("  opacity {opacity}");
+        }
+        if node.attr("transform").is_some() {
+            line += "  transformed";
+        }
     }
     if let Some(b) = bounds {
         line += &format!("  at {}", rect(b));
@@ -110,7 +152,9 @@ struct Listing<'a> {
 
 impl Listing<'_> {
     /// The tree under `id`, front to back (what's later in the file, and
-    /// so on top, first), each level indented under its parent.
+    /// so on top, first), each level indented under its parent. What a
+    /// definition holds (a gradient's stops, a filter's steps) is in the
+    /// file's order: there, later isn't on top.
     fn tree(&mut self, id: NodeId, depth: usize) {
         let Some(node) = self.doc.get(id) else { return };
         if self.left == 0 {
@@ -120,7 +164,11 @@ impl Listing<'_> {
         self.left -= 1;
         self.lines.push(format!("{}{}", "  ".repeat(depth), node_line(node, self.bounds.get(&id))));
         self.data.push(node_data(node, depth, self.bounds.get(&id)));
-        for child in node.elements().rev() {
+        let mut children: Vec<NodeId> = node.elements().collect();
+        if !in_file_order(node.kind) {
+            children.reverse();
+        }
+        for child in children {
             self.tree(child, depth + 1);
         }
     }
@@ -175,7 +223,7 @@ pub(crate) fn info(core: &Core, id: DocId) -> Result<(String, Doc), ToolError> {
     if let Some(latest) = history.undoable().next_back() {
         text += &format!(" (latest: \"{}\" by {})", latest.label, actor(latest.actor));
     }
-    text += &format!(". Redo: {redo}.\nNodes, front to back (the first listed is on top; boxes are where each shows in the drawing's coordinates, strokes aside):\n{}", lines.join("\n"));
+    text += &format!(". Redo: {redo}.\nNodes, front to back (the first listed is on top; what a <defs>, a gradient or a filter holds is in the file's order; boxes are where each shows in the drawing's coordinates, strokes aside):\n{}", lines.join("\n"));
     if skipped > 0 {
         text += &format!("\n… and {skipped} more (doc_source shows the whole file, or one node's markup)");
     }

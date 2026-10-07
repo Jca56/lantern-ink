@@ -98,6 +98,9 @@ impl Document {
                 let mut place = *place;
                 for element in elements {
                     let id = self.insert(place, element.clone())?;
+                    // New markup takes the file's indentation all the
+                    // way down.
+                    self.lay_out(id)?;
                     applied.created.push(id);
                     place = Place::After(id);
                 }

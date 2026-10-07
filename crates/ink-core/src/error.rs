@@ -15,6 +15,9 @@ pub enum CoreError {
     Doc(DocError),
     /// A file couldn't be read or written: which, and why.
     File { path: PathBuf, why: String },
+    /// The file is another open document's: two on one file would
+    /// save over each other.
+    AlreadyOpen { path: PathBuf, doc: DocId },
     /// A document that has never been saved was saved without saying
     /// where.
     NoPath(DocId),
@@ -29,6 +32,7 @@ impl fmt::Display for CoreError {
             CoreError::NoSuchDoc(id) => write!(f, "no open document {id}"),
             CoreError::Doc(e) => write!(f, "{e}"),
             CoreError::File { path, why } => write!(f, "{}: {why}", path.display()),
+            CoreError::AlreadyOpen { path, doc } => write!(f, "{} is open as {doc}: a file has one drawing at a time", path.display()),
             CoreError::NoPath(id) => write!(f, "{id} has no file yet: say where to save it"),
             CoreError::Size(e) => write!(f, "{e}"),
             CoreError::NothingToUndo => f.write_str("there's nothing to undo"),

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::document::Document;
 use crate::error::{DocError, invalid};
 use crate::id::NodeId;
+use crate::layout::{indent_before, indentation};
 use crate::node::{Attr, Child, Node};
 use crate::xml::parse::MAX_DEPTH;
 
@@ -25,28 +26,6 @@ pub enum Place {
     Before(NodeId),
     /// Just after it: right on top of it.
     After(NodeId),
-}
-
-/// One step of indentation, where the file gives no other to copy.
-const UNIT: &str = "  ";
-
-/// The line break and indentation `text` ends with, when it ends at the
-/// start of a line: what puts the element after it on a line of its own.
-fn indentation(text: &str) -> Option<&str> {
-    let nl = text.rfind('\n')?;
-    if !text[nl + 1..].bytes().all(|b| b == b' ' || b == b'\t') {
-        return None;
-    }
-    Some(&text[if text[..nl].ends_with('\r') { nl - 1 } else { nl }..])
-}
-
-/// The indentation of the child at `idx`: what the text before it ends
-/// with.
-fn indent_before(children: &[Child], idx: usize) -> Option<String> {
-    match idx.checked_sub(1).and_then(|i| children.get(i)) {
-        Some(Child::Text(text)) => indentation(text).map(str::to_owned),
-        _ => None,
-    }
 }
 
 /// Join texts left side by side, and drop empty ones.
@@ -178,14 +157,6 @@ impl Document {
                 None => invalid("nothing can go beside the root <svg>, only in it"),
             },
         }
-    }
-
-    /// One step of indentation, as this file takes them: what `parent`'s
-    /// own indentation (`own`, without its line break) divides into by
-    /// its depth.
-    fn unit(&self, parent: NodeId, own: &str) -> String {
-        let levels = self.depth(parent) - 1;
-        if levels > 0 && !own.is_empty() && own.len().is_multiple_of(levels) { own[..own.len() / levels].to_owned() } else { UNIT.to_owned() }
     }
 
     /// Link `id` (in the document, in no parent's children) in at

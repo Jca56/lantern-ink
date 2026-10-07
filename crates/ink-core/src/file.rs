@@ -15,6 +15,20 @@ fn failed(path: &Path, why: impl ToString) -> CoreError {
     CoreError::File { path: path.to_owned(), why: why.to_string() }
 }
 
+/// The one name the file at `path` has, however the path is spelled:
+/// links followed, `.` and `..` taken out. A file that isn't there yet
+/// is named through its folder.
+pub(crate) fn canonical(path: &Path) -> PathBuf {
+    if let Ok(real) = fs::canonicalize(path) {
+        return real;
+    }
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    match (fs::canonicalize(dir), path.file_name()) {
+        (Ok(dir), Some(name)) => dir.join(name),
+        _ => path.to_owned(),
+    }
+}
+
 /// The text of the file at `path`.
 pub(crate) fn read(path: &Path) -> Result<String, CoreError> {
     let size = fs::metadata(path).map_err(|e| failed(path, e))?.len();

@@ -30,6 +30,7 @@ pub mod geometry;
 pub mod gradient;
 mod id;
 mod kind;
+mod layout;
 pub mod length;
 mod node;
 pub mod refs;

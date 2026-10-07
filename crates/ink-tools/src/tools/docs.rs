@@ -20,12 +20,12 @@ fn direct(name: &'static str, title: &'static str, description: &'static str, sc
 pub(super) fn tools() -> Vec<Entry> {
     vec![
         direct("doc_new", "New drawing", "Make an empty drawing: an SVG whose page and viewBox are width × height (default 24 × 24, an icon's grid). It lives in this server until doc_save gives it a file. Returns its doc_id and its root node's id.", new_schema, Kind::Add, new),
-        direct("doc_open", "Open drawing", "Open an .svg file. Anything in it Ink doesn't understand is kept and written back as it was; another editor's private marks (Boxy SVG's) are taken out, and the file itself changes only when you doc_save. Returns the doc_id; doc_info lists its nodes.", open_schema, Kind::Add, open),
+        direct("doc_open", "Open drawing", "Open an .svg file. Anything in it Ink doesn't understand is kept and written back as it was; another editor's private marks (Boxy SVG's) are taken out, and the file itself changes only when you doc_save. A file has one drawing at a time: one that's open already is answered with the drawing it is. Returns the doc_id; doc_info lists its nodes.", open_schema, Kind::Add, open),
         direct("doc_list", "List drawings", "The drawings open in this server: id, file, page, how many nodes, and whether they have unsaved changes.", list_schema, Kind::Read, list),
         direct(
             "doc_info",
             "Describe drawing",
-            "A drawing's page, file and undo/redo, and its nodes front to back (the first listed is on top), children indented under their parent: each node's id, element, the paint it gives itself, and the box where it shows in the drawing's coordinates.",
+            "A drawing's page, file and undo/redo, and its nodes front to back (the first listed is on top), children indented under their parent: each node's id, element, the paint it gives itself, and the box where it shows in the drawing's coordinates. Definitions (what a <defs>, a gradient or a filter holds) are in the file's order, each with its attributes.",
             id_schema,
             Kind::Read,
             info,
@@ -41,12 +41,12 @@ pub(super) fn tools() -> Vec<Entry> {
         direct(
             "doc_preview",
             "Look at drawing",
-            "Look at a drawing: a picture of its page (or of `region`, a part of it in the drawing's coordinates) with its longer side max_edge px. A vector is sharp at any size, so ask small for a glance and large for detail. renderer \"lantern\" shows it as Lantern's apps will: drawn by lntrn-svg at 16, 24, 32, 48 and 64 px, each enlarged pixel for pixel. Ask at milestones rather than after every call.",
+            "Look at a drawing: a picture of its page (or of `region`, a part of it in the drawing's coordinates) with its longer side max_edge px. A vector is sharp at any size, so ask small for a glance and large for detail. renderer \"lantern\" shows it as Lantern's apps will: drawn by lntrn-svg at 16, 24, 32, 48 and 64 px, each enlarged pixel for pixel, in a strip of its own size (max_edge and region don't apply). Every look is also written to disk, to a file of its own. Ask at milestones rather than after every call.",
             preview_schema,
             Kind::Read,
             look,
         ),
-        direct("doc_save", "Save drawing", "Save a drawing as an .svg file: to `path`, or to its own file again. Replacing a file that isn't its own needs overwrite: true. The save is atomic: a crash never leaves half a file.", save_schema, Kind::Set, save),
+        direct("doc_save", "Save drawing", "Save a drawing as an .svg file: to `path`, or to its own file again. Replacing a file that isn't its own needs overwrite: true, and another open drawing's file can't be taken. The save is atomic: a crash never leaves half a file.", save_schema, Kind::Set, save),
         direct(
             "doc_export",
             "Export picture",
@@ -83,6 +83,18 @@ fn open_schema() -> Doc {
 
 fn open(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
     let path = input.env.resolve(input.args.str("path")?);
+    // A file has one drawing at a time: two would save over each other.
+    if let Some(id) = ctx.core.doc_at(&path) {
+        let doc = ctx.core.doc(id).map_err(refused)?;
+        let unsaved = if ctx.core.is_modified(id).map_err(refused)? { ", with changes that aren't saved" } else { "" };
+        let text = format!("{} is already open as {id}{unsaved}: work on that one (page {}, {} nodes, root {}). To read the file afresh, doc_close {id} first.", path.display(), describe::page(doc), doc.len(), doc.root());
+        let mut m = Map::new();
+        m.insert("doc_id", id.to_string().into());
+        m.insert("root", doc.root().to_string().into());
+        m.insert("node_count", Doc::Int(doc.len() as i64));
+        m.insert("already_open", true.into());
+        return Ok(Reply::text(text).data(Doc::Map(m)));
+    }
     let opened = ctx.core.open_file(&path).map_err(refused)?;
     let doc = ctx.core.doc(opened.doc).map_err(refused)?;
     let mut text = format!("Opened {} as {}: page {}, {} nodes. Its root is {}; doc_info lists the rest.", path.display(), opened.doc, describe::page(doc), doc.len(), doc.root());
@@ -150,7 +162,7 @@ fn preview_schema() -> Doc {
         &["doc_id"],
         vec![
             ("doc_id", common::doc_id()),
-            ("max_edge", schema::integer(16, MAX_EDGE as i64, "The picture's longer side in px (default 512)")),
+            ("max_edge", schema::integer(16, MAX_EDGE as i64, "The picture's longer side in px (default 512; the lantern strip has its own size)")),
             ("region", region),
             ("background", schema::one_of(&["checker", "white", "black", "none"], "Under transparent areas (default checker; none needs png)")),
             ("renderer", schema::one_of(&["ink", "lantern"], "ink (default): Ink's own renderer. lantern: as lntrn-svg draws it at icon sizes")),
@@ -179,6 +191,9 @@ fn save(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
     };
     if !path.extension().is_some_and(|x| x.eq_ignore_ascii_case("svg")) {
         return fail(format!("{} isn't an .svg name: doc_save writes the SVG itself (doc_export writes a png, jpeg or webp picture of it)", path.display()));
+    }
+    if let Some(other) = ctx.core.doc_at(&path).filter(|&other| other != id) {
+        return fail(format!("{} is {other}'s file, and {other} is open: save {id} under another name, or doc_close {other} first", path.display()));
     }
     if own.as_deref() != Some(path.as_path()) && path.exists() && input.args.opt_bool("overwrite")? != Some(true) {
         return fail(format!("{} is already there: pass overwrite: true to replace it", path.display()));

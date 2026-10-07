@@ -124,6 +124,32 @@ fn a_new_drawing_has_no_file_until_it_is_given_one() {
 }
 
 #[test]
+fn a_file_has_one_drawing_at_a_time() {
+    let dir = scratch("one-a-file");
+    let mut core = Core::headless();
+    let first = core.new_doc(24.0, 24.0);
+    let path = dir.join("a.svg");
+    core.save(first, Some(&path)).unwrap();
+    // By whatever name the path gives it.
+    let spelled = dir.join("sub/../a.svg");
+    std::fs::create_dir(dir.join("sub")).unwrap();
+    assert_eq!((core.doc_at(&path), core.doc_at(&spelled), core.doc_at(&dir.join("b.svg"))), (Some(first), Some(first), None));
+    assert_eq!(core.open_file(&spelled), Err(CoreError::AlreadyOpen { path: spelled.clone(), doc: first }));
+    assert_eq!(core.docs().count(), 1, "nothing was opened");
+    // Nor can another drawing be saved over it, though it can over itself.
+    let second = core.new_doc(8.0, 8.0);
+    assert_eq!(core.save(second, Some(&spelled)), Err(CoreError::AlreadyOpen { path: spelled.clone(), doc: first }));
+    assert_eq!(core.path(second), Ok(None));
+    assert_eq!(core.save(first, Some(&spelled)), Ok(spelled.clone()));
+    assert_eq!(core.save(DocId(9), Some(&path)), Err(CoreError::NoSuchDoc(DocId(9))));
+    // Closed, its file is anyone's.
+    core.close(first).unwrap();
+    assert_eq!(core.doc_at(&path), None);
+    assert_eq!(core.save(second, Some(&path)), Ok(path.clone()));
+    assert_eq!(core.open_file(&path).unwrap_err().to_string(), format!("{} is open as d2: a file has one drawing at a time", path.display()));
+}
+
+#[test]
 fn what_cannot_be_done_says_why_and_leaves_no_step() {
     let dir = scratch("refused");
     let mut core = Core::headless();

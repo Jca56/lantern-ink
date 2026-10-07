@@ -75,25 +75,27 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
      both renderers, saved it and exported it (Alva's copy:
      `~/Pictures/lantern.svg`). Opened again, edited, undone and saved,
      it gave the same bytes; the refused calls each named their fix.
-  - **Found by the done-test** (none blocking, none fixed yet):
-    - `batch`'s schema says every value in a step's `args` is a string,
-      but the server takes `attrs` objects, `node_ids` arrays and bare
-      numbers there: a stricter client would refuse or stringify them.
-    - `doc_open` on a file that is already open makes a second document
-      on it without a word; either can save over the other.
-    - `max_edge` does nothing with `renderer: "lantern"` (the strip was
-      672 × 152 asked for 1000 or left at the default), and the reply
-      doesn't say so.
-    - Every preview of a document goes to the same file
-      (`249994-d1.png` that session), so each one replaces the last on
-      disk.
-    - A new drawing declares `xmlns:ink="urn:lantern:ink"` with nothing
-      in it using the namespace.
-    - `node_add_svg` indents the elements it is given but leaves what
-      is nested in them as written: a `<defs>` of gradients is one long
-      line.
-    - `doc_info` lists a gradient's stops last first and without their
-      attributes, so telling them apart takes `doc_source`.
+  - **The done-test's seven findings were dealt with 2026-10-06** (six
+    fixed, one kept on purpose). The rules they left behind:
+    - A schema says what the server takes: an attribute's value is a
+      string or a number (null too in `node_set`), a batch step's `args`
+      a plain object (`input::common::value`, `any_object`).
+    - A file has one drawing at a time (`Core::doc_at`,
+      `CoreError::AlreadyOpen`): `doc_open` answers with the drawing
+      that's open already, and `doc_save` won't take another open
+      drawing's file.
+    - The lantern strip is its own size: the reply gives it, and says so
+      when `max_edge` was asked for.
+    - Each preview has a numbered file of its own, and a run keeps its
+      newest 32 (`Env::next_preview`).
+    - Markup put in is laid out like the file all the way down
+      (`ink-doc/src/layout.rs`), but never among words (`<text>`,
+      `<title>`, `<style>`) or in what isn't SVG's.
+    - `doc_info` lists what a `<defs>`, a gradient or a filter holds in
+      the file's order, each definition with its attributes.
+    - Kept on purpose: a new drawing declares `xmlns:ink` before
+      anything uses it (ARCHITECTURE §3.3: a drawing Ink made carries
+      it).
   - `doc_preview` with `renderer: "lantern"` draws the drawing with
     `lntrn-svg` itself at 16, 24, 32, 48 and 64 px, each enlarged pixel
     for pixel (ARCHITECTURE §5.4).

@@ -81,6 +81,12 @@ fn the_tool_list_is_fixed_and_fits_claude_codes_limits() {
         assert_eq!(t.path("inputSchema.type").and_then(Doc::as_str), Some("object"), "{name}");
         assert_eq!(t.path("inputSchema.additionalProperties").and_then(Doc::as_bool), Some(false), "{name}");
     }
+    // A schema says what the server takes: an attribute is a string or
+    // a number, and a batch step's arguments are whatever its tool's are.
+    let schema = |tool: &str, path: &str| tools.iter().find(|t| t.get("name").and_then(Doc::as_str) == Some(tool)).and_then(|t| t.path(path)).map(json::write);
+    assert_eq!(schema("node_add", "inputSchema.properties.attrs.additionalProperties.type").as_deref(), Some(r#"["string","number"]"#));
+    assert_eq!(schema("node_set", "inputSchema.properties.attrs.additionalProperties.type").as_deref(), Some(r#"["string","number","null"]"#));
+    assert_eq!(schema("batch", "inputSchema.properties.steps.items.properties.args").as_deref(), Some(r#"{"type":"object","description":"The tool's arguments, without doc_id"}"#));
     assert!(INSTRUCTIONS.len() <= MAX_INSTRUCTIONS, "{} characters of instructions", INSTRUCTIONS.len());
     let hello = json::parse(&s.handle_line(r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}"#)[0]).unwrap();
     assert_eq!(hello.path("result.serverInfo.name").and_then(Doc::as_str), Some("lantern-ink"));
@@ -109,7 +115,7 @@ fn a_drawing_is_made_looked_at_and_saved() {
     let source = ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#);
     assert_eq!(
         text(&source),
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:ink=\"urn:lantern:ink\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\">\n  <circle cx=\"12\" cy=\"12\" r=\"9.5\" fill=\"#ffc800\"/>\n  <g id='face' fill='none' stroke='#12100e' stroke-width=\"1.5\" opacity=\"0.9\">\n  <path d='M8 14 Q12 18 16 14'/>\n  <line x1='9' y1='9' x2='9' y2='10'/>\n</g>\n</svg>\n"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:ink=\"urn:lantern:ink\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\">\n  <circle cx=\"12\" cy=\"12\" r=\"9.5\" fill=\"#ffc800\"/>\n  <g id='face' fill='none' stroke='#12100e' stroke-width=\"1.5\" opacity=\"0.9\">\n    <path d='M8 14 Q12 18 16 14'/>\n    <line x1='9' y1='9' x2='9' y2='10'/>\n  </g>\n</svg>\n"
     );
     assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N5"}"#)), "<line x1='9' y1='9' x2='9' y2='10'/>");
     assert!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","max_chars":200}"#)).contains("… cut at 200 of"));
@@ -129,16 +135,21 @@ fn a_drawing_is_made_looked_at_and_saved() {
     assert_eq!(image.pixel(48, 20), [255, 200, 0, 255], "the disc");
     assert_eq!(image.pixel(1, 1), [255, 255, 255, 255], "the checkerboard shows where nothing is drawn");
     assert!(text(&seen).starts_with("Preview: all of d1 (page 24 × 24) → 96×96 PNG"), "{}", text(&seen));
-    assert!(dir.join("previews/test-d1.png").exists(), "and on disk, to open at its own size");
+    assert!(text(&seen).ends_with(&format!("On disk: {}", dir.join("previews/test-d1-1.png").display())), "{}", text(&seen));
     // A part of it, on black, as a JPEG.
     let part = ok(&mut s, "doc_preview", r#"{"doc_id":"d1","max_edge":64,"region":{"x":0,"y":0,"width":12,"height":6},"background":"black","format":"jpeg"}"#);
     let (mime, image) = picture(&part);
     assert_eq!((mime.as_str(), image.width, image.height), ("image/jpeg", 64, 32));
+    assert!(dir.join("previews/test-d1-1.png").exists() && dir.join("previews/test-d1-2.png").exists(), "each look has a file of its own");
     // As Lantern's apps will draw it: five sizes, side by side.
     let lantern = ok(&mut s, "doc_preview", r#"{"doc_id":"d1","renderer":"lantern"}"#);
     let (_, strip) = picture(&lantern);
     assert_eq!((strip.width, strip.height), (128 + 120 + 128 + 96 + 128 + 6 * 12, 152));
-    assert!(text(&lantern).starts_with("Lantern preview of d1: as lntrn-svg"), "{}", text(&lantern));
+    assert!(text(&lantern).starts_with("Lantern preview of d1: as lntrn-svg") && text(&lantern).contains("a strip 672×152; "), "{}", text(&lantern));
+    assert!(!text(&lantern).contains("max_edge"));
+    let sized = ok(&mut s, "doc_preview", r#"{"doc_id":"d1","renderer":"lantern","max_edge":1000}"#);
+    assert_eq!(picture(&sized).1.width, 672);
+    assert!(text(&sized).contains("a strip 672×152; transparency as a checkerboard. max_edge doesn't apply to it: the strip is always that size."), "{}", text(&sized));
 
     // Saved: the file is the markup. Then nothing is unsaved.
     assert_eq!(refused(&mut s, "doc_save", r#"{"doc_id":"d1"}"#), "d1 has no file yet: give doc_save a path ending in .svg");
@@ -148,9 +159,14 @@ fn a_drawing_is_made_looked_at_and_saved() {
     assert_eq!(std::fs::read_to_string(dir.join("smile.svg")).unwrap(), text(&source));
     assert!(text(&ok(&mut s, "doc_list", "{}")).ends_with("5 nodes, saved"), "{}", text(&ok(&mut s, "doc_list", "{}")));
     ok(&mut s, "doc_save", r#"{"doc_id":"d1"}"#);
-    // Another drawing can't take its file without saying so.
+    // Another drawing can't take its file while it's open, and takes any
+    // other file only when told to.
     ok(&mut s, "doc_new", r#"{"width":16}"#);
-    assert!(refused(&mut s, "doc_save", r#"{"doc_id":"d2","path":"smile.svg"}"#).ends_with("is already there: pass overwrite: true to replace it"));
+    for args in [r#"{"doc_id":"d2","path":"smile.svg"}"#, r#"{"doc_id":"d2","path":"./smile.svg","overwrite":true}"#] {
+        assert!(refused(&mut s, "doc_save", args).ends_with("smile.svg is d1's file, and d1 is open: save d2 under another name, or doc_close d1 first"));
+    }
+    std::fs::write(dir.join("other.svg"), "<svg/>").unwrap();
+    assert!(refused(&mut s, "doc_save", r#"{"doc_id":"d2","path":"other.svg"}"#).ends_with("is already there: pass overwrite: true to replace it"));
 
     // Pictures of it.
     let png = ok(&mut s, "doc_export", r#"{"doc_id":"d1","path":"smile.png","size":48}"#);
@@ -283,4 +299,70 @@ fn a_file_from_boxy_is_taken_over_and_saved_as_inks() {
     ok(&mut s, "node_set", r#"{"doc_id":"d1","node_id":"N5","attrs":{"stroke-width":2}}"#);
     ok(&mut s, "doc_save", r#"{"doc_id":"d1"}"#);
     assert_eq!(std::fs::read_to_string(dir.join("line.svg")).unwrap(), "<svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:ink=\"urn:lantern:ink\">\n  <path d=\"M4 12h16\" stroke=\"#e8dcc8\" stroke-width=\"2\"/>\n</svg>\n");
+}
+
+#[test]
+fn a_file_has_one_drawing_at_a_time() {
+    let (mut s, dir) = server("one-a-file");
+    std::fs::write(dir.join("dot.svg"), "<svg viewBox=\"0 0 8 8\">\n  <circle cx=\"4\" cy=\"4\" r=\"2\"/>\n</svg>\n").unwrap();
+    assert_eq!(data(&ok(&mut s, "doc_open", r#"{"path":"dot.svg"}"#), "doc_id"), "d1");
+    // Opened again, by whatever name: the drawing it already is.
+    let again = ok(&mut s, "doc_open", r#"{"path":"./dot.svg"}"#);
+    assert_eq!((data(&again, "doc_id"), again.path("structuredContent.already_open").and_then(Doc::as_bool)), ("d1", Some(true)));
+    assert!(text(&again).ends_with("dot.svg is already open as d1: work on that one (page 8 × 8, viewBox 0 0 8 8, 2 nodes, root N1). To read the file afresh, doc_close d1 first."), "{}", text(&again));
+    ok(&mut s, "node_set", r#"{"doc_id":"d1","node_id":"N2","attrs":{"r":3}}"#);
+    assert!(text(&ok(&mut s, "doc_open", r#"{"path":"dot.svg"}"#)).contains("already open as d1, with changes that aren't saved: work on that one"));
+    assert_eq!(text(&ok(&mut s, "doc_list", "{}")).lines().count(), 1, "one drawing, however often it was asked for");
+    // Closed, the file opens afresh.
+    ok(&mut s, "doc_close", r#"{"doc_id":"d1","discard":true}"#);
+    assert_eq!(data(&ok(&mut s, "doc_open", r#"{"path":"dot.svg"}"#), "doc_id"), "d2");
+}
+
+#[test]
+fn definitions_are_laid_out_and_listed_as_they_are_written() {
+    let (mut s, _) = server("definitions");
+    ok(&mut s, "doc_new", r#"{"width":4}"#);
+    // Markup all on one line takes the file's lines, however deep.
+    let markup = r##"<defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#fff\"/><stop offset=\"1\" stop-color=\"#000\"/></linearGradient><filter id=\"f\"><feDropShadow dx=\"0\" dy=\"1\" stdDeviation=\"1\"/></filter></defs><rect width=\"4\" height=\"4\" fill=\"url(#g)\"/>"##;
+    ok(&mut s, "node_add_svg", &format!(r#"{{"doc_id":"d1","svg":"{markup}"}}"#));
+    assert_eq!(
+        text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N2"}"#)),
+        "<defs>\n    <linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n      <stop offset=\"0\" stop-color=\"#fff\"/>\n      <stop offset=\"1\" stop-color=\"#000\"/>\n    </linearGradient>\n    <filter id=\"f\">\n      <feDropShadow dx=\"0\" dy=\"1\" stdDeviation=\"1\"/>\n    </filter>\n  </defs>"
+    );
+    // What's drawn is listed front to back; a gradient's stops and a
+    // filter's steps in their own order, with what they say.
+    let info = ok(&mut s, "doc_info", r#"{"doc_id":"d1"}"#);
+    let lines: Vec<&str> = text(&info).lines().collect();
+    assert!(lines[2].starts_with("Nodes, front to back (the first listed is on top; what a <defs>, a gradient or a filter holds is in the file's order;"), "{}", lines[2]);
+    assert_eq!(
+        &lines[3..],
+        [
+            "N1 svg  at 0,0 4×4",
+            "  N8 rect  fill url(#g)  at 0,0 4×4",
+            "  N2 defs",
+            "    N3 linearGradient #g  x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"",
+            "      N4 stop  offset=\"0\" stop-color=\"#fff\"",
+            "      N5 stop  offset=\"1\" stop-color=\"#000\"",
+            "    N6 filter #f",
+            "      N7 feDropShadow  dx=\"0\" dy=\"1\" stdDeviation=\"1\"",
+        ]
+    );
+    // A long value is cut, and a long list of them.
+    let long = "M0 0".to_owned() + &" L1 1".repeat(20);
+    ok(&mut s, "node_add", &format!(r#"{{"doc_id":"d1","element":"clipPath","attrs":{{"id":"c","a":"{long}","b":"{long}","c":"{long}","d":"{long}","e":"{long}"}},"into":"N2"}}"#));
+    let cut = format!("{}…", &long[..40]);
+    let info = ok(&mut s, "doc_info", r#"{"doc_id":"d1"}"#);
+    assert!(text(&info).ends_with(&format!("\n    N9 clipPath #c  a=\"{cut}\" b=\"{cut}\" c=\"{cut}\" d=\"{cut}\" …")), "{}", text(&info));
+}
+
+#[test]
+fn the_newest_looks_stay_on_disk() {
+    let (mut s, dir) = server("looks");
+    ok(&mut s, "doc_new", "{}");
+    for _ in 0..34 {
+        ok(&mut s, "doc_preview", r#"{"doc_id":"d1","max_edge":16}"#);
+    }
+    let kept = |n: u32| dir.join(format!("previews/test-d1-{n}.png")).exists();
+    assert!(!kept(1) && !kept(2) && kept(3) && kept(34), "the oldest of more than 32 go");
+    assert_eq!(std::fs::read_dir(dir.join("previews")).unwrap().count(), 32);
 }
