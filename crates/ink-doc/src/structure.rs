@@ -129,6 +129,40 @@ impl Document {
         self.insert(Place::After(id), copy)
     }
 
+    /// Put `elements` into the drawing's `<defs>`, after what's there:
+    /// the first `<defs>` directly in the root, or a new one made as the
+    /// root's first child. Each must have an `id` (what it's used by)
+    /// that nothing else has. Returns them.
+    pub(crate) fn define(&mut self, elements: &[Element]) -> Result<Vec<NodeId>, DocError> {
+        if elements.is_empty() {
+            return invalid("there's nothing to define");
+        }
+        let mut taken: HashSet<String> = self.nodes.values().filter_map(|n| n.attr("id").map(str::to_owned)).collect();
+        for element in elements {
+            match element.attr("id").map(str::trim) {
+                None | Some("") => return invalid(format!("a <{}> put in <defs> needs an id for others to use it by", element.name)),
+                Some(id) if !taken.insert(id.to_owned()) => return invalid(format!("something is called \"{id}\" already: an id is one thing's name")),
+                Some(_) => {}
+            }
+        }
+        let root = self.root;
+        let there = self.node(root)?.elements().find(|&c| self.get(c).is_some_and(|n| n.kind == Kind::Defs));
+        let defs = match there {
+            Some(defs) => defs,
+            None => {
+                let name = prefix(&self.node(root)?.name).map_or("defs".to_owned(), |p| format!("{p}:defs"));
+                self.insert(Place::FirstIn(root), Element::new(name))?
+            }
+        };
+        let mut made = Vec::with_capacity(elements.len());
+        for element in elements {
+            let id = self.insert(Place::LastIn(defs), element.clone())?;
+            self.lay_out(id)?;
+            made.push(id);
+        }
+        Ok(made)
+    }
+
     /// Put `nodes` (which share a parent) into a new group, where the
     /// topmost of them was, in the order they were in. Returns the group.
     pub(crate) fn group(&mut self, nodes: &[NodeId]) -> Result<NodeId, DocError> {

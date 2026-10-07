@@ -10,16 +10,22 @@
 //!   `transform` whole.
 //! - **How it looks goes with it.** Its stroke grows with it, so only
 //!   an even scale can go into the numbers of a stroked shape. A
+//!   gradient laid out in its own coordinates goes with it, when it's
+//!   the shape's alone (into the gradient's own numbers, or its
+//!   `gradientTransform`); one that other shapes use is never touched,
+//!   so its shape keeps everything in `transform`. A
 //!   gradient across its box doesn't turn with baked numbers, so a turn
 //!   or a mirror stays in `transform` (so does one of a dashed rect,
 //!   circle or ellipse, whose dashes start where its kind says). A clip
 //!   path, a mask, markers and
-//!   a gradient or filter laid out in its own coordinates would be left
+//!   a filter laid out in its own coordinates would be left
 //!   behind, so then everything stays in `transform`; a shadow would
 //!   not turn or grow, so a filtered node takes only a move.
 //! - **A group passes it down** to what's in it when everything there
 //!   can take it without being left a transform it didn't have, and
 //!   keeps it as its own `transform` otherwise.
+
+use std::collections::HashMap;
 
 use ink_geom::{Affine, Vec2};
 
@@ -29,7 +35,8 @@ use crate::gradient::{Gradient, Units};
 use crate::id::NodeId;
 use crate::kind::Kind;
 use crate::node::Node;
-use crate::refs::Ids;
+use crate::length::number;
+use crate::refs::{self, Ids};
 use crate::shape::Geometry;
 use crate::style::{Paint, Style, prop, url_id};
 use crate::transform;
@@ -63,6 +70,9 @@ struct Limits {
     level: bool,
     /// An even scale only, its stroke growing by as much.
     stroke: Option<Outline>,
+    /// Gradients laid out in its own coordinates that nothing else
+    /// uses: they go wherever its numbers go.
+    own: Vec<NodeId>,
 }
 
 impl Limits {
@@ -111,13 +121,75 @@ pub(crate) struct Settle<'a> {
     /// The size percentages are of.
     view: Vec2,
     p: Precision,
+    /// Which nodes name each id.
+    users: HashMap<String, Vec<NodeId>>,
     pub edits: Vec<Edit>,
 }
 
 impl<'a> Settle<'a> {
     pub fn new(doc: &'a Document) -> Settle<'a> {
         let view = doc.get(doc.root()).map_or(Vec2::ZERO, |root| Viewport::of(root).view);
-        Settle { doc, ids: Ids::of(doc), view, p: Precision::of(doc), edits: Vec::new() }
+        Settle { doc, ids: Ids::of(doc), view, p: Precision::of(doc), users: refs::users(doc), edits: Vec::new() }
+    }
+
+    /// Whether the gradient `server` is `node`'s alone, to take along:
+    /// nothing else names it, and it takes nothing from another.
+    fn is_own(&self, server: &Node, node: &Node) -> bool {
+        let users = server.attr("id").and_then(|id| self.users.get(id));
+        users.is_some_and(|users| users.as_slice() == [node.id]) && refs::href(server).is_none()
+    }
+
+    /// The edits that put the gradient `server` (in its user's own
+    /// coordinates) through `b` along with its user. Into its own
+    /// numbers when they're plain ones and all it's been through is a
+    /// move, an even scale, a turn or a mirror (only then do its colours
+    /// stay square to its line); as its `gradientTransform` otherwise.
+    fn carry(&mut self, server: &Node, b: &Affine) {
+        let radial = server.kind == Kind::RadialGradient;
+        let said = server.attr("gradientTransform").map(transform::parse);
+        let through = said.unwrap_or(Affine::IDENTITY).then(b);
+        let num = |name: &str| server.attr(name).and_then(number);
+        // Its line or circle, when every number of it is said, and
+        // plainly: `None` otherwise.
+        let points: Option<Vec<(&'static str, &'static str, Vec2)>> = if radial {
+            let centre = num("cx").zip(num("cy")).map(|(x, y)| ("cx", "cy", Vec2::new(x, y)));
+            let focus = match (server.attr("fx"), server.attr("fy")) {
+                (None, None) => Some(None),
+                _ => num("fx").zip(num("fy")).map(|(x, y)| Some(("fx", "fy", Vec2::new(x, y)))),
+            };
+            centre.zip(focus).filter(|_| num("r").is_some()).map(|(c, f)| std::iter::once(c).chain(f).collect())
+        } else {
+            let from = num("x1").zip(num("y1")).map(|(x, y)| ("x1", "y1", Vec2::new(x, y)));
+            let to = num("x2").zip(num("y2")).map(|(x, y)| ("x2", "y2", Vec2::new(x, y)));
+            from.zip(to).map(|(a, b)| vec![a, b])
+        };
+        let reach = points.iter().flatten().map(|(_, _, at)| at.abs().max_element()).fold(0.0, f64::max);
+        let p = self.p.reaching(reach);
+        let even = through.axes().filter(|axes| axes.is_uniform(reach.max(1.0), p.within()) && p.same(&axes.linear(), &through.without_move()));
+        let mut set = |name: &'static str, value: Option<String>| self.edits.push(Edit::Attr { node: server.id, name, value });
+        let (Some(points), Some(axes)) = (points, even) else {
+            if said.is_none_or(|said| !p.same(&said, &through)) {
+                set("gradientTransform", p.transform(&through));
+            }
+            return;
+        };
+        // A number that comes out as it was written stays as written.
+        let mut number_to = |name: &'static str, v: f64| {
+            if server.attr(name).and_then(number).is_none_or(|was| p.number(was) != p.number(v)) {
+                set(name, Some(p.number(v)));
+            }
+        };
+        for (x, y, at) in points {
+            let at = through.apply(at);
+            number_to(x, at.x);
+            number_to(y, at.y);
+        }
+        if let Some(r) = num("r").filter(|_| radial) {
+            number_to("r", r * axes.sx);
+        }
+        if said.is_some() {
+            set("gradientTransform", None);
+        }
     }
 
     /// What `node` inherits: what its ancestors say, from the root down.
@@ -158,11 +230,19 @@ impl<'a> Settle<'a> {
     /// drawn as `style` says.
     fn limits(&self, node: &Node, geometry: &Geometry, style: &Style) -> Limits {
         let stroked = style.stroke != Paint::None && style.line.width > 0.0;
-        let mut limits = Limits { held: self.is_clipped(node) || self.has_markers(node), move_only: false, level: false, stroke: None };
+        let mut limits = Limits { held: self.is_clipped(node) || self.has_markers(node), move_only: false, level: false, stroke: None, own: Vec::new() };
         for paint in [Some(&style.fill), stroked.then_some(&style.stroke)].into_iter().flatten() {
             let Paint::Server { id, .. } = paint else { continue };
             match self.ids.get(id).and_then(|id| self.doc.get(id)) {
                 Some(server) if matches!(server.kind, Kind::LinearGradient | Kind::RadialGradient) => match Gradient::of(self.doc, &self.ids, server).map(|g| g.units) {
+                    // In the node's own coordinates: it goes along if
+                    // it's this node's alone. One that other shapes use
+                    // is never touched, and holds the node where it is.
+                    Some(Units::UserSpace) if self.is_own(server, node) => {
+                        if !limits.own.contains(&server.id) {
+                            limits.own.push(server.id);
+                        }
+                    }
                     Some(Units::UserSpace) => limits.held = true,
                     _ => limits.level = true,
                 },
@@ -194,6 +274,11 @@ impl<'a> Settle<'a> {
         let baked = geometry.through(b, p)?.rounded(p);
         for (name, value) in baked.write(node, p) {
             self.edits.push(Edit::Attr { node: node.id, name, value });
+        }
+        if !p.same(b, &Affine::IDENTITY) {
+            for server in limits.own.iter().filter_map(|id| self.doc.get(*id)) {
+                self.carry(server, b);
+            }
         }
         if let Some(stroke) = limits.stroke.as_ref().filter(|_| (grow - 1.0).abs() > 1e-9) {
             let mut set = |name, value: String| self.edits.push(Edit::Prop { node: node.id, name, value: Some(value) });

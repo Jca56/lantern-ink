@@ -116,6 +116,54 @@ fn what_a_shape_is_drawn_with_decides_what_its_numbers_can_take() {
 }
 
 #[test]
+fn a_gradient_in_a_shapes_own_coordinates_goes_with_it_when_it_is_the_shapes_alone() {
+    let own = |gradient: &str, shape: &str, by: Affine| through(&format!("<defs>{gradient}</defs>{shape}"), &[4], by);
+    let linear = r#"<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="0" y2="12"/>"#;
+    let rect = r##"<rect x="4" y="4" width="8" height="8" fill="url(#g)"/>"##;
+    // A move, an even scale and a turn: into the gradient's own numbers.
+    assert_eq!(own(linear, rect, shift(2.0, 3.0)), r##"<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2" y1="7" x2="2" y2="15"/></defs><rect x="6" y="7" width="8" height="8" fill="url(#g)"/>"##);
+    assert_eq!(own(linear, rect, grow(2.0, 2.0)), r##"<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="8" x2="0" y2="24"/></defs><rect x="8" y="8" width="16" height="16" fill="url(#g)"/>"##);
+    assert_eq!(own(linear, rect, turn(90.0, 8.0, 8.0)), r##"<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="4" y2="0"/></defs><rect x="4" y="4" width="8" height="8" fill="url(#g)"/>"##, "the square is where it was; its gradient has turned");
+    // A stretch would leave its colours no longer square to its line:
+    // that goes into its gradientTransform, and is added to after.
+    let stretched = own(linear, rect, grow(2.0, 1.0));
+    assert_eq!(stretched, r##"<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="0" y2="12" gradientTransform="scale(2 1)"/></defs><rect x="8" y="4" width="16" height="8" fill="url(#g)"/>"##);
+    assert!(through(&stretched, &[4], shift(1.0, 0.0)).starts_with(r##"<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="0" y2="12" gradientTransform="matrix(2 0 0 1 1 0)"/>"##));
+    // One an editor left a gradientTransform on is taken in whole, when
+    // that and the move come to an even scale.
+    let boxy = r#"<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="8" x2="0" y2="24" gradientTransform="matrix(0.5, 0, 0, 0.5, 1, 0)"/>"#;
+    assert_eq!(own(boxy, rect, shift(1.0, 0.0)), r##"<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2" y1="4" x2="2" y2="12"/></defs><rect x="5" y="4" width="8" height="8" fill="url(#g)"/>"##);
+    // Rings: the middle, the focus and the radius.
+    let radial = r#"<radialGradient id="g" gradientUnits="userSpaceOnUse" cx="8" cy="8" r="4" fx="6" fy="8"/>"#;
+    assert_eq!(own(radial, rect, turn(90.0, 8.0, 8.0).then(&grow(2.0, 2.0))), r##"<defs><radialGradient id="g" gradientUnits="userSpaceOnUse" cx="16" cy="16" r="8" fx="16" fy="12"/></defs><rect x="8" y="8" width="16" height="16" fill="url(#g)"/>"##);
+    // Numbers that aren't all said plainly stay, under a gradientTransform.
+    let unsaid = r#"<linearGradient id="g" gradientUnits="userSpaceOnUse" x2="50%"/>"#;
+    assert_eq!(own(unsaid, rect, shift(2.0, 3.0)), r##"<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x2="50%" gradientTransform="translate(2 3)"/></defs><rect x="6" y="7" width="8" height="8" fill="url(#g)"/>"##);
+    // A stroke's gradient goes too, and with it the stroke grows.
+    let stroked = r##"<path d="M0 8H8" stroke="url(#g)" stroke-width="2"/>"##;
+    assert_eq!(own(linear, stroked, grow(2.0, 2.0)), r##"<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="8" x2="0" y2="24"/></defs><path d="M0 16 H16" stroke="url(#g)" stroke-width="4"/>"##);
+}
+
+#[test]
+fn a_gradient_other_shapes_use_is_never_touched() {
+    let gradient = r#"<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="0" y2="12"/>"#;
+    // Two shapes paint with it: the one moved keeps its move as a
+    // transform, and the gradient is as it was for both.
+    let shared = format!(r##"<defs>{gradient}</defs><rect x="4" y="4" width="8" height="8" fill="url(#g)"/><rect x="14" y="4" width="8" height="8" fill="url(#g)"/>"##);
+    assert_eq!(through(&shared, &[4], shift(2.0, 3.0)), format!(r##"<defs>{gradient}</defs><rect x="4" y="4" width="8" height="8" fill="url(#g)" transform="translate(2 3)"/><rect x="14" y="4" width="8" height="8" fill="url(#g)"/>"##));
+    // Even moved together: neither can say the gradient is its own.
+    assert_eq!(through(&shared, &[4, 5], shift(2.0, 3.0)), format!(r##"<defs>{gradient}</defs><rect x="4" y="4" width="8" height="8" fill="url(#g)" transform="translate(2 3)"/><rect x="14" y="4" width="8" height="8" fill="url(#g)" transform="translate(2 3)"/>"##));
+    // One that another gradient takes its stops from is used by it;
+    // one that takes from another isn't all there to move; and one a
+    // group hands to what's in it is each of theirs.
+    let based = format!(r##"<defs>{gradient}<linearGradient id="h" href="#g"/></defs><rect width="8" height="8" fill="url(#g)"/><rect width="8" height="8" fill="url(#h)"/>"##);
+    assert!(through(&based, &[5], shift(1.0, 0.0)).contains(r##"<rect width="8" height="8" fill="url(#g)" transform="translate(1 0)"/>"##));
+    assert!(through(&based, &[6], shift(1.0, 0.0)).ends_with(r##"<rect width="8" height="8" fill="url(#h)" transform="translate(1 0)"/>"##));
+    let handed = format!(r##"<defs>{gradient}</defs><g fill="url(#g)"><rect width="8" height="8"/></g>"##);
+    assert_eq!(through(&handed, &[4], shift(1.0, 0.0)), format!(r##"<defs>{gradient}</defs><g fill="url(#g)" transform="translate(1 0)"><rect width="8" height="8"/></g>"##));
+}
+
+#[test]
 fn a_group_passes_it_down_when_everything_in_it_can_take_it() {
     let group = r#"<g><rect x="4" y="4" width="8" height="8"/><path d="M4 14 H12"/><title>two</title></g>"#;
     assert_eq!(through(group, &[2], shift(2.0, 3.0)), r#"<g><rect x="6" y="7" width="8" height="8"/><path d="M6 17 H14"/><title>two</title></g>"#);

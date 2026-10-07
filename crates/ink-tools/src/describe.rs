@@ -70,7 +70,7 @@ const MAX_ATTRS: usize = 160;
 
 /// A node's attributes as it writes them, its `id` aside (that's said
 /// already): ` offset="0" stop-color="#ffc800"`.
-fn attributes(node: &Node) -> String {
+pub(crate) fn attributes(node: &Node) -> String {
     let mut out = String::new();
     for attr in node.attrs.iter().filter(|a| a.name != "id") {
         if out.len() > MAX_ATTRS {

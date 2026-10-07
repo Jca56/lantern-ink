@@ -135,11 +135,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - `doc_set` with `content: "fit"` puts the root through the transform
     from the old viewBox to the new: how a 500-unit Boxy icon becomes a
     24-unit one in one step.
-  - **Not yet:** a shape painted by a gradient in its own coordinates
-    (`userSpaceOnUse`, 18 corpus files) keeps even a move in its
-    `transform`, until M3b can move the gradient with it. `ToPath` and
-    `SetGeometry` have no Command: nothing needs them before M3c's path
-    tools and M4's handles.
+  - **Not yet:** `ToPath` and `SetGeometry` have no Command: nothing
+    needs them before M3c's path tools and M4's handles.
 
 - **M3b (paint) is under way**, in four pieces, the renderer first
   (Alva's order, 2026-10-06): **b1** the renderer, **b2** styles
@@ -165,7 +162,16 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   (`ink-doc/src/styling.rs`) and the `node_style` tool (26 tools). A
   property's name is one SVG has (a near miss is refused with the name
   it was near), and its value is checked where Ink draws with it.
-  **b3 (gradients) is next.**
+- **M3b's b3 is built** (2026-10-07, 225 tests): `Command::Define`
+  (into `<defs>`, made if missing), the tools `gradient_add` and
+  `gradient_set` (28 tools), and a user-space gradient that is one
+  shape's alone now moves with it (`Settle::carry`). **b4 (clips and
+  filters as tools) is next.**
+  - New gradients go by the painted shape's box unless asked for
+    `units: "user"`: a box gradient follows its shape for free and can
+    be shared, but can't paint a line with no height.
+  - Alva, 2026-10-07: for the rest of M3b each finished piece is
+    committed once it's tested and deployed, without asking first.
 
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.

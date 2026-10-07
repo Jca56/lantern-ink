@@ -18,7 +18,7 @@ use crate::input::In;
 use crate::tools::{Ctx, Entry};
 
 /// What the model reads up front (Claude Code keeps 2048 chars).
-pub const INSTRUCTIONS: &str = "Lantern Ink: make and edit SVG drawings (icons, logos), headless in this server (ids like d1). \
+pub const INSTRUCTIONS: &str = "Lantern Ink: make and edit SVG drawings, headless in this server (ids like d1). \
 A drawing is its SVG file's own tree: elements (nodes \"N3\") with their attributes exactly as the file writes them. \
 What you don't change is saved byte for byte. \
 Conventions: an attribute's numbers are in the element's own coordinates (inside its groups' transforms), y down; \
@@ -27,8 +27,8 @@ Address everything by the ids results return: doc \"d1\", node \"N3\". Ids never
 an element's own id=\"…\" is just an attribute. \
 Make things with node_add (one element and its attributes) or node_add_svg (markup as you'd write it); \
 change them with node_set (any attribute; null takes one off), node_style (paint, set where it will show), \
-node_move (the stacking order, or into a group) and node_delete. \
-Move, scale, turn and flip things on the page with node_transform, and line them up with node_align: both work in the drawing's coordinates \
+gradient_add (a gradient to paint with), node_move (the stacking order, or into a group) and node_delete. \
+Move, scale, turn and flip things with node_transform, and line them up with node_align: both work in the drawing's coordinates \
 whatever groups a node is in, and write the change into its own numbers where those can say it. \
 node_duplicate copies; node_group and node_ungroup make and dissolve groups, and leave the picture as it was. \
 Look things up with doc_info (every node, front to back, and where it shows), node_info (all about one), \

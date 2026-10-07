@@ -9,10 +9,11 @@ use crate::color;
 use crate::document::Document;
 use crate::kind::Kind;
 use crate::length::{Length, unit};
-use crate::node::Node;
+use crate::node::{Element, Node};
 use crate::refs::{Ids, href};
 use crate::style::prop;
 use crate::transform;
+use crate::value::Precision;
 
 /// How deep a chain of `href`s is followed.
 const MAX_HREFS: usize = 8;
@@ -100,6 +101,38 @@ fn said(doc: &Document, g: &Node) -> Said {
     }
 }
 
+/// A stop to write: where along the gradient, its colour as it's to
+/// be written (any colour SVG reads), and how see-through.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NewStop {
+    pub offset: f64,
+    pub color: String,
+    pub opacity: Option<f64>,
+}
+
+impl NewStop {
+    /// `<stop offset="…" stop-color="…"/>`, with a `stop-opacity` only
+    /// when it's less than whole.
+    pub fn element(&self, p: &Precision) -> Element {
+        let stop = Element::new("stop").with("offset", p.number(self.offset.clamp(0.0, 1.0))).with("stop-color", self.color.trim());
+        match self.opacity.filter(|o| *o < 1.0) {
+            Some(opacity) => stop.with("stop-opacity", p.number(opacity.clamp(0.0, 1.0))),
+            None => stop,
+        }
+    }
+}
+
+/// A gradient element to put in: `linearGradient` or `radialGradient`,
+/// called `id`, with `attrs` (its line or circle, its units and so on,
+/// as the file will write them) and `stops`.
+pub fn element(radial: bool, id: &str, attrs: &[(&str, String)], stops: &[NewStop], p: &Precision) -> Element {
+    let mut gradient = Element::new(if radial { "radialGradient" } else { "linearGradient" }).with("id", id);
+    for (name, value) in attrs {
+        gradient = gradient.with(name, value.as_str());
+    }
+    stops.iter().fold(gradient, |gradient, stop| gradient.child(stop.element(p)))
+}
+
 fn is_gradient(node: &Node) -> bool {
     matches!(node.kind, Kind::LinearGradient | Kind::RadialGradient)
 }
@@ -181,5 +214,16 @@ mod tests {
         assert_eq!((lost.units, lost.spread, lost.transform, lost.stops.len()), (Units::BBox, Spread::Pad, Affine::IDENTITY, 0));
         assert!(gradient(defs, "loop").is_some());
         assert!(gradient("<g id=\"g\"/>", "g").is_none());
+    }
+
+    #[test]
+    fn a_gradient_is_written_as_it_will_be_read() {
+        let p = Precision { decimals: 3, reach: 24.0 };
+        let stops = [NewStop { offset: 0.0, color: " #ffe9a8 ".into(), opacity: None }, NewStop { offset: 0.33333, color: "red".into(), opacity: Some(0.5) }, NewStop { offset: 7.0, color: "#000".into(), opacity: Some(1.0) }];
+        let made = element(false, "glow", &[("x1", "0".into()), ("y1", "0".into()), ("x2", "0".into()), ("y2", "1".into())], &stops, &p);
+        assert_eq!(made.to_markup(), r##"<linearGradient id="glow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe9a8"/><stop offset="0.333" stop-color="red" stop-opacity="0.5"/><stop offset="1" stop-color="#000"/></linearGradient>"##);
+        let g = gradient(&made.to_markup(), "glow").unwrap();
+        assert_eq!((g.stops.len(), g.stops[1].color, g.coords[3]), (3, Color::RED.with_alpha(0.5), Some(Length::Px(1.0))));
+        assert_eq!(element(true, "r", &[], &[], &p).to_markup(), r#"<radialGradient id="r"/>"#);
     }
 }

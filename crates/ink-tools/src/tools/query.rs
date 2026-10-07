@@ -4,7 +4,7 @@
 use ink_core::NodeId;
 use ink_core::ink_doc::geometry::page_bounds;
 use ink_core::ink_doc::hit::{self, Part};
-use ink_core::ink_doc::refs::Ids;
+use ink_core::ink_doc::refs::{Ids, named as names};
 use ink_core::ink_doc::style::{INHERITED, prop};
 use ink_core::ink_doc::{Document, Node};
 use ink_geom::Vec2;
@@ -45,23 +45,6 @@ pub(super) fn tools() -> Vec<Entry> {
 
 fn info_schema() -> Doc {
     schema::object(&["doc_id", "node_id"], vec![("doc_id", common::doc_id()), ("node_id", common::node_id("The node"))])
-}
-
-/// The ids `value` names: every `url(#id)` in it, or for an `href` the
-/// `#id` it is.
-fn names<'a>(attr: &str, value: &'a str) -> Vec<&'a str> {
-    if attr == "href" || attr.ends_with(":href") {
-        return value.trim().strip_prefix('#').into_iter().collect();
-    }
-    let mut found = Vec::new();
-    let mut rest = value;
-    while let Some(open) = rest.find("url(") {
-        let Some(close) = rest[open..].find(')') else { break };
-        let name = rest[open + 4..open + close].trim().trim_matches(['"', '\'']).trim();
-        found.extend(name.strip_prefix('#'));
-        rest = &rest[open + close + 1..];
-    }
-    found
 }
 
 /// An attribute's value, cut short when it's long.

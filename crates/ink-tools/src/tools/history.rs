@@ -9,7 +9,7 @@ use crate::input::{In, Names, common, refused, refused_edit};
 use crate::tools::{Ctx, Entry, Handler, previewed};
 
 /// The tools a batch can hold: every edit.
-pub(crate) const EDITS: [&str; 12] = ["node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "node_style", "doc_set"];
+pub(crate) const EDITS: [&str; 14] = ["node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "node_style", "gradient_add", "gradient_set", "doc_set"];
 /// The most steps one batch holds.
 const MAX_BATCH: usize = 200;
 
@@ -21,7 +21,7 @@ pub(super) fn tools() -> Vec<Entry> {
         direct(
             "batch",
             "Many edits as one",
-            "Run many edits on one drawing as ONE undo step, all or nothing: if any step is refused, none happen, and the reply says which step and why. Each step is {tool, args, as}: tool is any edit (node_add, node_add_svg, node_set, node_move, node_delete, node_transform, node_align, node_duplicate, node_group, node_ungroup, node_style, doc_set); args are that tool's, without doc_id; `as` names the node the step makes (what it adds, a copy, a group), so later steps can refer to it as \"@name\" before its id exists (e.g. as \"face\", then into: \"@face\"). Attaches a picture of the result unless preview: false.",
+            "Run many edits on one drawing as ONE undo step, all or nothing: if any step is refused, none happen, and the reply says which step and why. Each step is {tool, args, as}: tool is any edit (node_add, node_add_svg, node_set, node_move, node_delete, node_transform, node_align, node_duplicate, node_group, node_ungroup, node_style, gradient_add, gradient_set, doc_set); args are that tool's, without doc_id; `as` names the node the step makes (what it adds, a copy, a group), so later steps can refer to it as \"@name\" before its id exists (e.g. as \"face\", then into: \"@face\"). Attaches a picture of the result unless preview: false.",
             batch_schema,
             Kind::Set,
             batch,

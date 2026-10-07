@@ -45,6 +45,10 @@ pub enum Command {
     /// transform on it; it goes into the node's own numbers where they
     /// can say so, and into its `transform` where they can't (D13).
     Transform { nodes: Vec<NodeId>, by: Affine },
+    /// Put `elements` (gradients, clip paths, filters: each with an `id`
+    /// nothing else has) into the drawing's `<defs>`, which is made if
+    /// there isn't one.
+    Define { elements: Vec<Element> },
     /// Set how `nodes` are painted: each of `set` is a property and what
     /// it's set to (`None` takes it off). A property is one SVG has,
     /// and its value is checked where Ink draws with it. Each is written
@@ -199,6 +203,10 @@ impl Document {
             Command::Transform { nodes, by } => {
                 let changed = self.make(&settle::plan(self, nodes, by)?)?;
                 applied.note(changed);
+            }
+            Command::Define { elements } => {
+                let made = self.define(elements)?;
+                applied.created.extend(made);
             }
             Command::SetStyle { nodes, set } => {
                 let changed = self.set_style(nodes, set)?;
