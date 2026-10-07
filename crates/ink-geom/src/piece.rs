@@ -187,6 +187,39 @@ impl Piece {
         t
     }
 
+    /// How long it is.
+    pub fn length(&self) -> f64 {
+        if let Seg::Line { to } = self.seg {
+            return to.distance(self.from);
+        }
+        // Its speed summed along it: five well-chosen places (Gauss
+        // and Legendre's) on each of eight stretches.
+        const PLACES: [(f64, f64); 5] = [(0.0, 0.568_888_888_888_888_9), (0.538_469_310_105_683, 0.478_628_670_499_366_5), (-0.538_469_310_105_683, 0.478_628_670_499_366_5), (0.906_179_845_938_664, 0.236_926_885_056_189_1), (-0.906_179_845_938_664, 0.236_926_885_056_189_1)];
+        const STRETCHES: usize = 8;
+        let half = 0.5 / STRETCHES as f64;
+        (0..STRETCHES).map(|i| PLACES.iter().map(|(x, w)| w * self.heading((2 * i + 1) as f64 * half + x * half).length()).sum::<f64>() * half).sum()
+    }
+
+    /// The `t` by which `length` of it has gone by.
+    pub fn along(&self, length: f64) -> f64 {
+        let whole = self.length();
+        if !(length > 0.0 && whole > 0.0) {
+            return 0.0;
+        }
+        if length >= whole {
+            return 1.0;
+        }
+        if matches!(self.seg, Seg::Line { .. }) {
+            return length / whole;
+        }
+        let (mut lo, mut hi) = (0.0, 1.0);
+        for _ in 0..48 {
+            let mid = (lo + hi) * 0.5;
+            if self.part(0.0, mid).length() < length { lo = mid } else { hi = mid }
+        }
+        (lo + hi) * 0.5
+    }
+
     /// How far it strays, at most, from the straight line between its
     /// ends: nothing for a line, and never less than it truly does.
     pub fn bulge(&self) -> f64 {

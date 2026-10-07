@@ -290,6 +290,31 @@ curve the same curve: nothing is flattened, and a circle that comes
 through untouched comes back the circle it was. §10 says how it's
 tested.
 
+**Outline stroke and simplify** (M3c) are `OutlineStroke { nodes }` and
+`Simplify { nodes, tolerance }`.
+- A stroke's outline (`ink-geom`'s `offset.rs`) is a ribbon along each
+  piece of the line, a join at each corner and a cap at each open end,
+  made one by the union above. Beside a straight line the stroke's edge
+  is a straight line and beside a circle's arc an arc, exactly; beside
+  any other curve it is fitted with cubics, to within a tolerance (a
+  two-hundredth of the stroke's width unless told; never finer than
+  the file can write). Where a stroke is wider than its line bends (it folds
+  over itself) that stretch is built from short straight slices
+  instead: no one ribbon's outline says what a folded stroke covers. A
+  shape with no fill becomes its stroke's outline; one with a fill
+  keeps it, and the outline is a new path over it (in a group that
+  takes over the shape's opacity, filter, clip path and mask, if it had
+  any: they applied to fill and stroke as one). What is measured
+  against a shape's box (a gradient across it, the reach of a filter on
+  it or above it) is measured against the outline's box afterwards,
+  which is half the stroke's width bigger all round.
+- A path is simplified (`simplify.rs`) a smooth stretch at a time, from
+  corner to corner (a turn of more than 30° is a corner, and stays):
+  each stretch becomes one line, one arc of a circle or one fitted
+  cubic if that stays within the tolerance of it both ways, and is
+  halved and tried again if not. No anchor moves and none is made, so
+  the anchors left keep their ids.
+
 **A gradient in a shape's own coordinates goes with the shape**
 (`settle.rs`, since M3b) when it is that shape's alone: into the
 gradient's own numbers when they're plain and all it has been through
@@ -389,6 +414,19 @@ current scale, paint, opacity, clip, filter, bounds; cached by
   arcs holding the curve's exact area.
 - **Strokes** as polygons, the SVG way: miter (with its limit), round and
   bevel joins; butt, round and square caps; dashes with an offset.
+  Since M3c a stroked line is flattened for its stroke
+  (`Path::flatten_to_stroke`): a point right by each end of every
+  curve, so caps and joins sit square to the curve itself and not to
+  its first chord, and no chord turning further than the stroke's
+  outer edge can take; and dashes are cut from the curves themselves
+  (`Path::dashed`), before flattening. What is still approximate:
+  where a wide line is cut off square on a tight bend (a butt cap, a
+  dash's end), the boxes along the flattened line stand a little past
+  the cut on the inside of the bend. A fifth of a pixel for an icon's
+  strokes; `ink-render/tests/outline.rs` measures it. Slices between
+  the curve's true normals, as `offset.rs` makes them, would be exact.
+- **A pixel too faint to show is clear** (alpha 0 has no colour): the
+  far edge of a blur is the same bytes whichever band drew it.
 - **Paints:** colours, linear and radial gradients (units, transform,
   spread, `href`), `currentColor`.
 - **Groups** that fade, clip or filter as one draw into a layer of their
@@ -527,7 +565,7 @@ carries over; only the differences and the tool list are new here.
 |---|---|
 | Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox) |
 | Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
-| Paths | `path_set`§, `path_edit`§ (anchors and handles), `path_op`§ (to path, reverse, and the boolean ops: union, subtract, intersect, exclude; outline stroke and simplify to come) (§ = built in M3c) |
+| Paths | `path_set`§, `path_edit`§ (anchors and handles), `path_op`§ (to path, reverse, the boolean ops union, subtract, intersect and exclude, outline stroke, simplify) (§ = built in M3c) |
 | Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`‡, `gradient_set`‡, `clip_set`‡, `filter_set`‡ (‡ = built in M3b) |
 | Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
 | Queries | `doc_query`† (what's at a point; a node's bounds are `node_info`'s) |
@@ -634,6 +672,13 @@ As LS3 §7, to the letter where it can be:
   up as they must), and against the renderer, which draws one shape
   clipped by the other and knows nothing of how the results were
   made.
+- **A stroke's outline** is held to the stroke's own definition, place
+  by place (round all over, a stroke is everywhere within half its
+  width of the line; cut off square, everywhere a square-on line from
+  it reaches that far), drawn beside the renderer's own stroke of the
+  same line, and tried on every stroke in the corpus, which has to
+  draw as it did. **A simplified path** is measured against the path
+  it was, both ways.
 - **Render goldens:** fixed documents to RGBA, exact (pure CPU). Agreement
   with `lntrn-svg` and, when present, `rsvg-convert`, each test declaring
   its tolerance (D22).
@@ -654,7 +699,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (anchors, editing and boolean ops built 2026-10-07; outline and simplify to come), **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 

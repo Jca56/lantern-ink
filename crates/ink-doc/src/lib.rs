@@ -45,6 +45,7 @@ mod settle;
 mod shape;
 pub mod sheet;
 mod structure;
+mod stroking;
 pub mod style;
 pub mod styling;
 pub mod transform;

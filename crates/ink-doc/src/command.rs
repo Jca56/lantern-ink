@@ -77,6 +77,17 @@ pub enum Command {
     /// takes the result as its outline and keeps its place and paint,
     /// the others are removed ([`crate::boolean`]).
     Boolean { nodes: Vec<NodeId>, how: Combine },
+    /// Make the stroke of each of the shapes `nodes` a shape of its
+    /// own: a path that covers what the stroke did, filled with what it
+    /// was painted with ([`crate::stroking`]). A shape with a fill
+    /// keeps it, and the outline is a new path beside it. `tolerance`
+    /// is how near the stroke's edge the outline's curves keep (`None`:
+    /// a two-hundredth of the stroke's width).
+    OutlineStroke { nodes: Vec<NodeId>, tolerance: Option<f64> },
+    /// Say each of the paths `nodes` with as few segments as keep its
+    /// outline within `tolerance` of where it was. Corners stay, and
+    /// no anchor moves.
+    Simplify { nodes: Vec<NodeId>, tolerance: f64 },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -266,6 +277,26 @@ impl Document {
                 let removed = self.combine(nodes, *how)?;
                 applied.note(nodes[..1].to_vec());
                 applied.removed.extend(removed);
+            }
+            Command::OutlineStroke { nodes, tolerance } => {
+                if nodes.is_empty() {
+                    return invalid("there's no stroke to outline: name at least one shape");
+                }
+                for &id in nodes {
+                    let made = self.stroke_to_shape(id, *tolerance)?;
+                    applied.note(vec![id]);
+                    applied.created.extend(made);
+                }
+            }
+            Command::Simplify { nodes, tolerance } => {
+                if nodes.is_empty() {
+                    return invalid("there's nothing to simplify: name at least one path");
+                }
+                for &id in nodes {
+                    if self.simplify(id, *tolerance)? {
+                        applied.note(vec![id]);
+                    }
+                }
             }
             Command::Batch(commands) => {
                 if depth >= MAX_BATCH_DEPTH {

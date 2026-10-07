@@ -4,7 +4,7 @@
 //! same ones.
 #![allow(dead_code)]
 
-use ink_geom::{Affine, Path, Vec2};
+use ink_geom::{Affine, Cap, Join, Path, Stroke, Subpath, Vec2};
 
 /// A small random number generator: the same shapes every run.
 pub struct Rng(pub u64);
@@ -108,4 +108,38 @@ pub fn pair(rng: &mut Rng) -> (Path, Path) {
         _ => a.bounds().map_or_else(Path::new, |b| Path::rect(b.min.x, b.min.y, b.width(), b.height(), 0.0, 0.0)),
     };
     (a, b)
+}
+
+/// A line to stroke: a shape, or a shape with its outline left open,
+/// or only some of it.
+pub fn line(rng: &mut Rng) -> Path {
+    let mut path = shape(rng);
+    match rng.below(3) {
+        0 => {}
+        1 => path.subpaths.iter_mut().for_each(|sub| sub.closed = false),
+        _ => {
+            for sub in &mut path.subpaths {
+                let keep = 1 + rng.below(sub.segs.len().max(1) as u64) as usize;
+                *sub = Subpath { start: sub.start, segs: sub.segs[..keep.min(sub.segs.len())].to_vec(), closed: false };
+            }
+        }
+    }
+    path
+}
+
+/// A pen to stroke it with: any width, cap and join, dashed one time
+/// in four.
+pub fn pen(rng: &mut Rng) -> Stroke {
+    let dashes = match rng.below(4) {
+        0 => vec![rng.grid(0.5, 3.0, 0.5), rng.grid(0.5, 2.0, 0.5)],
+        _ => Vec::new(),
+    };
+    Stroke {
+        width: [0.3, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0][rng.below(7) as usize],
+        cap: [Cap::Butt, Cap::Round, Cap::Square][rng.below(3) as usize],
+        join: [Join::Miter, Join::Round, Join::Bevel][rng.below(3) as usize],
+        miter_limit: [1.0, 4.0, 10.0][rng.below(3) as usize],
+        dash_offset: if dashes.is_empty() { 0.0 } else { rng.grid(0.0, 3.0, 0.5) },
+        dashes,
+    }
 }

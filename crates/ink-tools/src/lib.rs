@@ -31,7 +31,7 @@ gradient_add, clip_set (cut to a shape), filter_set (a shadow, a blur), \
 node_move (stacking order, into a group) and node_delete. \
 Move, scale, turn and flip things with node_transform, and line them up with node_align: both in the drawing's coordinates, \
 whatever groups a node is in. \
-Reshape a path by its anchors with path_edit and path_set (node_info lists them, \"A3\"); path_op unites, subtracts and intersects shapes, and makes one a path. \
+Reshape a path by its anchors with path_edit and path_set (node_info lists them, \"A3\"); path_op: union, subtract, intersect, outline a stroke, simplify. \
 node_duplicate copies; node_group and node_ungroup group and ungroup. \
 Ask doc_info (every node, front to back, with its box), node_info (all about one), \
 doc_query (what's at a point) and doc_source (the markup); doc_set sets the page. \

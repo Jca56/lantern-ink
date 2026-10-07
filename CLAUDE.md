@@ -103,7 +103,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     binary to `~/.lantern/bin/lantern-ink-mcp.new` and `mv` it over.
   - `~/.lantern/bin/lantern-ink` is the May 2026 iced prototype's
     binary, not ours: left alone until M4's window takes the name.
-- **M3 (operations) is under way**, in five slices, in the order Alva
+- **M3 (operations) is under way** (a, b and c built; d text and e
+  tidy to go), in five slices, in the order Alva
   chose 2026-10-06: **a** structure and transforms, **b** paint (styles,
   gradients, clips, filters; the renderer learns `feGaussianBlur` and
   `<style>` rules), **c** paths (anchors, editing, boolean ops), **d**
@@ -278,6 +279,65 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - A group left empty by the shapes taken out of it stays (tidy is
     M3e's). `batch` no longer reports a node that a later step of the
     same batch took out again.
+- **M3c's c3 is built** (2026-10-07, 300 tests), and with it **M3c
+  is built**: outline stroke and simplify. `Command::OutlineStroke`
+  (`ink-doc/src/stroking.rs`) and `Command::Simplify` (`paths.rs`),
+  and `path_op`'s `outline` and `simplify` (with `tolerance`).
+  **M3d (text) is next.**
+  - A stroke's outline is `ink-geom/src/offset.rs`: a ribbon along
+    each piece, a join at each corner, a cap at each open end, made
+    one by `combine`. Its edge is a line beside a line and an arc
+    beside a circle's arc, exactly; fitted cubics beside any other
+    curve, within `tolerance` of the true edge (a two-hundredth of
+    the stroke's width unless told: finer makes more anchors). Where the stroke is wider than its line bends (it folds),
+    that stretch is short straight slices between the curve's true
+    normals instead: a folded ribbon's outline doesn't say what it
+    covers.
+  - A shape with no fill becomes the outline. One with a fill keeps
+    it; the outline is a new path over it (under, for `paint-order:
+    stroke`), and if the shape had an opacity, filter, clip path or
+    mask, the two go in a group that has it now (Alva hasn't been
+    asked about this: it's what Illustrator, Inkscape and Figma do).
+    What's measured against the shape's box (a gradient across it, a
+    filter's reach) is measured against a bigger box afterwards.
+  - Simplify (`ink-geom/src/simplify.rs`) goes corner to corner (a
+    turn over 30° stays a corner whatever the tolerance) and says each
+    smooth stretch with one line, one circle's arc or one fitted
+    cubic if that stays within the tolerance both ways. No anchor
+    moves; the ones left keep their ids. The default tolerance is a
+    five-hundredth of the path's size.
+  - **How they're proven:** `ink-geom/tests/outline.rs` holds the
+    outline to the stroke's own definition at 140 000 places (round
+    all over: everywhere within half the width of the line; cut off
+    square: wherever a square-on line from it reaches); 
+    `ink-render/tests/outline.rs` draws 1500 strokes beside the
+    renderer's (0.06 of a pixel apart where the line isn't cut off
+    square) and outlines all 830 strokes in the corpus that aren't
+    measured against a box (each file draws as it did, to 0.05 of a
+    pixel); `ink-geom/tests/simplify.rs` measures 1200 simplified
+    paths against what they were.
+  - **What the proofs changed in the core** (`combine.rs`, `meet.rs`):
+    the same line is now anything within the tolerance between the
+    same two corners, and the look to either side of an edge steps
+    past the edges it stands for; a cut in one piece is carried to
+    every piece that shares that stretch; a cut corner sits on the
+    straight line it cuts; and an edge that can't be told from its
+    neighbour and is shorter than a file can say is one corner.
+    `Tangled` says what couldn't be worked out. All the boolean
+    proofs pass as before.
+  - **The renderer changed too** (found by drawing strokes beside
+    their outlines; goldens looked at and kept again): a stroked
+    line is flattened for its stroke (`flatten_to_stroke`: true
+    directions at the ends of curves, no chord turning further than
+    the stroke's edge can take), dashes are cut from the curves
+    (`Path::dashed`), and a pixel with alpha 0 has no colour (blur
+    tails were different bytes from band to band, under an alpha of
+    0). Still approximate, and written down in ARCHITECTURE §5.1: a
+    wide line cut off square on a tight bend.
+  - **Known limit:** outlines that come within a billionth of their
+    size of each other without being the same line (files written
+    with nine to eleven significant digits can do it) may be refused
+    (`Tangled`) rather than guessed. Nothing in the corpus does.
 
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.

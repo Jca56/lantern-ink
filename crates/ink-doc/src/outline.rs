@@ -184,7 +184,7 @@ pub(crate) struct Anchored {
 impl Outline {
     /// `path` as runs of anchors, called by `ids` in order (as many as
     /// it has anchors).
-    fn build(path: &Path, ids: &[AnchorId]) -> Outline {
+    pub(crate) fn build(path: &Path, ids: &[AnchorId]) -> Outline {
         let mut ids = ids.iter().copied();
         let runs = path
             .subpaths

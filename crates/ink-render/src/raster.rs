@@ -97,12 +97,17 @@ impl Canvas {
     }
 }
 
-/// Premultiplied float pixels as straight-alpha bytes, onto `out`.
+/// Premultiplied float pixels as straight-alpha bytes, onto `out`. A
+/// pixel too faint to show at all is clear, with no colour: what
+/// little it has divided by next to nothing is whatever the last
+/// rounding left (the far edge of a blur would be a different colour
+/// from one band of rows to the next, under an alpha of 0).
 pub(crate) fn to_bytes(pixels: &[Pixel], out: &mut Vec<u8>) {
     for px in pixels {
         let a = px[3].clamp(0.0, 1.0);
-        let un = if a > 0.0 { 255.0 / a } else { 0.0 };
-        out.extend_from_slice(&[(px[0] * un).round().clamp(0.0, 255.0) as u8, (px[1] * un).round().clamp(0.0, 255.0) as u8, (px[2] * un).round().clamp(0.0, 255.0) as u8, (a * 255.0).round() as u8]);
+        let alpha = (a * 255.0).round() as u8;
+        let un = if alpha > 0 { 255.0 / a } else { 0.0 };
+        out.extend_from_slice(&[(px[0] * un).round().clamp(0.0, 255.0) as u8, (px[1] * un).round().clamp(0.0, 255.0) as u8, (px[2] * un).round().clamp(0.0, 255.0) as u8, alpha]);
     }
 }
 

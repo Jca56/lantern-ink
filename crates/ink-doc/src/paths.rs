@@ -127,6 +127,24 @@ impl Document {
         Ok((self.set_outline(id, &outline)? || made_path, each))
     }
 
+    /// Say the path `id` with as few segments as keep its outline
+    /// within `tol` of where it was ([`Path::simplified`]). Its corners
+    /// stay, and the anchors that are left keep their ids. Whether it
+    /// changed.
+    pub(crate) fn simplify(&mut self, id: NodeId, tol: f64) -> Result<bool, DocError> {
+        if !(tol > 0.0 && tol.is_finite()) {
+            return invalid("a tolerance says how far the outline may move: it has to be more than nothing");
+        }
+        let node = self.node(id)?;
+        if node.kind != Kind::Path {
+            return invalid(format!("{id} is a <{}>: only a path has segments to do with fewer of (a rect or a circle is as simple as it gets)", node.name));
+        }
+        let Some(was) = self.outline(id) else { return invalid(format!("{id}'s path data can't all be read, so it can't be gone over: set its d to path data that reads first")) };
+        let (path, left) = was.path().simplified(tol);
+        let ids: Vec<AnchorId> = was.runs.iter().filter(|run| !run.anchors.is_empty()).zip(&left).flat_map(|(run, left)| left.iter().filter_map(|i| run.anchors.get(*i).map(|a| a.id))).collect();
+        self.set_outline(id, &Outline::build(&path, &ids))
+    }
+
     /// Make the path `id`'s whole outline `runs`. An anchor given the id
     /// of one the path has is that anchor still; the rest are new.
     /// Whether it changed, and the new ones.

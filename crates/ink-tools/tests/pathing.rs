@@ -195,7 +195,7 @@ fn shapes_become_paths_and_paths_turn_round() {
     let mut s = drawing("op");
     ok(&mut s, "node_add_svg", r#"{"doc_id":"d1","svg":"<circle cx='12' cy='12' r='4' stroke='#fff'/>"}"#);
     let made = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N3","N7","N2"],"op":"to_path"}"#);
-    assert_eq!(text(&made), "Done: N3 <path id=\"box\">, N7 <path> (node_info lists a path's anchors).", "the path was one already");
+    assert_eq!(text(&made), "Done: N3 <path id=\"box\"> (8 anchors), N7 <path> (4 anchors). node_info lists a path's anchors.", "the path was one already");
     assert_eq!(made.path("structuredContent.node_ids").map(lntrn_data::json::write).as_deref(), Some(r#"["N3","N7"]"#));
     assert_eq!(node(&mut s, "N3"), "<path id='box' d='M4 2 H8 A2 2 0 0 1 10 4 V6 A2 2 0 0 1 8 8 H4 A2 2 0 0 1 2 6 V4 A2 2 0 0 1 4 2 Z'/>", "a rounded corner is an arc still");
     assert_eq!(node(&mut s, "N7"), "<path d='M16 12 A4 4 0 0 1 12 16 A4 4 0 0 1 8 12 A4 4 0 0 1 12 8 A4 4 0 0 1 16 12 Z' stroke='#fff'/>");
@@ -211,7 +211,7 @@ fn shapes_become_paths_and_paths_turn_round() {
         (r#""node_ids":["N5"],"op":"reverse""#, "N5 is a <g>, which has no direction to turn round: only a path does (to_path makes a shape one)"),
         (r#""node_ids":["N6"],"op":"reverse""#, "N6's path data can't all be read, so it can't be taken point by point: set its d to path data that reads first"),
         (r#""node_ids":[],"op":"reverse""#, "\"node_ids\" is empty: name at least one node"),
-        (r#""node_ids":["N2"],"op":"weld""#, "op is to_path, reverse, union, subtract, intersect or exclude, not \"weld\""),
+        (r#""node_ids":["N2"],"op":"weld""#, "op is to_path, reverse, union, subtract, intersect, exclude, outline or simplify, not \"weld\""),
     ] {
         assert_eq!(refused(&mut s, "path_op", &format!(r#"{{"doc_id":"d1",{args}}}"#)), says);
     }
@@ -226,7 +226,7 @@ fn shapes_are_made_one() {
     // A bite out of the card: the card keeps its paint and its corners,
     // and takes the circle's arc; the circle is gone.
     let bitten = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N2","N3"],"op":"subtract"}"#);
-    assert_eq!(text(&bitten), "Done: N2 <path id=\"card\"> is the result at 2,2 14×14; N3 was taken into it and deleted.");
+    assert_eq!(text(&bitten), "Done: N2 <path id=\"card\"> (8 anchors) is the result at 2,2 14×14; N3 was taken into it and deleted.");
     assert_eq!((bitten.path("structuredContent.node_ids[0]").and_then(Doc::as_str), bitten.path("structuredContent.removed[0]").and_then(Doc::as_str)), (Some("N2"), Some("N3")));
     assert_eq!(node(&mut s, "N2"), "<path id='card' d='M4 2 H14 A2 2 0 0 1 16 4 V11 A5 5 0 0 0 11 16 H4 A2 2 0 0 1 2 14 V4 A2 2 0 0 1 4 2 Z' fill='#ffc800'/>");
     assert_eq!(refused(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#), "no node N3 in this document (doc_info lists its nodes)");
@@ -235,19 +235,19 @@ fn shapes_are_made_one() {
     assert_eq!((image.pixel(24, 24), image.pixel(60, 60)[3]), ([255, 200, 0, 255], 0));
     // With a shape under a group's move: where it shows is what counts.
     let barred = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N2","N5"],"op":"exclude"}"#);
-    assert_eq!(text(&barred), "Done: N2 <path id=\"card\"> is the result at 1,2 22×14; N5 was taken into it and deleted.");
+    assert_eq!(text(&barred), "Done: N2 <path id=\"card\"> (20 anchors) is the result at 1,2 22×14; N5 was taken into it and deleted.");
     assert!(node(&mut s, "N2").contains("M16 9 V7 H23 V9 Z"), "the bar's end, past the card, a unit to the right of its own numbers");
     // One step each, and back to the byte.
     assert_eq!(text(&ok(&mut s, "history_undo", r#"{"doc_id":"d1","steps":2}"#)), "Undid 2 steps: \"path_op\" (Claude), \"path_op\" (Claude). Now 1 can be undone and 2 redone.");
     assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#)), before);
     // Three at once, the one kept in a group: written in its coordinates.
     let all = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N5","N2","N3"],"op":"union"}"#);
-    assert_eq!(text(&all), "Done: N5 <path id=\"bar\"> is the result at 1,2 22×19; N2, N3 were taken into it and deleted.");
+    assert_eq!(text(&all), "Done: N5 <path id=\"bar\"> (18 anchors) is the result at 1,2 22×19; N2, N3 were taken into it and deleted.");
     assert_eq!(node(&mut s, "N5"), "<path id='bar' d='M0 6 H1 V3 A2 2 0 0 1 3 1 H13 A2 2 0 0 1 15 3 V6 H22 V8 H15 V10 A5 5 0 0 1 20 15 A5 5 0 0 1 15 20 A5 5 0 0 1 10 15 H3 A2 2 0 0 1 1 13 V8 H0 Z'/>");
     ok(&mut s, "history_undo", r#"{"doc_id":"d1"}"#);
     for (args, says) in [
         (r#""node_ids":["N3","N5"],"op":"intersect""#, "the shapes don't overlap anywhere, so nothing would be left: nothing was changed"),
-        (r#""node_ids":["N3","N6"],"op":"union""#, "N6 is a <g>: only shapes (paths, rects, circles, ellipses, polygons) can be combined; for a group, name the shapes in it"),
+        (r#""node_ids":["N3","N6"],"op":"union""#, "N6 is a <g>: only shapes (paths, rects, circles, ellipses, lines, polygons) have an outline to work on; for a group, name the shapes in it"),
         (r#""node_ids":["N3"],"op":"subtract""#, "that takes two shapes or more: the first is kept, and the others are taken from it, or met with it (a union of one shape makes its outline simple, where it crosses itself)"),
         (r#""node_ids":["N3","N3"],"op":"union""#, "N3 is named twice: a shape is combined with others, not with itself"),
     ] {
@@ -259,4 +259,55 @@ fn shapes_are_made_one() {
     let ran = ok(&mut s, "batch", &format!(r#"{{"doc_id":"d1","preview":false,"steps":{steps}}}"#));
     assert_eq!(text(&ran), "Ran 3 steps on d1 as one undo step (history_undo undoes all of them). New nodes: N7. Named: @a = N7. Made and taken out again on the way: N8.");
     assert_eq!(node(&mut s, "N7"), "<path d=\"M7 4 A3 3 0 0 1 5.5 6.598 A3 3 0 0 1 4 4 A3 3 0 0 1 5.5 1.402 A3 3 0 0 1 7 4 Z\"/>", "a lens of four arcs");
+}
+
+#[test]
+fn a_stroke_becomes_a_shape() {
+    let (mut s, _) = server("outline");
+    ok(&mut s, "doc_new", "{}");
+    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<path id='rule' d='M4 12 H20' fill='none' stroke='#ffc800' stroke-width='2' stroke-linecap='round'/><circle id='coin' cx='12' cy='12' r='6' fill='#ffc800' stroke='#12100e' stroke-width='2'/><rect id='plain' width='4' height='4'/>"}"##);
+    // A line: the node itself is its stroke's outline now.
+    let rule = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N2"],"op":"outline"}"#);
+    assert_eq!(text(&rule), "Done: N2 <path id=\"rule\"> (6 anchors). node_info lists a path's anchors.");
+    assert_eq!(node(&mut s, "N2"), "<path id='rule' d='M20 13 H4 A1 1 0 0 1 3 12 A1 1 0 0 1 4 11 H20 A1 1 0 0 1 21 12 A1 1 0 0 1 20 13 Z' fill='#ffc800' stroke='none'/>", "said where it was said, in the quotes it had");
+    // A filled shape keeps its fill: the ring is a new path over it.
+    let coin = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N3"],"op":"outline"}"#);
+    assert_eq!(text(&coin), "Done: N3 <circle id=\"coin\">. A shape that had a fill keeps it, and its stroke's outline is a new path beside it: N5 <path id=\"coin-2\">.");
+    assert_eq!(coin.path("structuredContent.created[0]").and_then(Doc::as_str), Some("N5"));
+    assert_eq!(node(&mut s, "N3"), "<circle id='coin' cx='12' cy='12' r='6' fill='#ffc800' stroke='none'/>");
+    assert!(node(&mut s, "N5").starts_with("<path id='coin-2' d='M12 17 A5 5 0 0 0 17 12 ") && node(&mut s, "N5").ends_with("fill='#12100e' stroke='none'/>"), "{}", node(&mut s, "N5"));
+    assert_eq!(text(&ok(&mut s, "history_undo", r#"{"doc_id":"d1"}"#)), "Undid 1 step: \"path_op\" (Claude). Now 2 can be undone and 1 redone.");
+    assert_eq!(refused(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N4"],"op":"outline"}"#), "N4 has no stroke to outline (its stroke is none, or has no width): node_style gives it one");
+}
+
+#[test]
+fn a_path_is_said_with_fewer_segments() {
+    let (mut s, _) = server("simplify");
+    ok(&mut s, "doc_new", "{}");
+    // A circle of radius 8 as thirty-two short lines, a line in three
+    // bits with a corner after it, and a rect.
+    let ring: Vec<String> = (0..32).map(|i| (i as f64 * std::f64::consts::TAU / 32.0).sin_cos()).map(|(sin, cos)| format!("{:.3} {:.3}", 12.0 + 8.0 * cos, 12.0 + 8.0 * sin)).collect();
+    ok(&mut s, "node_add_svg", &format!(r#"{{"doc_id":"d1","svg":"<path id='ring' d='M{} Z'/><path id='bar' d='M2 2 H5 H9 H12 V6'/><rect id='box' width='4' height='4'/><path id='wobble' d='M2 20 L6 20.3 L10 19.8 L14 20'/>"}}"#, ring.join(" L")));
+    let done = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N2","N3"],"op":"simplify"}"#);
+    assert_eq!(text(&done), "Done: N2 <path id=\"ring\"> (2 anchors), N3 <path id=\"bar\"> (3 anchors). node_info lists a path's anchors.");
+    assert_eq!(node(&mut s, "N3"), "<path id='bar' d='M2 2 H12 V6'/>");
+    let round = node(&mut s, "N2");
+    assert!(round.matches(" A8 8 0 0 1 ").count() == 2 && !round.contains('L'), "the two halves of the circle it was: {round}");
+    // The anchors that are left are the ones they were.
+    let info = text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#)).to_owned();
+    assert!(info.contains("A33 at 2,2  then a line to A36") && info.contains("A36 at 12,2  then a line to A37"), "{info}");
+    // As simple as it gets already; and a tolerance of its own.
+    assert_eq!(text(&ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N3"],"op":"simplify"}"#)), "Nothing changed: they were like that already.");
+    // A corner stays a corner whatever the tolerance; a wobble goes
+    // once it's within it.
+    assert_eq!(text(&ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N3"],"op":"simplify","tolerance":5}"#)), "Nothing changed: they were like that already.");
+    assert_eq!(text(&ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N5"],"op":"simplify"}"#)), "Nothing changed: they were like that already.");
+    assert_eq!(text(&ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N5"],"op":"simplify","tolerance":0.5}"#)), "Done: N5 <path id=\"wobble\"> (2 anchors). node_info lists a path's anchors.");
+    assert_eq!(node(&mut s, "N5"), "<path id='wobble' d='M2 20 H14'/>");
+    for (args, says) in [
+        (r#""node_ids":["N4"],"op":"simplify""#, "N4 is a <rect>: only a path has segments to do with fewer of (a rect or a circle is as simple as it gets)"),
+        (r#""node_ids":["N2"],"op":"simplify","tolerance":0"#, "tolerance is how far the outline may move: more than nothing"),
+    ] {
+        assert_eq!(refused(&mut s, "path_op", &format!(r#"{{"doc_id":"d1",{args}}}"#)), says);
+    }
 }

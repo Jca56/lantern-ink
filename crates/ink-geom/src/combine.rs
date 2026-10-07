@@ -10,10 +10,14 @@ use std::collections::HashMap;
 use lntrn_math::Vec2;
 
 use crate::FillRule;
-use crate::meet::{SAME, Tangled, boxes_near, meets};
+use crate::meet::{Meet, SAME, Tangled, boxes_near, met};
 use crate::path::{Path, Seg, Subpath};
 use crate::piece::Piece;
 use crate::wind::{outline, winding};
+
+mod stitch;
+
+use stitch::{Edge, loops, neat, tidy};
 
 /// How shapes are made one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,25 +50,6 @@ impl Combine {
 /// loses.
 const TOL: f64 = 1e-9;
 
-/// A cut piece of an outline: the part of piece `source` from `t0` to
-/// `t1`, between two corners.
-#[derive(Clone, Copy, Debug)]
-struct Edge {
-    piece: Piece,
-    source: usize,
-    t0: f64,
-    t1: f64,
-    from: usize,
-    to: usize,
-}
-
-impl Edge {
-    /// The same edge walked the other way.
-    fn turned(&self) -> Edge {
-        Edge { piece: self.piece.reversed(), source: self.source, t0: self.t1, t1: self.t0, from: self.to, to: self.from }
-    }
-}
-
 /// A shape's outline, ready to cut: a cubic that might cross itself is
 /// two that can only cross each other.
 fn prepared(path: &Path) -> Vec<Piece> {
@@ -92,8 +77,12 @@ fn prepared(path: &Path) -> Vec<Piece> {
 
 /// Which corner each of `points` is: points within `within` of each
 /// other (or of one that is) are one corner. And where each corner is:
-/// at one of its `exact` points if it has any.
-fn weld(points: &[Vec2], exact: &[bool], within: f64) -> (Vec<usize>, Vec<Vec2>) {
+/// at the one of its points that is `surest` (the least number): an
+/// end a shape was given with, before a cut along a straight line,
+/// before a cut along a curve. A straight line cut and put together
+/// again is then the very line it was, however near a curve came to
+/// touching it there.
+fn weld(points: &[Vec2], surest: &[u8], within: f64) -> (Vec<usize>, Vec<Vec2>) {
     let mut group: Vec<usize> = (0..points.len()).collect();
     fn root(group: &mut [usize], mut i: usize) -> usize {
         while group[i] != i {
@@ -112,17 +101,17 @@ fn weld(points: &[Vec2], exact: &[bool], within: f64) -> (Vec<usize>, Vec<Vec2>)
             }
         }
     }
-    let (mut corner, mut at, mut is_exact) = (vec![0; points.len()], Vec::new(), Vec::new());
+    let (mut corner, mut at, mut sure) = (vec![0; points.len()], Vec::new(), Vec::new());
     let mut named: HashMap<usize, usize> = HashMap::new();
     for i in 0..points.len() {
         let r = root(&mut group, i);
         let id = *named.entry(r).or_insert_with(|| {
             at.push(points[i]);
-            is_exact.push(exact[i]);
+            sure.push(surest[i]);
             at.len() - 1
         });
-        if exact[i] && !is_exact[id] {
-            (at[id], is_exact[id]) = (points[i], true);
+        if surest[i] < sure[id] {
+            (at[id], sure[id]) = (points[i], surest[i]);
         }
         corner[i] = id;
     }
@@ -137,92 +126,6 @@ fn alike(a: &Edge, b: &Edge, within: f64) -> bool {
     })
 }
 
-/// The way an edge is heading where it starts (`end` false) or ends.
-fn heading(edge: &Edge, end: bool) -> Vec2 {
-    let (at, inward) = if end { (1.0, 0.999) } else { (0.0, 0.001) };
-    let h = edge.piece.heading(at);
-    // A handle of no length leaves it heading nowhere: the way it has
-    // gone a little further in, then.
-    if h.length_squared() > 0.0 { h } else if end { edge.piece.to() - edge.piece.at(inward) } else { edge.piece.at(inward) - edge.piece.from }
-}
-
-/// `edges`, each with what's filled on its left, joined into loops:
-/// at each corner on to the edge that keeps the same filled place on
-/// the left. A loop never passes one corner twice.
-fn loops(edges: &[Edge], corners: usize) -> Result<Vec<Vec<Edge>>, Tangled> {
-    let mut leaving: Vec<Vec<usize>> = vec![Vec::new(); corners];
-    let mut balance = vec![0i32; corners];
-    for (i, e) in edges.iter().enumerate() {
-        leaving[e.from].push(i);
-        balance[e.from] += 1;
-        balance[e.to] -= 1;
-    }
-    // An outline goes on from every corner it comes to.
-    if balance.iter().any(|b| *b != 0) {
-        return Err(Tangled);
-    }
-    let mut used = vec![false; edges.len()];
-    let mut out = Vec::new();
-    for start in 0..edges.len() {
-        if used[start] {
-            continue;
-        }
-        let mut walk: Vec<usize> = Vec::new();
-        let mut next = Some(start);
-        while let Some(i) = next {
-            used[i] = true;
-            walk.push(i);
-            let corner = edges[i].to;
-            // Back at a corner the walk has left before: that much of
-            // it is a loop.
-            if let Some(since) = walk.iter().position(|w| edges[*w].from == corner) {
-                out.push(walk.drain(since..).map(|w| edges[w]).collect());
-            }
-            let Some(&last) = walk.last() else { break };
-            // The first edge clockwise from the way back.
-            let back = (heading(&edges[last], true) * -1.0).angle();
-            let turn = |e: &usize| {
-                let turn = (back - heading(&edges[*e], false).angle()).rem_euclid(std::f64::consts::TAU);
-                if turn == 0.0 { std::f64::consts::TAU } else { turn }
-            };
-            next = leaving[corner].iter().copied().filter(|e| !used[*e]).min_by(|a, b| turn(a).total_cmp(&turn(b)));
-            if next.is_none() {
-                return Err(Tangled);
-            }
-        }
-    }
-    Ok(out)
-}
-
-/// A loop's edges with the cuts that didn't end up mattering taken out
-/// again: two parts of one piece that follow on are that part of it,
-/// and straight lines in one line are one.
-fn tidy(mut edges: Vec<Edge>, sources: &[Piece]) -> Vec<Edge> {
-    let joins = |a: &Edge, b: &Edge| -> Option<Edge> {
-        if a.source == b.source && a.source < sources.len() && a.t1 == b.t0 && (a.t1 > a.t0) == (b.t1 > b.t0) && a.t0 != b.t1 {
-            let whole = sources[a.source].part(a.t0.min(b.t1), a.t0.max(b.t1));
-            let piece = if b.t1 > a.t0 { whole } else { whole.reversed() };
-            return Some(Edge { piece, source: a.source, t0: a.t0, t1: b.t1, from: a.from, to: b.to });
-        }
-        let (da, db) = (a.piece.to() - a.piece.from, b.piece.to() - b.piece.from);
-        let straight = matches!((a.piece.seg, b.piece.seg), (Seg::Line { .. }, Seg::Line { .. }));
-        (straight && da.dot(db) > 0.0 && da.perp_dot(db).abs() <= 1e-12 * da.length() * db.length())
-            .then(|| Edge { piece: Piece::new(a.piece.from, Seg::Line { to: b.piece.to() }), source: usize::MAX, t0: 0.0, t1: 1.0, from: a.from, to: b.to })
-    };
-    // Start at a real corner, so that nothing joins across the start.
-    if let Some(corner) = (0..edges.len()).find(|i| joins(&edges[(i + edges.len() - 1) % edges.len()], &edges[*i]).is_none()) {
-        edges.rotate_left(corner);
-    }
-    let mut out: Vec<Edge> = Vec::with_capacity(edges.len());
-    for edge in edges {
-        match out.last().and_then(|last| joins(last, &edge)) {
-            Some(joined) => *out.last_mut().expect("there is a last") = joined,
-            None => out.push(edge),
-        }
-    }
-    out
-}
-
 /// The shapes made one: each a path and how it's filled. `fine` is the
 /// narrowest thing worth keeping (what a file can't write is nothing):
 /// a loop of the result thinner than that is left out.
@@ -231,6 +134,15 @@ fn tidy(mut edges: Vec<Edge>, sources: &[Piece]) -> Vec<Edge> {
 /// round, and none crosses another, so it fills the same by either
 /// rule. Its segments are the shapes' own, cut where they meet.
 pub fn combine(shapes: &[(&Path, FillRule)], how: Combine, fine: f64) -> Result<Path, Tangled> {
+    combine_giving(shapes, how, fine, fine * 0.25)
+}
+
+/// [`combine`], saying apart how much it may `give`: an edge that
+/// can't be told from another right by it, and is no longer than
+/// this, is taken for one corner. (A stroke's outline is made of
+/// several of these in a row: only the last leaves things out, but
+/// each may give.)
+pub(crate) fn combine_giving(shapes: &[(&Path, FillRule)], how: Combine, fine: f64, give: f64) -> Result<Path, Tangled> {
     let outlines: Vec<Vec<Piece>> = shapes.iter().map(|(path, _)| prepared(path)).collect();
     let sources: Vec<Piece> = outlines.iter().flatten().copied().collect();
     let boxes: Vec<_> = sources.iter().map(Piece::bounds).collect();
@@ -243,14 +155,40 @@ pub fn combine(shapes: &[(&Path, FillRule)], how: Combine, fine: f64) -> Result<
 
     // Where each piece is cut: wherever it meets another.
     let mut cuts: Vec<Vec<f64>> = vec![Vec::new(); sources.len()];
+    let mut shared: Vec<(usize, usize, Meet, Meet)> = Vec::new();
     for i in 0..sources.len() {
         for j in i + 1..sources.len() {
             if boxes_near(&boxes[i], &boxes[j], tol) {
-                for meet in meets(&sources[i], &sources[j], tol)? {
+                let (meets, stretch) = met(&sources[i], &sources[j], tol)?;
+                for meet in meets {
                     cuts[i].push(meet.t);
                     cuts[j].push(meet.u);
                 }
+                shared.extend(stretch.map(|(lo, hi)| (i, j, lo, hi)));
             }
+        }
+    }
+    // Where two pieces are the same line, a cut in one is a cut in the
+    // other: a third line crossing both at a fine angle is found to
+    // cross each somewhere a little different, and their cut pieces
+    // have to match corner for corner to be seen as one.
+    for _ in 0..4 {
+        let mut carried = false;
+        for &(i, j, lo, hi) in &shared {
+            for (from, to, a, b) in [(i, j, lo.t, hi.t), (j, i, lo.u.min(hi.u), lo.u.max(hi.u))] {
+                let across: Vec<f64> = cuts[from]
+                    .iter()
+                    .filter(|t| **t > a && **t < b)
+                    .map(|t| (sources[from].at(*t), sources[to].nearest(sources[from].at(*t))))
+                    .filter(|(p, u)| !cuts[to].iter().chain(&[0.0, 1.0]).any(|known| sources[to].at(*known).distance(*p) <= 4.0 * tol) && sources[to].at(*u).distance(*p) <= tol)
+                    .map(|(_, u)| u)
+                    .collect();
+                carried |= !across.is_empty();
+                cuts[to].extend(across);
+            }
+        }
+        if !carried {
+            break;
         }
     }
     // The cut pieces, and the corners they run between.
@@ -267,33 +205,17 @@ pub fn combine(shapes: &[(&Path, FillRule)], how: Combine, fine: f64) -> Result<
         }
     }
     let ends: Vec<Vec2> = edges.iter().flat_map(|e| [e.piece.from, e.piece.to()]).collect();
-    let exact: Vec<bool> = edges.iter().flat_map(|e| [e.t0 == 0.0, e.t1 == 1.0]).collect();
-    let (corner, at) = weld(&ends, &exact, 8.0 * tol);
+    let surest: Vec<u8> = edges
+        .iter()
+        .flat_map(|e| {
+            let cut = if matches!(e.piece.seg, Seg::Line { .. }) { 1 } else { 2 };
+            [if e.t0 == 0.0 { 0 } else { cut }, if e.t1 == 1.0 { 0 } else { cut }]
+        })
+        .collect();
+    let (corner, at) = weld(&ends, &surest, 8.0 * tol);
     for (i, edge) in edges.iter_mut().enumerate() {
         (edge.from, edge.to) = (corner[2 * i], corner[2 * i + 1]);
     }
-    // An edge that comes to nothing is nothing.
-    edges.retain(|e| {
-        let b = e.piece.bounds();
-        e.from != e.to || b.width().max(b.height()) > 16.0 * tol
-    });
-    // Edges that are the same line (two shapes' shared side) are one.
-    // The same to what's left over when one line is worked out twice:
-    // anything further apart than that is two lines, and is told apart.
-    let floor = 4.0 * tol * SAME;
-    let mut single: Vec<Edge> = Vec::new();
-    let mut between: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
-    for edge in edges {
-        let key = (edge.from.min(edge.to), edge.from.max(edge.to));
-        let known = between.entry(key).or_default();
-        if !known.iter().any(|k| alike(&single[*k], &edge, floor)) {
-            known.push(single.len());
-            single.push(edge);
-        }
-    }
-
-    // Kept: the edges with the result on one side and not the other,
-    // each walked so that the result is on its left.
     let rules: Vec<FillRule> = shapes.iter().map(|(_, rule)| *rule).collect();
     let filled = |p: Vec2, fine: f64| {
         let within: Vec<bool> = outlines
@@ -309,29 +231,106 @@ pub fn combine(shapes: &[(&Path, FillRule)], how: Combine, fine: f64) -> Result<
             .collect();
         how.has(&within)
     };
-    let reach: Vec<_> = single.iter().map(|e| e.piece.bounds()).collect();
+    // What's left over when one line is worked out twice: nearer than
+    // this, two edges can't be told apart by looking.
+    let floor = 4.0 * tol * SAME;
     let mut kept: Vec<Edge> = Vec::new();
-    for (i, edge) in single.iter().enumerate() {
-        // A look to either side of it, from the place along it with
-        // the most room: a quarter of the way to whatever else is
-        // nearest there, so that nothing is stepped over, however thin
-        // the gap.
-        let look = [0.5, 0.25, 0.75, 0.375, 0.625, 0.125, 0.875]
-            .into_iter()
-            .filter_map(|share| {
-                let (mid, way) = (edge.piece.at(share), edge.piece.heading(share));
-                let near = |(j, other): (usize, &Edge)| (j != i && boxes_near(&reach[j], &lntrn_math::Rect::new(mid, mid), tol)).then(|| other.piece.at(other.piece.nearest(mid)).distance(mid));
-                let room = single.iter().enumerate().filter_map(near).fold(tol, f64::min);
-                (way.length_squared() > 0.0 && room > floor).then(|| (room, mid, way.perp() * (0.25 * room / way.length())))
-            })
-            .reduce(|best, next| if next.0 > best.0 { next } else { best })
-            .map(|(room, mid, aside)| (mid, aside, room * 0.0025));
-        let Some((mid, aside, fine)) = look else { return Err(Tangled) };
-        match (filled(mid + aside, fine), filled(mid - aside, fine)) {
-            (true, false) => kept.push(*edge),
-            (false, true) => kept.push(edge.turned()),
-            _ => {}
+    // Usually once through. Again, when edges turned up that can't be
+    // told from their neighbours and are too short to matter: each is
+    // then one corner, not two, and everything is looked at afresh.
+    for _ in 0..8 {
+        // An edge that comes to nothing is nothing.
+        edges.retain(|e| {
+            let b = e.piece.bounds();
+            e.from != e.to || b.width().max(b.height()) > 16.0 * tol
+        });
+        // Edges that are the same line (two shapes' shared side) are
+        // one: between the same two corners, and within `tol` of each
+        // other on the way. Each keeps the others it stands for.
+        let mut single: Vec<Edge> = Vec::new();
+        let mut twins: Vec<Vec<Edge>> = Vec::new();
+        let mut between: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+        for edge in &edges {
+            let key = (edge.from.min(edge.to), edge.from.max(edge.to));
+            let known = between.entry(key).or_default();
+            match known.iter().find(|k| alike(&single[**k], edge, tol)) {
+                Some(&k) => twins[k].push(*edge),
+                None => {
+                    known.push(single.len());
+                    single.push(*edge);
+                    twins.push(Vec::new());
+                }
+            }
         }
+        // How far `p` is from an edge, if within `tol` or so of its box.
+        let reach: Vec<Vec<_>> = single.iter().zip(&twins).map(|(e, twins)| std::iter::once(e).chain(twins).map(|e| e.piece.bounds()).collect()).collect();
+        let far = |edge: &Edge, reach: &lntrn_math::Rect, p: Vec2| boxes_near(reach, &lntrn_math::Rect::new(p, p), 4.0 * tol).then(|| edge.piece.at(edge.piece.nearest(p)).distance(p));
+        // Kept: the edges with the result on one side and not the
+        // other, each walked so that the result is on its left.
+        kept.clear();
+        let mut one: Vec<(usize, usize)> = Vec::new();
+        for (i, edge) in single.iter().enumerate() {
+            // A look to either side of it, from the place along it
+            // with the most room: past every edge it stands for (they
+            // are one line with it), and then a quarter of the way to
+            // whatever else is nearest there, so that nothing is
+            // stepped over, however thin the gap.
+            let look = [0.5, 0.25, 0.75, 0.375, 0.625, 0.125, 0.875]
+                .into_iter()
+                .filter_map(|share| {
+                    let (mid, way) = (edge.piece.at(share), edge.piece.heading(share));
+                    let own = twins[i].iter().zip(&reach[i][1..]).filter_map(|(twin, reach)| far(twin, reach, mid)).fold(0.0, f64::max);
+                    let others = (0..single.len()).filter(|j| *j != i).flat_map(|j| std::iter::once(&single[j]).chain(&twins[j]).zip(&reach[j]));
+                    let room = others.filter_map(|(other, reach)| far(other, reach, mid)).fold(4.0 * tol, f64::min);
+                    (way.length_squared() > 0.0 && room - own > floor && room > 2.0 * own).then(|| (room - own, mid, way.perp() * ((own + 0.25 * (room - own)) / way.length())))
+                })
+                .reduce(|best, next| if next.0 > best.0 { next } else { best })
+                .map(|(room, mid, aside)| (mid, aside, room * 0.0025));
+            let Some((mid, aside, look_fine)) = look else {
+                // Another edge is right by it all the way along and
+                // isn't the same line. Where it's shorter than a file
+                // could say, its two ends are one place.
+                let b = reach[i][0];
+                if b.width().max(b.height()) <= give && edge.from != edge.to {
+                    one.push((edge.from, edge.to));
+                    continue;
+                }
+                return Err(Tangled("an edge has another right by it all the way along that isn't the same line"));
+            };
+            match (filled(mid + aside, look_fine), filled(mid - aside, look_fine)) {
+                (true, false) => kept.push(*edge),
+                (false, true) => kept.push(edge.turned()),
+                _ => {}
+            }
+        }
+        if one.is_empty() {
+            break;
+        }
+        // The corners made one: each takes the lower of the two names.
+        let mut name: Vec<usize> = (0..at.len()).collect();
+        for (a, b) in one {
+            let root = |name: &[usize], mut v: usize| {
+                while name[v] != v {
+                    v = name[v];
+                }
+                v
+            };
+            let (a, b) = (root(&name, a), root(&name, b));
+            name[a.max(b)] = a.min(b);
+        }
+        for edge in &mut edges {
+            for corner in [&mut edge.from, &mut edge.to] {
+                while name[*corner] != *corner {
+                    *corner = name[*corner];
+                }
+            }
+        }
+        // What ran between two corners that are now one is gone, if
+        // it was no longer than they were apart.
+        edges.retain(|e| {
+            let b = e.piece.bounds();
+            e.from != e.to || b.width().max(b.height()) > give
+        });
     }
 
     let mut path = Path::new();
@@ -348,6 +347,7 @@ pub fn combine(shapes: &[(&Path, FillRule)], how: Combine, fine: f64) -> Result<
                 Seg::Arc { arc, .. } => Seg::Arc { arc, to },
             });
         }
+        neat(&mut sub, fine);
         // The line home is the one closing draws.
         if sub.segs.len() > 1 && matches!(sub.segs.last(), Some(Seg::Line { .. })) {
             sub.segs.pop();

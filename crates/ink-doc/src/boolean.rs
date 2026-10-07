@@ -16,13 +16,12 @@ use crate::geometry::to_doc;
 use crate::id::NodeId;
 use crate::kind::Kind;
 use crate::shape::Geometry;
-use crate::style::Style;
 use crate::value::Precision;
 
 impl Document {
     /// The outline `id` is filled within, in its own coordinates, and
     /// the rule it's filled by. Only a shape has one.
-    fn filled(&self, id: NodeId) -> Result<(Path, FillRule), DocError> {
+    pub(crate) fn filled(&self, id: NodeId) -> Result<(Path, FillRule), DocError> {
         let node = self.node(id)?;
         let path = match node.kind {
             Kind::Path => {
@@ -36,13 +35,10 @@ impl Document {
                 Some(geometry) => geometry.path(),
                 None => return invalid(format!("{id}'s numbers can't all be read (one is a percentage, or isn't a number), so there's no saying what it covers")),
             },
-            _ => return invalid(format!("{id} is a <{}>: only shapes (paths, rects, circles, ellipses, polygons) can be combined; for a group, name the shapes in it", node.name)),
+            _ => return invalid(format!("{id} is a <{}>: only shapes (paths, rects, circles, ellipses, lines, polygons) have an outline to work on; for a group, name the shapes in it", node.name)),
         };
         // How it's filled comes down the tree to it.
-        let mut above: Vec<&crate::node::Node> = self.ancestors(id).collect();
-        above.reverse();
-        let style = above.into_iter().chain([node]).fold(Style::default(), |style, node| style.cascade(node));
-        Ok((path, style.fill_rule))
+        Ok((path, self.style_of(id)?.fill_rule))
     }
 
     /// Make the shapes `nodes` one, as `how` says: the first of them

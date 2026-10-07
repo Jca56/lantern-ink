@@ -46,6 +46,11 @@ impl Document {
                     if range.end >= style.len() && rest.trim_end().ends_with(';') {
                         rest.truncate(rest.trim_end().len() - 1);
                     }
+                    // The first of the style takes the space after it
+                    // along: what follows is the first now.
+                    if rest.trim().is_empty() {
+                        at += style[at..].len() - style[at..].trim_start().len();
+                    }
                 }
                 rest.push_str(&style[at..]);
                 let style_changed = self.set_attr(id, "style", if rest.trim().is_empty() { None } else { Some(&rest) })?;
@@ -113,7 +118,7 @@ mod tests {
     #[test]
     fn a_property_taken_off_goes_from_everywhere_it_was_said() {
         assert_eq!(after(r#"stroke-width="2""#, "stroke-width", None), "<path/>");
-        assert_eq!(after(r#"style="fill:red; stroke: blue;""#, "fill", None), r#"<path style=" stroke: blue;"/>"#);
+        assert_eq!(after(r#"style="fill:red; stroke: blue;""#, "fill", None), r#"<path style="stroke: blue;"/>"#, "the first goes with the space after it");
         assert_eq!(after(r#"style="fill:red; stroke: blue""#, "stroke", None), r#"<path style="fill:red"/>"#);
         assert_eq!(after(r#"style="fill:red;stroke:blue;fill:green" fill="black""#, "fill", None), r#"<path style="stroke:blue"/>"#);
         assert_eq!(after(r#"style=" fill : red ; ""#, "fill", None), "<path/>", "a style with nothing left in it goes too");

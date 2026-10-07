@@ -233,7 +233,7 @@ fn a_transform_left_by_another_editor_is_taken_in_when_its_node_is_moved() {
     assert_eq!(through(r#"<g transform="matrix(2 0 0 2 1 1)" clip-path="url(#c)"><path d="M0 0h1"/></g>"#, &[2], shift(1.0, 0.0)), r#"<g transform="matrix(2 0 0 2 2 1)" clip-path="url(#c)"><path d="M0 0h1"/></g>"#);
     // An origin it turned about is worked in, and not left to move it.
     assert_eq!(through(r#"<rect width="4" height="2" transform="rotate(90)" transform-origin="2 1"/>"#, &[2], shift(1.0, 0.0)), r#"<rect width="2" height="4" x="2" y="-1"/>"#);
-    assert_eq!(through(r#"<text transform="scale(2)" style="transform-origin: 1px 1px; fill: red">a</text>"#, &[2], shift(1.0, 0.0)), r#"<text transform="matrix(2 0 0 2 0 -1)" style=" fill: red">a</text>"#);
+    assert_eq!(through(r#"<text transform="scale(2)" style="transform-origin: 1px 1px; fill: red">a</text>"#, &[2], shift(1.0, 0.0)), r#"<text transform="matrix(2 0 0 2 0 -1)" style="fill: red">a</text>"#);
 }
 
 #[test]

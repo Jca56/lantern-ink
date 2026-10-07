@@ -29,8 +29,10 @@ mod hit;
 mod map;
 mod meet;
 pub mod number;
+mod offset;
 mod path;
 mod piece;
+mod simplify;
 mod stroke;
 mod wind;
 
@@ -39,6 +41,7 @@ pub use combine::{Combine, combine};
 pub use data::Parsed;
 pub use flatten::Polyline;
 pub use lntrn_math::{Rect, Vec2};
+pub use offset::outline_stroke;
 pub use meet::{Meet, Tangled, meets};
 pub use path::{ArcTo, Path, Seg, Subpath};
 pub use piece::{Piece, circle_through};

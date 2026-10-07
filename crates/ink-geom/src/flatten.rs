@@ -118,22 +118,73 @@ impl Path {
     /// round or square caps); one with a point that isn't a real number
     /// is left out.
     pub fn flatten(&self, tol: f64) -> Vec<Polyline> {
+        self.flattened(tol, None)
+    }
+
+    /// [`Self::flatten`] for a line that's to be stroked `width` wide,
+    /// so that the stroke's edges are within `tol` of where they should
+    /// be, and not just the line down its middle:
+    ///
+    /// - Each curve has a point right by either end of it as well, so
+    ///   the polyline sets out and arrives the way the curve itself is
+    ///   heading. A cap or a join takes its direction from there:
+    ///   without, a wide stroke's cap on a tight bend is turned by half
+    ///   of what the first chord spans.
+    /// - No chord turns from the one before by more than the stroke's
+    ///   outer edge can take: that edge is half the width further out
+    ///   than the line, and as much more faceted.
+    pub fn flatten_to_stroke(&self, tol: f64, width: f64) -> Vec<Polyline> {
+        self.flattened(tol, Some(if width.is_finite() { width.abs() * 0.5 } else { 0.0 }))
+    }
+
+    fn flattened(&self, tol: f64, stroked: Option<f64>) -> Vec<Polyline> {
+        /// How far along a curve the points by its ends are.
+        const BY: f64 = 1.0 / 1024.0;
         let tol = sane(tol);
+        // The most one chord may turn from the last: where the edge a
+        // half-width out strays half of `tol` from round.
+        let widest = stroked.filter(|half| *half > 0.0).map(|half| (2.0 * tol / half).sqrt());
         let mut out = Vec::new();
         let mut budget = MAX_POINTS;
         for sub in &self.subpaths {
             let mut points = vec![sub.start];
             let mut at = sub.start;
             for seg in &sub.segs {
-                match *seg {
-                    Seg::Line { to } => points.push(to),
-                    Seg::Quad { c, to } => quad(at, c, to, tol, &mut points),
-                    Seg::Cubic { c1, c2, to } => cubic(at, c1, c2, to, tol, &mut points),
-                    Seg::Arc { ref arc, to } => match shape(at, arc, to) {
-                        Shape::Nothing => {}
-                        Shape::Line => points.push(to),
-                        Shape::Arc(centered) => ellipse_arc(&centered, to, tol, &mut points),
-                    },
+                let curve = stroked.is_some() && !matches!(seg, Seg::Line { .. });
+                let piece = crate::piece::Piece::new(at, *seg);
+                let before = points.len();
+                let mut fine = if curve { tol * 0.5 } else { tol };
+                for _ in 0..8 {
+                    points.truncate(before);
+                    if curve {
+                        points.push(piece.at(BY));
+                    }
+                    let first = points.len();
+                    match *seg {
+                        Seg::Line { to } => points.push(to),
+                        Seg::Quad { c, to } => quad(at, c, to, fine, &mut points),
+                        Seg::Cubic { c1, c2, to } => cubic(at, c1, c2, to, fine, &mut points),
+                        Seg::Arc { ref arc, to } => match shape(at, arc, to) {
+                            Shape::Nothing => {}
+                            Shape::Line => points.push(to),
+                            Shape::Arc(centered) => ellipse_arc(&centered, to, fine, &mut points),
+                        },
+                    }
+                    if curve && points.len() > first {
+                        points.insert(points.len() - 1, piece.at(1.0 - BY));
+                    }
+                    // Finer, while any chord turns too far for the
+                    // stroke's edge.
+                    let turns_too_far = widest.filter(|_| curve).is_some_and(|widest| {
+                        points[before - 1..].windows(3).any(|w| {
+                            let (a, b) = (w[1] - w[0], w[2] - w[1]);
+                            a.perp_dot(b).atan2(a.dot(b)).abs() > widest
+                        })
+                    });
+                    if !turns_too_far || points.len() - before > MAX_SEGMENTS {
+                        break;
+                    }
+                    fine *= 0.25;
                 }
                 at = seg.to();
                 if points.len() > budget {

@@ -5,8 +5,8 @@
 use ink_core::ink_doc::outline::AnchorId;
 use ink_core::ink_doc::pathedit::{Along, PathEdit};
 use ink_core::ink_doc::paths::{NewAnchor, NewRun};
-use ink_core::ink_doc::geometry::page_bounds;
-use ink_core::ink_doc::{Document, Kind};
+use ink_core::ink_doc::geometry::{page_bounds, path_of};
+use ink_core::ink_doc::{Document, Kind, Precision};
 use ink_core::{Applied, Command, NodeId};
 use ink_geom::{Combine, Vec2};
 use lntrn_data::{Doc, Map};
@@ -57,7 +57,7 @@ pub(super) fn tools() -> Vec<Entry> {
         edit(
             "path_op",
             "Path operation",
-            "Work on whole outlines. to_path: each shape (a rect, a circle, an ellipse, a line, a polyline, a polygon) becomes a <path> that draws the same outline, a rounded corner still an arc, with everything else about it as it was. reverse: each path runs the other way. union, subtract, intersect and exclude make several shapes one, by what their fills cover wherever each shows in the drawing: union is what any of them covers, intersect what all of them do, subtract the first less the others, exclude what an odd number cover (two shapes less their overlap). The first node named takes the result as its outline (a <path> now) and keeps its place, its paint and its id; the others are deleted. Curves stay the curves they were, cut where the outlines cross: nothing is flattened. A union of one shape makes its outline simple where it crosses itself.",
+            "Work on whole outlines. to_path: each shape (a rect, a circle, an ellipse, a line, a polyline, a polygon) becomes a <path> that draws the same outline, a rounded corner still an arc, with everything else about it as it was. reverse: each path runs the other way. union, subtract, intersect and exclude make several shapes one, by what their fills cover wherever each shows in the drawing: union is what any of them covers, intersect what all of them do, subtract the first less the others, exclude what an odd number cover (two shapes less their overlap). The first node named takes the result as its outline (a <path> now) and keeps its place, its paint and its id; the others are deleted. Curves stay the curves they were, cut where the outlines cross: nothing is flattened. A union of one shape makes its outline simple where it crosses itself. outline: each shape's stroke becomes a shape of its own, a path covering what the stroke covered (its width, caps, joins and dashes), filled with what the stroke was painted with; a shape with no fill becomes that path, and one with a fill keeps it and gets the outline as a new path over it. A stroke's edge beside a straight line or a circle's arc is a line or an arc still; beside any other curve it's fitted with curves, to within `tolerance`. simplify: each path is said with as few segments as keep its outline within `tolerance` of where it was (in its own units; by default a five-hundredth of its size): runs of short lines become the arc or the curve they were drawn round, a curve in pieces is one curve again, corners stay corners, and the anchors left keep their ids.",
             op_schema,
             lntrn_mcp::Kind::Set,
             op,
@@ -310,7 +310,14 @@ fn outlined(doc: &Document, applied: &Applied) -> Reply {
 }
 
 fn op_schema() -> Doc {
-    common::edit(&["node_ids", "op"], vec![("node_ids", schema::list(common::node_id("A node"), "The shapes or paths; for union, subtract, intersect and exclude, the one to keep first")), ("op", schema::one_of(&["to_path", "reverse", "union", "subtract", "intersect", "exclude"], "What to do"))])
+    common::edit(
+        &["node_ids", "op"],
+        vec![
+            ("node_ids", schema::list(common::node_id("A node"), "The shapes or paths; for union, subtract, intersect and exclude, the one to keep first")),
+            ("op", schema::one_of(&["to_path", "reverse", "union", "subtract", "intersect", "exclude", "outline", "simplify"], "What to do")),
+            ("tolerance", schema::number(0.0, 1e9, "simplify: how far the outline may move, in the path's own units (default: a five-hundredth of its size). outline: how near the stroke's true edge the outline's curves keep (default: a two-hundredth of the stroke's width; finer makes more anchors)")),
+        ],
+    )
 }
 
 fn op(doc: &Document, input: &In) -> Result<Command, ToolError> {
@@ -330,7 +337,24 @@ fn op(doc: &Document, input: &In) -> Result<Command, ToolError> {
         "subtract" => Ok(Command::Boolean { nodes, how: Combine::Subtract }),
         "intersect" => Ok(Command::Boolean { nodes, how: Combine::Intersect }),
         "exclude" => Ok(Command::Boolean { nodes, how: Combine::Exclude }),
-        other => fail(format!("op is to_path, reverse, union, subtract, intersect or exclude, not \"{other}\"")),
+        "outline" => {
+            let tolerance = input.args.opt_f64("tolerance")?;
+            if tolerance.is_some_and(|t| !(t > 0.0 && t.is_finite())) {
+                return fail("tolerance is how near the stroke's edge the outline keeps: more than nothing");
+            }
+            Ok(Command::OutlineStroke { nodes, tolerance })
+        }
+        "simplify" => {
+            let said = input.args.opt_f64("tolerance")?;
+            if said.is_some_and(|t| !(t > 0.0 && t.is_finite())) {
+                return fail("tolerance is how far the outline may move: more than nothing");
+            }
+            // Each by its own size, unless told.
+            let fine = Precision::of(doc).within() * 2.0;
+            let by_size = |id: &NodeId| doc.get(*id).and_then(|node| path_of(node).bounds()).map_or(fine, |b| (b.size().length() / 500.0).max(fine));
+            Ok(Command::Batch(nodes.iter().map(|id| Command::Simplify { nodes: vec![*id], tolerance: said.unwrap_or_else(|| by_size(id)) }).collect()))
+        }
+        other => fail(format!("op is to_path, reverse, union, subtract, intersect, exclude, outline or simplify, not \"{other}\"")),
     }
 }
 
@@ -338,11 +362,26 @@ fn operated(doc: &Document, applied: &Applied) -> Reply {
     if applied.changed.is_empty() {
         return Reply::text("Nothing changed: they were like that already.");
     }
-    let said: Vec<String> = applied.changed.iter().filter_map(|id| doc.get(*id)).map(|n| format!("{} {}", n.id, tag(n))).collect();
+    // Each with how many anchors it has now.
+    let said: Vec<String> = applied
+        .changed
+        .iter()
+        .filter_map(|id| doc.get(*id))
+        .map(|n| match doc.outline(n.id).map(|o| o.anchors().count()) {
+            Some(count) => format!("{} {} ({count} anchor{})", n.id, tag(n), if count == 1 { "" } else { "s" }),
+            None => format!("{} {}", n.id, tag(n)),
+        })
+        .collect();
     let mut m = Map::new();
     m.insert("node_ids", Doc::List(applied.changed.iter().map(|id| id.to_string().into()).collect()));
+    if !applied.created.is_empty() {
+        // Strokes outlined beside the shapes that keep their fills.
+        let new: Vec<String> = applied.created.iter().filter_map(|id| doc.get(*id)).map(|n| format!("{} {}", n.id, tag(n))).collect();
+        m.insert("created", Doc::List(applied.created.iter().map(|id| id.to_string().into()).collect()));
+        return Reply::text(format!("Done: {}. A shape that had a fill keeps it, and its stroke's outline is a new path beside it: {}.", said.join(", "), new.join(", "))).data(Doc::Map(m));
+    }
     if applied.removed.is_empty() {
-        return Reply::text(format!("Done: {} (node_info lists a path's anchors).", said.join(", "))).data(Doc::Map(m));
+        return Reply::text(format!("Done: {}. node_info lists a path's anchors.", said.join(", "))).data(Doc::Map(m));
     }
     // Shapes made one: where the one that's left shows now.
     let at = applied.changed.first().and_then(|id| page_bounds(doc).get(id).map(rect)).map_or(String::new(), |at| format!(" at {at}"));

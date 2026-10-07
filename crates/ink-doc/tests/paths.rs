@@ -295,7 +295,7 @@ mod boolean {
         for (nodes, how, says) in [
             (&[2u64, 3][..], Combine::Intersect, "the shapes don't overlap anywhere, so nothing would be left: nothing was changed"),
             (&[2, 7], Combine::Subtract, "the others cover all of the first shape, so nothing would be left: nothing was changed (node_delete takes shapes out)"),
-            (&[2, 4], Combine::Union, "N4 is a <g>: only shapes (paths, rects, circles, ellipses, polygons) can be combined; for a group, name the shapes in it"),
+            (&[2, 4], Combine::Union, "N4 is a <g>: only shapes (paths, rects, circles, ellipses, lines, polygons) have an outline to work on; for a group, name the shapes in it"),
             (&[2, 5], Combine::Union, "N5's path data can't all be read, so there's no saying what it covers: set its d to path data that reads first"),
             (&[6, 2], Combine::Union, "N6's transform squashes it flat, so nothing can be worked out in its coordinates: give it a transform that can be undone first"),
             (&[2, 2], Combine::Union, "N2 is named twice: a shape is combined with others, not with itself"),
@@ -307,5 +307,59 @@ mod boolean {
         let mut d = doc(body);
         assert_eq!(d.apply(&Command::Boolean { nodes: vec![N(2), N(99)], how: Combine::Union }), Err(DocError::NoSuchNode(N(99))));
         assert!(d.get(N(2)).is_some_and(|n| n.name == "rect"), "nothing of a refused one is left");
+    }
+}
+
+mod stroking {
+    use ink_doc::{Command, DocId, Document, NodeId};
+
+    const N: fn(u64) -> NodeId = NodeId;
+
+    fn outlined(body: &str, nodes: &[u64]) -> Result<(String, Vec<NodeId>), String> {
+        let mut d = Document::parse(DocId(1), &format!("<svg viewBox=\"0 0 24 24\">\n{body}\n</svg>\n")).unwrap();
+        let applied = d.apply(&Command::OutlineStroke { nodes: nodes.iter().map(|n| N(*n)).collect(), tolerance: None }).map_err(|e| e.to_string())?;
+        assert_eq!(applied.changed, nodes.iter().map(|n| N(*n)).collect::<Vec<_>>());
+        Ok((d.to_svg().lines().skip(1).take_while(|l| *l != "</svg>").collect::<Vec<_>>().join("\n"), applied.created))
+    }
+
+    #[test]
+    fn a_line_becomes_the_shape_of_its_stroke() {
+        // No fill: the node itself is the outline now, filled with what
+        // the stroke was painted with, where it said so.
+        let (made, new) = outlined("  <path id=\"rule\" d=\"M4 12 H20\" fill=\"none\" stroke=\"#ffc800\" stroke-width=\"2\" stroke-linecap=\"round\"/>", &[2]).unwrap();
+        assert_eq!(made, "  <path id=\"rule\" d=\"M20 13 H4 A1 1 0 0 1 3 12 A1 1 0 0 1 4 11 H20 A1 1 0 0 1 21 12 A1 1 0 0 1 20 13 Z\" fill=\"#ffc800\" stroke=\"none\"/>");
+        assert!(new.is_empty());
+        // A <line> is made a path; its stroke came from its group, and
+        // its style says how it was drawn.
+        let grouped = "  <g stroke=\"red\" stroke-opacity=\"0.5\">\n    <line x1=\"4\" y1=\"4\" x2=\"4\" y2=\"10\" style=\"stroke-width: 2; fill: none\"/>\n  </g>";
+        let (made, _) = outlined(grouped, &[3]).unwrap();
+        assert_eq!(made, "  <g stroke=\"red\" stroke-opacity=\"0.5\">\n    <path d=\"M3 10 V4 H5 V10 Z\" style=\"fill: red\" stroke=\"none\" fill-opacity=\"0.5\"/>\n  </g>");
+    }
+
+    #[test]
+    fn a_shape_with_a_fill_keeps_it() {
+        // The ring is a new path over the disc, which has no stroke now.
+        let coin = "  <circle id=\"coin\" cx=\"12\" cy=\"12\" r=\"6\" fill=\"#ffc800\" stroke=\"#12100e\" stroke-width=\"2\"/>";
+        let (made, new) = outlined(coin, &[2]).unwrap();
+        assert_eq!(made, "  <circle id=\"coin\" cx=\"12\" cy=\"12\" r=\"6\" fill=\"#ffc800\" stroke=\"none\"/>\n  <path id=\"coin-2\" d=\"M12 17 A5 5 0 0 0 17 12 A5 5 0 0 0 12 7 A5 5 0 0 0 7 12 A5 5 0 0 0 12 17 Z M19 12 A7 7 0 0 1 12 19 A7 7 0 0 1 5 12 A7 7 0 0 1 12 5 A7 7 0 0 1 19 12 Z\" fill=\"#12100e\" stroke=\"none\"/>");
+        assert_eq!(new, [N(3)]);
+        // Under it, where strokes are painted first.
+        let (made, _) = outlined(&coin.replace("stroke-width=\"2\"", "stroke-width=\"2\" paint-order=\"stroke\""), &[2]).unwrap();
+        assert!(made.starts_with("  <path id=\"coin-2\" d=\"M12 17 ") && made.ends_with("\n  <circle id=\"coin\" cx=\"12\" cy=\"12\" r=\"6\" fill=\"#ffc800\" stroke=\"none\" paint-order=\"stroke\"/>"), "{made}");
+    }
+
+    #[test]
+    fn what_has_no_stroke_to_outline_says_so() {
+        let body = "  <rect id=\"plain\" width=\"4\" height=\"4\"/>\n  <rect id=\"thin\" width=\"4\" height=\"4\" stroke=\"red\" stroke-width=\"0\"/>\n  <g id=\"g\" stroke=\"red\"/>\n  <path id=\"dot\" d=\"M5 5 L5 5\" stroke=\"red\"/>";
+        for (node, says) in [
+            (2u64, "N2 has no stroke to outline (its stroke is none, or has no width): node_style gives it one"),
+            (3, "N3 has no stroke to outline (its stroke is none, or has no width): node_style gives it one"),
+            (4, "N4 is a <g>: only shapes (paths, rects, circles, ellipses, lines, polygons) have an outline to work on; for a group, name the shapes in it"),
+            (5, "N5's stroke covers nothing (its line has no length, or its dashes are all gaps): nothing was changed"),
+            (99, "no node N99 in this document"),
+        ] {
+            assert_eq!(outlined(body, &[node]).unwrap_err(), says);
+        }
+        assert_eq!(outlined(body, &[]).unwrap_err(), "there's no stroke to outline: name at least one shape");
     }
 }

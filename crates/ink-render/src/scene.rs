@@ -14,7 +14,7 @@ use ink_doc::length::unit;
 use ink_doc::refs::Ids;
 use ink_doc::style::{Paint as Ink, Style, fill_rule, prop};
 use ink_doc::{Document, Kind, Node, geometry, transform};
-use ink_geom::{Affine, FillRule, Polyline, Rect, Vec2, stroke};
+use ink_geom::{Affine, FillRule, Polyline, Rect, Stroke, Vec2, stroke};
 
 use crate::filter::{self, Stage};
 use crate::paint::{Paint, rgba};
@@ -241,7 +241,10 @@ impl<'a> Builder<'a> {
                 items.push(Item::Fill { shape: (polygons(&lines, &ctm), st.fill_rule), paint, alpha: (st.fill_opacity * alpha) as f32 });
             }
             if !filling && strokes && let Some(paint) = self.paint(&st.stroke, path.bounds(), &ctm) {
-                let outline: Vec<Vec<Vec2>> = stroke(&lines, &st.line, tol).iter().map(|poly| poly.iter().map(|p| ctm.apply(*p)).collect()).collect();
+                // Dashes are cut from the curves themselves, and the
+                // line flattened as its stroke's edges need it.
+                let whole = Stroke { dashes: Vec::new(), ..st.line.clone() };
+                let outline: Vec<Vec<Vec2>> = stroke(&path.dashed(&st.line).flatten_to_stroke(tol, st.line.width), &whole, tol).iter().map(|poly| poly.iter().map(|p| ctm.apply(*p)).collect()).collect();
                 items.push(Item::Fill { shape: (outline, FillRule::NonZero), paint, alpha: (st.stroke_opacity * alpha) as f32 });
             }
         }

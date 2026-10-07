@@ -3,6 +3,8 @@
 use lntrn_math::Vec2;
 
 use crate::flatten::Polyline;
+use crate::path::{Path, Seg, Subpath};
+use crate::piece::Piece;
 use crate::stroke::Stroke;
 
 /// The most dashes one line is cut into; a finer pattern is drawn solid,
@@ -81,6 +83,97 @@ pub(crate) fn dashed(pts: &[Vec2], closed: bool, st: &Stroke) -> Option<Vec<Poly
         pieces.push(cur);
     }
     Some(pieces.into_iter().map(|points| Polyline { points, closed: false }).collect())
+}
+
+impl Path {
+    /// The path as `st` dashes it: each dash a subpath of its own, cut
+    /// from the curves themselves, so a dash is as long along a curve
+    /// as it is along a line and ends square to it. The path as it is
+    /// when `st` has no dashes (or too many to draw).
+    pub fn dashed(&self, st: &Stroke) -> Path {
+        if pattern(&st.dashes).is_none() {
+            return self.clone();
+        }
+        let mut out = Path::new();
+        for sub in &self.subpaths {
+            let mut pieces: Vec<Piece> = Vec::new();
+            let mut at = sub.start;
+            for seg in &sub.segs {
+                pieces.push(Piece::new(at, *seg));
+                at = seg.to();
+            }
+            if sub.closed && at != sub.start {
+                pieces.push(Piece::new(at, Seg::Line { to: sub.start }));
+            }
+            match dashed_pieces(&pieces, sub.closed, st) {
+                Some(dashes) => out.subpaths.extend(dashes.into_iter().filter_map(|(run, closed)| Some(Subpath { start: run.first()?.from, segs: run.iter().map(|p| p.seg).collect(), closed }))),
+                None => out.subpaths.push(sub.clone()),
+            }
+        }
+        out
+    }
+}
+
+/// A run of pieces cut into its dashes, curves staying curves: each
+/// dash a run of its own, open (or the whole run, closed, when one
+/// dash goes all the way round). `None` when it's stroked whole. A dash
+/// of no length is one piece of no length: a dot, under a round cap.
+pub(crate) fn dashed_pieces(run: &[Piece], closed: bool, st: &Stroke) -> Option<Vec<(Vec<Piece>, bool)>> {
+    let pat = pattern(&st.dashes)?;
+    let lengths: Vec<f64> = run.iter().map(Piece::length).collect();
+    let (sum, total): (f64, f64) = (pat.iter().sum(), lengths.iter().sum());
+    if run.is_empty() || total.is_nan() || total <= 0.0 || !total.is_finite() || !sum.is_finite() || total / sum * pat.len() as f64 > MAX_DASHES {
+        return None;
+    }
+    let mut phase = if st.dash_offset.is_finite() { st.dash_offset.rem_euclid(sum) } else { 0.0 };
+    let mut idx = 0;
+    while phase > 0.0 && phase >= pat[idx] {
+        phase -= pat[idx];
+        idx = (idx + 1) % pat.len();
+    }
+    let mut left = pat[idx] - phase;
+    let mut on = idx % 2 == 0;
+    let starts_on = on;
+    let mut dashes: Vec<Vec<Piece>> = Vec::new();
+    let mut cur: Vec<Piece> = Vec::new();
+    // A cut that lands on a corner to within rounding is at the corner:
+    // not a sliver of the next piece, heading wherever rounding says.
+    let hair = 1e-12 * total;
+    for (piece, &len) in run.iter().zip(&lengths) {
+        // How much of this piece is behind the cut, and where that is.
+        let (mut gone, mut from) = (0.0, 0.0);
+        if left <= hair && left > 0.0 {
+            left = 0.0;
+        }
+        while len - gone > left + hair {
+            gone += left;
+            let to = piece.along(gone);
+            if on {
+                cur.push(piece.part(from, to));
+                dashes.push(std::mem::take(&mut cur));
+            }
+            from = to;
+            idx = (idx + 1) % pat.len();
+            left = pat[idx];
+            on = !on;
+        }
+        left = (left - (len - gone)).max(0.0);
+        if on && from < 1.0 {
+            cur.push(piece.part(from, 1.0));
+        }
+    }
+    if on && closed && starts_on {
+        match dashes.first_mut() {
+            None => return Some(vec![(run.to_vec(), true)]),
+            Some(first) => {
+                cur.append(first);
+                *first = cur;
+            }
+        }
+    } else if on && !cur.is_empty() {
+        dashes.push(cur);
+    }
+    Some(dashes.into_iter().map(|pieces| (pieces, false)).collect())
 }
 
 #[cfg(test)]

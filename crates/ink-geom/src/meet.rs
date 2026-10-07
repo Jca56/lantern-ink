@@ -21,8 +21,9 @@ pub struct Meet {
 
 /// Two outlines lie on each other in a way that can't be worked out: no
 /// answer is better than a wrong one.
+/// With what it was that couldn't be: for whoever looks into it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Tangled;
+pub struct Tangled(pub &'static str);
 
 /// The most looking one pair of pieces gets: two that cross a handful
 /// of times take a few hundred looks.
@@ -117,7 +118,7 @@ fn line_to_box(p0: Vec2, p1: Vec2, r: &Rect) -> f64 {
 /// Every place the parts `a` and `b` might meet, onto `out`: each to
 /// be looked at closely after.
 fn search(a: &Part, b: &Part, tol: f64, out: &mut Vec<Meet>, budget: &mut u32) -> Result<(), Tangled> {
-    *budget = budget.checked_sub(1).ok_or(Tangled)?;
+    *budget = budget.checked_sub(1).ok_or(Tangled("two pieces lie along each other without being the same line"))?;
     if !boxes_near(&a.bounds, &b.bounds, tol) {
         return Ok(());
     }
@@ -230,8 +231,10 @@ fn settle(a: &Piece, b: &Piece, from: Meet, tol: f64) -> (Meet, f64) {
 }
 
 /// The stretch `a` and `b` share, if the ends found on each other
-/// (`ends`) are the ends of one: they are the same line all the way
-/// between.
+/// (`ends`) are the ends of one: they are within `tol` of each other
+/// all the way between, which is the same line as far as anything
+/// here can tell (and if they cross somewhere along it, at an angle
+/// too fine to see, that is neither here nor there).
 fn stretch(a: &Piece, b: &Piece, ends: &[Meet], tol: f64) -> Option<(Meet, Meet)> {
     let lo = *ends.iter().min_by(|x, y| x.t.total_cmp(&y.t))?;
     let hi = *ends.iter().max_by(|x, y| x.t.total_cmp(&y.t))?;
@@ -240,7 +243,7 @@ fn stretch(a: &Piece, b: &Piece, ends: &[Meet], tol: f64) -> Option<(Meet, Meet)
     }
     let together = [0.25, 0.5, 0.75].into_iter().all(|share| {
         let p = a.at(lo.t + (hi.t - lo.t) * share);
-        b.at(b.nearest(p)).distance(p) <= tol * SAME
+        b.at(b.nearest(p)).distance(p) <= tol
     });
     together.then_some((lo, hi))
 }
@@ -250,8 +253,18 @@ fn stretch(a: &Piece, b: &Piece, ends: &[Meet], tol: f64) -> Option<(Meet, Meet)
 /// both ends of any stretch where they're the same line. A meet at an
 /// end of either piece says exactly 0 or 1 for it.
 pub fn meets(a: &Piece, b: &Piece, tol: f64) -> Result<Vec<Meet>, Tangled> {
+    met(a, b, tol).map(|(meets, _)| meets)
+}
+
+/// Where two pieces meet, and the two ends of the stretch along which
+/// they're the same line, if there is one.
+pub(crate) type Met = (Vec<Meet>, Option<(Meet, Meet)>);
+
+/// [`meets`], and the stretch along which the two are the same line,
+/// if there is one: its two ends, the first the earlier along `a`.
+pub(crate) fn met(a: &Piece, b: &Piece, tol: f64) -> Result<Met, Tangled> {
     if !boxes_near(&a.bounds(), &b.bounds(), tol) {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), None));
     }
     // An end of one lying on the other is a meet at exactly that end.
     let mut found: Vec<Meet> = Vec::new();
@@ -274,7 +287,8 @@ pub fn meets(a: &Piece, b: &Piece, tol: f64) -> Result<Vec<Meet>, Tangled> {
     // each piece is looked through.
     let mut maybe = Vec::new();
     let mut budget = BUDGET;
-    match stretch(a, b, &found, tol) {
+    let shared = stretch(a, b, &found, tol);
+    match shared {
         Some((lo, hi)) => {
             found.retain(|m| *m == lo || *m == hi);
             let (u0, u1) = (lo.u.min(hi.u), lo.u.max(hi.u));
@@ -367,7 +381,7 @@ pub fn meets(a: &Piece, b: &Piece, tol: f64) -> Result<Vec<Meet>, Tangled> {
         }
     }
     out.sort_by(|x, y| x.t.total_cmp(&y.t).then(x.u.total_cmp(&y.u)));
-    Ok(out)
+    Ok((out, shared))
 }
 
 #[cfg(test)]
