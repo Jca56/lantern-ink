@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150" width="200" height="150" font-family="Ink Test">
+  <!-- Set in the tests' own font (tests/fonts): boxes for letters, a ring
+       for an o, so every edge here is a known number. -->
+  <defs>
+    <linearGradient id="across">
+      <stop offset="0" stop-color="#e63"/>
+      <stop offset="1" stop-color="#36e"/>
+    </linearGradient>
+    <linearGradient id="down" x2="0" y2="1">
+      <stop offset="0" stop-color="#fd4"/>
+      <stop offset="1" stop-color="#2a6"/>
+    </linearGradient>
+    <clipPath id="word">
+      <text x="118" y="142" font-size="30" font-weight="bold">HO</text>
+    </clipPath>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="1.5" dy="2" stdDeviation="1.2" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+  <rect width="200" height="150" fill="#f4f1ea"/>
+  <text x="10" y="30" font-size="24" fill="#223">Hop on</text>
+  <text x="190" y="26" font-size="10" letter-spacing="2" text-anchor="end" fill="#555" transform="rotate(-8 190 26)">spaced out</text>
+  <text x="100" y="58" font-size="20" font-weight="bold" text-anchor="middle" fill="url(#across)">HOOP 2026</text>
+  <text x="10" y="80" font-size="12" fill="#223">Hi <tspan fill="#c33">pop</tspan> on<tspan x="10" dy="1.3em" fill="none" stroke="#06c" stroke-width="0.8">Open lines</tspan>
+    <tspan x="10" dy="1.3em" font-size="8" word-spacing="4">a b c. d-e</tspan></text>
+  <path d="M112 84 H196" stroke="#c33" stroke-width="0.5"/>
+  <text x="114" y="84" font-size="14" dominant-baseline="central" fill="#223">on<tspan dx="3" dominant-baseline="hanging" fill="#06c">top</tspan></text>
+  <text x="170" y="84" font-size="14" dominant-baseline="text-after-edge" fill="#2a6">up</text>
+  <text x="14" y="140" font-size="26" fill="#fc0" stroke="#000" stroke-width="2" paint-order="stroke" opacity="0.6">Op</text>
+  <text x="62" y="138" font-size="22" fill="#36e" filter="url(#shadow)">Io</text>
+  <rect x="112" y="112" width="84" height="36" fill="url(#down)" clip-path="url(#word)"/>
+  <text x="1 2 3" y="100">set one by one: not drawn</text>
+</svg>

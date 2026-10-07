@@ -13,8 +13,8 @@ use ink_doc::gradient::{Gradient, Units};
 use ink_doc::length::unit;
 use ink_doc::refs::Ids;
 use ink_doc::style::{Paint as Ink, Style, fill_rule, prop};
-use ink_doc::{Document, Kind, Node, geometry, transform};
-use ink_geom::{Affine, FillRule, Polyline, Rect, Stroke, Vec2, stroke};
+use ink_doc::{Document, Kind, Node, geometry, text, transform};
+use ink_geom::{Affine, FillRule, Path, Polyline, Rect, Stroke, Vec2, stroke};
 
 use crate::filter::{self, Stage};
 use crate::paint::{Paint, rgba};
@@ -103,10 +103,32 @@ pub(crate) fn fitted(items: Vec<Item<Polys>>, fit: &impl Fn(Polys) -> Option<Sha
         .collect()
 }
 
-/// Whether `node` is drawn at all: a group or a shape, and not
-/// `display: none`. (Text, images and `<use>` aren't drawn yet.)
+/// Whether `node` is drawn at all: a group, a shape or a text, and not
+/// `display: none`. (Images and `<use>` aren't drawn yet.)
 fn is_drawn(node: &Node) -> bool {
-    (node.kind.is_group() || node.kind.is_shape()) && prop(node, "display") != Some("none")
+    (node.kind.is_group() || node.kind.is_shape() || node.kind == Kind::Text) && prop(node, "display") != Some("none")
+}
+
+/// An outline a node paints: a shape's own, or one element's glyphs of
+/// a text.
+struct Piece {
+    path: Path,
+    lines: Vec<Polyline>,
+    /// How it's painted, where that isn't how its node is: a `<tspan>`
+    /// with paint of its own.
+    style: Option<Style>,
+    fills: bool,
+    strokes: bool,
+}
+
+impl Piece {
+    /// `path`, painted as `own` says (or, with none, as `node` says).
+    fn new(path: Path, own: Option<Style>, node: &Style, tol: f64) -> Piece {
+        let st = own.as_ref().unwrap_or(node);
+        let lines = path.flatten(tol);
+        let shows = st.visible && !lines.is_empty();
+        Piece { fills: shows && st.fill != Ink::None, strokes: shows && st.stroke != Ink::None && st.line.width > 0.0, path, lines, style: own }
+    }
 }
 
 /// The lines of `lines` with enough points to enclose anything, through
@@ -166,8 +188,11 @@ impl<'a> Builder<'a> {
     }
 
     /// The box around what `node` draws (strokes aside), in its own
-    /// coordinates.
+    /// coordinates. A text's is around its glyphs' cells.
     fn bbox(&self, node: &Node) -> Option<Rect> {
+        if node.kind == Kind::Text {
+            return text::lay(self.doc, node, self.view).ok().and_then(|laid| laid.cells);
+        }
         let mut all = geometry::path_of(node).bounds();
         for child in node.elements().filter_map(|id| self.doc.get(id)).filter(|c| is_drawn(c)) {
             let Some(b) = self.bbox(child) else { continue };
@@ -210,15 +235,26 @@ impl<'a> Builder<'a> {
             return;
         }
         let tol = TOLERANCE / stretch;
-        let path = geometry::path_of(node);
-        let lines = path.flatten(tol);
-        let fills = st.visible && !lines.is_empty() && st.fill != Ink::None;
-        let strokes = st.visible && !lines.is_empty() && st.stroke != Ink::None && st.line.width > 0.0;
+        // What it paints itself, and the box its paint is measured
+        // across. A text that can't be set isn't drawn.
+        let is_text = node.kind == Kind::Text;
+        let (pieces, own_box) = if is_text {
+            let laid = text::lay(doc, node, self.view).unwrap_or_default();
+            // Glyphs are outlines made to be filled one way.
+            let painted = |run: text::Run| Piece::new(run.outline, Some(Style { fill_rule: FillRule::NonZero, ..text::style_of(doc, node, &st, run.node) }), &st, tol);
+            (laid.runs.into_iter().map(painted).collect(), laid.cells)
+        } else {
+            let path = geometry::path_of(node);
+            let own_box = path.bounds();
+            (vec![Piece::new(path, None, &st, tol)], own_box)
+        };
+        let paints = pieces.iter().map(|piece| usize::from(piece.fills) + usize::from(piece.strokes)).sum::<usize>();
+        let bbox = |builder: &Builder| if is_text { own_box } else { builder.bbox(node) };
         // A filter that can be drawn; one with no region to show in
         // shows nothing.
         let said = self.ids.target(doc, node, "filter", Kind::Filter).and_then(|f| Filter::of(doc, f));
         let fitted = match &said {
-            Some(said) => match self.bbox(node).and_then(|b| filter::fit(said, b, &ctm, self.view)) {
+            Some(said) => match bbox(self).and_then(|b| filter::fit(said, b, &ctm, self.view)) {
                 Some(fitted) => Some(fitted),
                 None => return,
             },
@@ -227,7 +263,7 @@ impl<'a> Builder<'a> {
         let clip = self.ids.target(doc, node, "clip-path", Kind::ClipPath);
         // What's filtered, clipped, or faded as more than one piece, is
         // drawn apart and laid on as one.
-        let apart = fitted.is_some() || clip.is_some() || (opacity < 1.0 && (node.elements().next().is_some() || (fills && strokes)));
+        let apart = fitted.is_some() || clip.is_some() || (opacity < 1.0 && (paints > 1 || (!is_text && node.elements().next().is_some())));
         let layered = apart && self.open_layer();
         let alpha = if layered { alpha } else { alpha * opacity };
         let own_reach = if layered { fitted.as_ref().map_or(0.0, |f| f.reach()) } else { 0.0 };
@@ -236,19 +272,23 @@ impl<'a> Builder<'a> {
 
         let mut inside = Vec::new();
         let items = if layered { &mut inside } else { &mut *out };
-        for filling in if st.stroke_first { [false, true] } else { [true, false] } {
-            if filling && fills && let Some(paint) = self.paint(&st.fill, path.bounds(), &ctm) {
-                items.push(Item::Fill { shape: (polygons(&lines, &ctm), st.fill_rule), paint, alpha: (st.fill_opacity * alpha) as f32 });
-            }
-            if !filling && strokes && let Some(paint) = self.paint(&st.stroke, path.bounds(), &ctm) {
-                // Dashes are cut from the curves themselves, and the
-                // line flattened as its stroke's edges need it.
-                let whole = Stroke { dashes: Vec::new(), ..st.line.clone() };
-                let outline: Vec<Vec<Vec2>> = stroke(&path.dashed(&st.line).flatten_to_stroke(tol, st.line.width), &whole, tol).iter().map(|poly| poly.iter().map(|p| ctm.apply(*p)).collect()).collect();
-                items.push(Item::Fill { shape: (outline, FillRule::NonZero), paint, alpha: (st.stroke_opacity * alpha) as f32 });
+        for piece in &pieces {
+            let st = piece.style.as_ref().unwrap_or(&st);
+            for filling in if st.stroke_first { [false, true] } else { [true, false] } {
+                if filling && piece.fills && let Some(paint) = self.paint(&st.fill, own_box, &ctm) {
+                    items.push(Item::Fill { shape: (polygons(&piece.lines, &ctm), st.fill_rule), paint, alpha: (st.fill_opacity * alpha) as f32 });
+                }
+                if !filling && piece.strokes && let Some(paint) = self.paint(&st.stroke, own_box, &ctm) {
+                    // Dashes are cut from the curves themselves, and the
+                    // line flattened as its stroke's edges need it.
+                    let whole = Stroke { dashes: Vec::new(), ..st.line.clone() };
+                    let outline: Vec<Vec<Vec2>> = stroke(&piece.path.dashed(&st.line).flatten_to_stroke(tol, st.line.width), &whole, tol).iter().map(|poly| poly.iter().map(|p| ctm.apply(*p)).collect()).collect();
+                    items.push(Item::Fill { shape: (outline, FillRule::NonZero), paint, alpha: (st.stroke_opacity * alpha) as f32 });
+                }
             }
         }
-        for child in node.elements().filter_map(|id| doc.get(id)) {
+        // What's in a text is its lettering, set above.
+        for child in node.elements().filter_map(|id| doc.get(id)).filter(|_| !is_text) {
             self.node(child, &st, alpha, &ctm, items);
         }
         self.reach -= own_reach;
@@ -258,7 +298,7 @@ impl<'a> Builder<'a> {
         self.layers -= 1;
         let clip = match clip {
             // A clip path that lets nothing through shows nothing.
-            Some(clip) => match self.clip(clip, &ctm, self.bbox(node), 0) {
+            Some(clip) => match self.clip(clip, &ctm, bbox(self), 0) {
                 Some(clip) => Some(clip),
                 None => return,
             },
@@ -306,13 +346,13 @@ impl<'a> Builder<'a> {
             if !(stretch.is_finite() && stretch > 0.0) {
                 continue;
             }
-            let path = geometry::path_of(child);
+            let path = geometry::outline_of(doc, child, self.view);
             let polys = polygons(&path.flatten(TOLERANCE / stretch), &t);
             if polys.is_empty() {
                 continue;
             }
             let within = match self.ids.target(doc, child, "clip-path", Kind::ClipPath) {
-                Some(inner) => match self.clip(inner, &t, path.bounds(), depth + 1) {
+                Some(inner) => match self.clip(inner, &t, self.bbox(child), depth + 1) {
                     Some(within) => Some(within),
                     None => continue,
                 },
@@ -322,7 +362,8 @@ impl<'a> Builder<'a> {
                 return None;
             }
             self.clip_budget -= 1;
-            shapes.push(((polys, prop(child, "clip-rule").and_then(fill_rule).unwrap_or(inherited)), within));
+            let rule = if child.kind == Kind::Text { FillRule::NonZero } else { prop(child, "clip-rule").and_then(fill_rule).unwrap_or(inherited) };
+            shapes.push(((polys, rule), within));
         }
         (!shapes.is_empty()).then_some(Clip { shapes, outer })
     }

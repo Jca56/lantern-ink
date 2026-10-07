@@ -12,3 +12,4 @@ workspace = true
 [dependencies]
 ink-geom.workspace = true
 lntrn-math.workspace = true
+lntrn-text.workspace = true

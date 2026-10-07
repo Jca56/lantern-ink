@@ -36,7 +36,7 @@ pub(super) fn tools() -> Vec<Entry> {
         direct(
             "doc_query",
             "What's at a point",
-            "What's drawn at a point, in the drawing's coordinates: the shapes there, the one on top first, each with the part of it that's there (its fill or its stroke) and the groups it's in. It looks through every transform, and not where a clip path cuts a shape away or a shape is hidden. Text, images and uses aren't drawn yet, so aren't found.",
+            "What's drawn at a point, in the drawing's coordinates: the shapes and texts there, the one on top first, each with the part of it that's there (its fill or its stroke) and the groups it's in. It looks through every transform, and not where a clip path cuts a shape away or a shape is hidden. A text is there where its glyphs are. Images and uses aren't drawn yet, so aren't found.",
             query_schema,
             query,
         ),
@@ -87,10 +87,10 @@ fn info(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
         lines.push(format!("From the groups above: {}", handed.join(", ")));
     }
     let boxes = page_bounds(doc);
-    lines.push(match (boxes.get(&id), undrawn(node)) {
+    lines.push(match (boxes.get(&id), undrawn(doc, node)) {
         (_, Some(why)) => format!("Shows nowhere ({why})."),
         (Some(b), None) => format!("Shows at {} in the drawing's coordinates (strokes aside).", rect(b)),
-        (None, None) if node.kind.is_shape() || node.kind.is_group() => "Shows nowhere: it draws nothing as it is.".to_owned(),
+        (None, None) if node.kind.is_shape() || node.kind.is_group() || node.kind == NodeKind::Text => "Shows nowhere: it draws nothing as it is.".to_owned(),
         (None, None) => "Shows nowhere itself: it's something others use, or words about the picture.".to_owned(),
     });
     // The root's own transform isn't one.

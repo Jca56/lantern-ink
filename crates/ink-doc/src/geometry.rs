@@ -12,6 +12,7 @@ use crate::kind::Kind;
 use crate::length::number;
 use crate::node::Node;
 use crate::style::prop;
+use crate::text;
 use crate::transform;
 use crate::viewport::Viewport;
 
@@ -43,6 +44,16 @@ pub fn path_of(node: &Node) -> Path {
     }
 }
 
+/// The outline `node` draws, in its own coordinates: a shape's own
+/// ([`path_of`]), or every glyph of a text as it's set ([`text::lay`];
+/// nothing for a text that can't be). Percentages are of `view`.
+pub fn outline_of(doc: &Document, node: &Node, view: Vec2) -> Path {
+    match node.kind {
+        Kind::Text => text::lay(doc, node, view).map(|laid| laid.outline()).unwrap_or_default(),
+        _ => path_of(node),
+    }
+}
+
 /// From `id`'s own coordinates to the document's: its own transform,
 /// then every transform it's under.
 pub fn to_doc(doc: &Document, id: NodeId) -> Option<Affine> {
@@ -50,19 +61,24 @@ pub fn to_doc(doc: &Document, id: NodeId) -> Option<Affine> {
 }
 
 /// Where every drawn node sits in the drawing: the box around its
-/// outline (for a group, around everything in it), strokes aside, in the
-/// document's coordinates (the root's user units), through whatever
-/// transforms it's under. Nodes that draw nothing have no box.
+/// outline (for a group, around everything in it; for a text, around
+/// its glyphs as they're set), strokes aside, in the document's
+/// coordinates (the root's user units), through whatever transforms
+/// it's under. Nodes that draw nothing have no box.
 pub fn page_bounds(doc: &Document) -> HashMap<NodeId, Rect> {
     fn walk(doc: &Document, node: &Node, parent: &Affine, view: Vec2, out: &mut HashMap<NodeId, Rect>) -> Option<Rect> {
-        if !(node.kind.is_group() || node.kind.is_shape()) || prop(node, "display") == Some("none") {
+        if !(node.kind.is_group() || node.kind.is_shape() || node.kind == Kind::Text) || prop(node, "display") == Some("none") {
             return None;
         }
         // The root's own transform isn't one: its coordinates are the
         // document's.
         let t = if node.parent.is_none() { *parent } else { transform::of(node, view).map_or(*parent, |t| t.then(parent)) };
-        let mut all = path_of(node).bounds_through(&t);
-        for child in node.elements().filter_map(|id| doc.get(id)) {
+        let mut all = match node.kind {
+            Kind::Text => text::lay(doc, node, view).ok().and_then(|laid| laid.bounds_through(&t)),
+            _ => path_of(node).bounds_through(&t),
+        };
+        // What's in a text is its lettering, not nodes with boxes.
+        for child in node.elements().filter_map(|id| doc.get(id)).filter(|_| node.kind != Kind::Text) {
             if let Some(b) = walk(doc, child, &t, view, out) {
                 all = Some(all.map_or(b, |a| a.union(&b)));
             }
@@ -128,5 +144,27 @@ mod tests {
         for undrawn in [6, 7, 8, 9] {
             assert!(!boxes.contains_key(&NodeId(undrawn)), "N{undrawn}");
         }
+    }
+
+    #[test]
+    fn a_text_s_box_is_around_its_glyphs() {
+        crate::text::tests::test_fonts();
+        // At size 10 a capital is a box 1..5 across and 7 tall; a
+        // descender reaches 2 below the line.
+        let d = Document::parse(
+            DocId(1),
+            r#"<svg viewBox="0 0 100 100" font-family="Ink Test" font-size="10"><g transform="translate(10 0) scale(2)"><text x="5" y="20">H<tspan x="5" dy="12">Hp</tspan></text></g><text x="1 2">HH</text><text> </text></svg>"#,
+        )
+        .unwrap();
+        let boxes = page_bounds(&d);
+        let b = boxes[&NodeId(3)];
+        assert_eq!((b.min.x, b.min.y, b.max.x, b.max.y), (22.0, 26.0, 42.0, 68.0), "both lines, through the group's transform");
+        assert_eq!(boxes[&NodeId(2)], b, "and its group's is the same");
+        assert!(!boxes.contains_key(&NodeId(4)), "a span is lettering, not a node with a box");
+        assert!(!boxes.contains_key(&NodeId(5)), "a text that can't be set draws nothing");
+        assert!(!boxes.contains_key(&NodeId(6)), "nor does one with nothing to say");
+        let text = d.node(NodeId(3)).unwrap();
+        assert_eq!(outline_of(&d, text, Vec2::new(100.0, 100.0)).to_data(3), "M6 20 V13 H10 V20 Z M6 32 V25 H10 V32 Z M12 34 V27 H16 V34 Z");
+        assert!(outline_of(&d, d.node(NodeId(5)).unwrap(), Vec2::new(100.0, 100.0)).is_empty());
     }
 }

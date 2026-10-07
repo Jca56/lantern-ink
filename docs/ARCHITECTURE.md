@@ -71,7 +71,8 @@ ink-geom    Vector maths: paths (lines, quadratics, cubics, arcs), affines,
    ↓
 ink-doc     The document: lossless XML in and out, the node tree and its
             IDs, typed views (shapes, the style cascade, paints, transforms,
-            units), Commands and their validation.
+            units, text set in the machine's fonts), Commands and their
+            validation.
    ↓
 ink-render  Document → pixels on the CPU: the scene, the exact-area
             rasterizer on all cores, gradients, clips, groups, filters, text.
@@ -106,7 +107,7 @@ ink-mcp → bin lantern-ink-mcp      ink-app → bin lantern-ink
 | Flattening, strokes (joins, caps), exact-area rasterizer on all cores | LS3 `studio-core/src/vector` (856 lines, f64; 4096² with 118k edges in 50 ms) | Flattening and strokes ported into `ink-geom`. The rasterizer is Ink's own (§5.1): LS3's counts a pixel twice where a stroke's pieces overlap in it |
 | Path `d` parser, colour and transform parsers, gradients, clip paths, drop shadows, group layers, dashes | LUI2 `lntrn-svg` (3.3k lines, f32, all private behind one `render(svg, size)`) | Port the knowledge, in f64 (LUI2 D004). `lntrn-svg` itself stays as it is and becomes our reference (§5.4) |
 | XML | `lntrn-svg/src/xml.rs` drops comments, text and formatting | A new lossless one in `ink-doc` (§3.2) |
-| Text shaping, glyph outlines | `lntrn-text` (`place_outlines`, U057) | Use as is |
+| Text shaping, glyph outlines | `lntrn-text` (`place_outlines`, U057) | Used through `line_glyphs` (LUI2 U085, added for M3d: each glyph with its character and its place, which `place_outlines` didn't say) |
 | PNG, JPEG, WebP encoders | `lntrn-image` | Use as is |
 | JSON; JSON-RPC lines, both MCP eras, schemas, arguments, replies, the stdio loop | `lntrn-data`; LS3 `studio-tools` (about 1.5k generic lines among 7.2k) | D11: lifted into a new LUI2 crate, `lntrn-mcp` (LUI2 U082). LS3's staged calls and socket pipe stay with it until the live bridge (M5) needs them shared |
 | The Studio look: theme, layout, chrome, controls | LS3 `studio-app` (about 1.8k lines) | D12: copy at M4, or a shared crate |
@@ -434,7 +435,10 @@ current scale, paint, opacity, clip, filter, bounds; cached by
 - **Clip paths**, nested, in either units.
 - **Filters:** chains of steps (§5.2), in the colour space the file
   asks for.
-- **Text** through `lntrn-text`'s glyph outlines, filled like any path.
+- **Text** through `lntrn-text`'s glyph outlines, filled like any path
+  (§5.5). It is set in `ink-doc`, which is where its box, what's at a
+  point and (in time) text made into paths need it too; the renderer
+  draws the outlines it's handed.
 - **Colour:** 8-bit sRGB, composited in sRGB as SVG does.
 
 ### 5.2 What v1 draws, by what the corpus uses
@@ -457,7 +461,8 @@ in the order something needs them (D21).
 
 **As built in M1:** everything in the table but `<text>`, `<style>`
 rules and `feGaussianBlur`, which is exactly what `lntrn-svg` draws.
-Those three come with M3's operations.
+Those three come with M3's operations: the last two in M3b (below),
+`<text>` in M3d (§5.5).
 
 **As built in M3b:** `<style>` rules, and filters as chains of steps.
 - **A filter is a chain** (`ink-doc/src/filter.rs`, drawn by
@@ -513,7 +518,8 @@ on `lntrn-svg`, unchanged, for two things:
   `lntrn-svg` itself, in the window and over MCP. It also says what
   `lntrn-svg` will not draw (today: text, masks, `<use>`, most filters).
 - **Agreement tests:** Ink's renderer and `lntrn-svg` must agree on every
-  corpus file (D22). They can't to the pixel: `lntrn-svg` samples 16
+  corpus file both draw all of (D22; 26 files have something only Ink
+  draws: blurs, `<style>` rules, text). They can't to the pixel: `lntrn-svg` samples 16
   heights per pixel row where Ink takes exact areas. Measured, the worst
   file is 0.95 levels apart on average at 64 px and 0.30 at 256 px. Two
   real differences remain, a few pixels each: dashes round a curve (Ink
@@ -524,6 +530,77 @@ on `lntrn-svg`, unchanged, for two things:
 `rsvg-convert` is on this machine (`/usr/bin/rsvg-convert`). Tests use it
 as a second opinion when it's there and skip when it isn't; nothing links
 to it.
+
+### 5.5 Text
+**As built in M3d (its first piece, the renderer; 2026-10-07).** A
+`<text>` is drawn as outlines: its glyphs, filled and stroked like any
+shape's.
+
+- **The fonts are the machine's** (`ink-doc/src/fonts.rs`), found once
+  and shared by every drawing in the process: `lntrn-text`'s engine
+  behind a lock. It shapes a line (fallback from font to font,
+  ligatures, kerning, right-to-left runs) and hands back each glyph's
+  outline, the character it stands for and its place on the line
+  (`TextEngine::line_glyphs`, LUI2 U085). Ink shapes at 1000 px to the
+  em and keeps everything for a font size of 1, so a glyph's numbers
+  are the font's own and one shaping serves any size.
+- **The generic names are Lantern's** (Alva, 2026-10-07): `sans-serif`
+  is the desktop's font (`lantern.toml`'s `[appearance] font_family`,
+  read by `ink-mcp`; Inter where that names none), `monospace` is
+  JetBrains Mono, `serif` the first installed of a short list (Lora
+  first). A family that isn't installed gives way to the next in its
+  `font-family`, and a text with none left is set in the sans. So text
+  looks as it does in Lantern's apps, not as a browser on the same
+  machine (which asks fontconfig) would set it. `lntrn-text` has two
+  weights: from 600 up is bold.
+- **A character that comes back as a picture** (the engine falls back
+  to the colour emoji font for a heart from some families) can't be
+  filled or stroked, so it's asked for again in families that draw
+  symbols and emoji as outlines, and the line closes up around it.
+  One that nothing draws as an outline isn't drawn.
+- **Setting** (`ink-doc/src/text.rs`, `text/lay.rs`): the characters of
+  the text and of the `<tspan>`s (and links) in it are gathered, white
+  space dealt with as a browser does (line breaks and tabs are spaces,
+  spaces in a row are one, none at either end; kept as written under
+  `white-space: pre` or `xml:space="preserve"`), then shaped a run at a
+  time: as far as one font goes with no jump in it, so elements that
+  only paint differently still kern as one word. The pen starts at the
+  text's `x` and `y`; an element's `x` or `y` puts it somewhere else
+  and starts a new chunk, its `dx` and `dy` nudge it (the innermost
+  element at a character has the say); each chunk is hung from where
+  it started by its `text-anchor`. `letter-spacing` goes after each
+  character and `word-spacing` after each space; `dominant-baseline`
+  says which line of the font sits at `y`. Lengths may be in `em`, and
+  a percentage is of the page.
+- **What comes back** (`text::Laid`): each element's glyphs as one
+  `Path` in the text's own coordinates, in painting order, so a
+  `<tspan>` is painted as it says (`text::style_of`); and the box
+  around the glyphs' cells (each as wide as its advance, from the
+  font's top to its bottom), which is what a gradient or a filter
+  measured against "the element's box" is measured against. Glyphs
+  fill non-zero whatever `fill-rule` says.
+- **Everything that reads an outline reads a text's:** the renderer, a
+  clip path with a text in it, what's at a point (`hit.rs`: a text is
+  there where its glyphs are), and where a node shows (`doc_info`'s
+  box is around the glyphs themselves, as a shape's is around its
+  outline). `geometry::outline_of` is the one way in.
+- **Not set, so not drawn at all** rather than drawn wrong
+  (`text::Unset` says which, and `doc_info` passes it on): text along a
+  path, characters placed or turned one by one (`rotate`, or a list in
+  `x`, `y`, `dx`, `dy`), text set top to bottom, text stretched to a
+  length. Not read yet: the `font` shorthand, `text-decoration`,
+  `baseline-shift`, `direction`.
+- **A text still keeps a move as a `transform`** (it has no numbers
+  `settle.rs` knows how to write). That, the text tools and saying
+  which font a text ended up in come with M3d's next piece.
+- **Tests set text in fonts of their own** (`tests/fonts/`, family
+  "Ink Test", made by `ink-doc/tests/font.rs`, which holds the files to
+  what it makes): boxes for letters and a ring for an `o`, 1000 units
+  to the em, no kerning, so every edge of a set text is a number a test
+  can say and every machine draws the text golden to the same bytes.
+  The nineteen corpus files with text are in real fonts, so they're
+  read beside `rsvg-convert`'s pictures, not measured: twelve looked at
+  on 2026-10-07 sit where its do, in Lantern's fonts.
 
 ---
 
@@ -688,7 +765,10 @@ As LS3 §7, to the letter where it can be:
 - **UI logic** with `lntrn_ui::testing::Harness`. **Visual checks are
   Alva's.** Nothing in this project ever captures the screen.
 - **Determinism:** no wall clock or randomness in a Command; fonts named
-  in the file, a missing one reported rather than silently swapped.
+  in the file, a missing one reported rather than silently swapped
+  (the reporting comes with M3d's text tools: until then one that's
+  missing gives way without a word, §5.5). Tests set text in fonts of
+  their own (`tests/fonts/`).
 
 ---
 
@@ -699,7 +779,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text, **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (its renderer built 2026-10-07), **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 

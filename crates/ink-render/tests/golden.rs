@@ -17,7 +17,19 @@ fn golden(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens").join(name)
 }
 
+/// The fonts `text.svg` is set in (`ink-doc/tests/font.rs` makes them).
+fn test_fonts() {
+    static ADDED: std::sync::Once = std::sync::Once::new();
+    ADDED.call_once(|| {
+        for font in ["InkTest-Regular.ttf", "InkTest-Bold.ttf"] {
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fonts").join(font);
+            ink_doc::fonts::add(std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))).unwrap();
+        }
+    });
+}
+
 fn check(svg: &str, png: &str, view: impl Fn(&Viewport) -> View) {
+    test_fonts();
     let text = std::fs::read_to_string(golden(svg)).unwrap();
     let doc = Document::parse(DocId(1), &text).unwrap();
     let viewport = Viewport::of(doc.node(doc.root()).unwrap());
@@ -55,6 +67,21 @@ fn filters_and_rules_at_their_own_size() {
 #[test]
 fn filters_and_rules_enlarged_and_off_the_grid() {
     check("filters-and-rules.svg", "filters-and-rules-x2.3.png", |v| View::page(v, 2.3));
+}
+
+#[test]
+fn text_at_twice_its_size() {
+    check("text.svg", "text-x2.png", |v| View::page(v, 2.0));
+}
+
+#[test]
+fn text_as_a_small_icon() {
+    check("text.svg", "text-48.png", |v| View::icon(v, 48));
+}
+
+#[test]
+fn text_enlarged_and_off_the_grid() {
+    check("text.svg", "text-x3.3.png", |v| View::page(v, 3.3));
 }
 
 /// The goldens' drawings as `rsvg-convert` draws them, if it's on this

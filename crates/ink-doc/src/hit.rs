@@ -1,12 +1,13 @@
-//! What's at a point (ARCHITECTURE §4.1): the shapes drawn there, front
-//! to back, as the renderer would draw them. Through every transform
-//! above each shape, inside its fill by its fill rule or within its
-//! stroke's reach, and not where a clip path cuts it away.
+//! What's at a point (ARCHITECTURE §4.1): the shapes and the texts
+//! drawn there, front to back, as the renderer would draw them. Through
+//! every transform above each, inside its fill by its fill rule (a
+//! text's: inside one of its glyphs) or within its stroke's reach, and
+//! not where a clip path cuts it away.
 
-use ink_geom::{Affine, Vec2};
+use ink_geom::{Affine, FillRule, Path, Vec2};
 
 use crate::document::Document;
-use crate::geometry::path_of;
+use crate::geometry::{outline_of, path_of};
 use crate::gradient::Units;
 use crate::id::NodeId;
 use crate::kind::Kind;
@@ -14,6 +15,7 @@ use crate::length::unit;
 use crate::node::Node;
 use crate::refs::Ids;
 use crate::style::{Paint, Style, fill_rule, prop};
+use crate::text;
 use crate::transform;
 use crate::viewport::Viewport;
 
@@ -47,7 +49,7 @@ struct Seeker<'a> {
 
 /// Something drawn where it stands, and not `display: none`.
 fn is_drawn(node: &Node) -> bool {
-    (node.kind.is_group() || node.kind.is_shape()) && prop(node, "display") != Some("none")
+    (node.kind.is_group() || node.kind.is_shape() || node.kind == Kind::Text) && prop(node, "display") != Some("none")
 }
 
 impl Seeker<'_> {
@@ -82,9 +84,27 @@ impl Seeker<'_> {
         clip.elements().filter_map(|id| self.doc.get(id)).filter(|c| is_drawn(c) && !matches!(prop(c, "visibility"), Some("hidden" | "collapse"))).any(|shape| {
             let to_clipped = transform::of(shape, self.view).map_or(base, |t| t.then(&base));
             let Some(back) = to_clipped.inverse() else { return false };
-            let rule = prop(shape, "clip-rule").and_then(fill_rule).unwrap_or(inherited);
-            path_of(shape).contains(back.apply(local), rule, TOLERANCE / to_clipped.max_stretch().max(f64::MIN_POSITIVE))
+            let rule = if shape.kind == Kind::Text { FillRule::NonZero } else { prop(shape, "clip-rule").and_then(fill_rule).unwrap_or(inherited) };
+            outline_of(self.doc, shape, self.view).contains(back.apply(local), rule, TOLERANCE / to_clipped.max_stretch().max(f64::MIN_POSITIVE))
         })
+    }
+
+    /// Which part of `path`, painted as `style` says and filled by
+    /// `rule`, is at `local`: the one on top there.
+    fn part(&self, path: &Path, style: &Style, rule: FillRule, local: Vec2, tol: f64) -> Option<Part> {
+        if !style.visible {
+            return None;
+        }
+        let filled = self.paints(&style.fill) && path.contains(local, rule, tol);
+        let stroked = self.paints(&style.stroke) && style.line.width > 0.0 && path.distance(local, tol).is_some_and(|d| d <= style.line.width / 2.0);
+        // The stroke is painted over the fill, unless the shape says
+        // the other way round.
+        match (filled, stroked) {
+            (true, true) => Some(if style.stroke_first { Part::Fill } else { Part::Stroke }),
+            (true, false) => Some(Part::Fill),
+            (false, true) => Some(Part::Stroke),
+            (false, false) => None,
+        }
     }
 
     fn walk(&mut self, node: &Node, parent: &Style, parent_ctm: &Affine) {
@@ -100,24 +120,21 @@ impl Seeker<'_> {
         {
             return;
         }
-        if node.kind.is_shape() && style.visible {
-            let path = path_of(node);
-            let tol = TOLERANCE / ctm.max_stretch().max(f64::MIN_POSITIVE);
-            let filled = self.paints(&style.fill) && path.contains(local, style.fill_rule, tol);
-            let stroked = self.paints(&style.stroke) && style.line.width > 0.0 && path.distance(local, tol).is_some_and(|d| d <= style.line.width / 2.0);
-            // The stroke is painted over the fill, unless the shape
-            // says the other way round.
-            let part = match (filled, stroked) {
-                (true, true) => Some(if style.stroke_first { Part::Fill } else { Part::Stroke }),
-                (true, false) => Some(Part::Fill),
-                (false, true) => Some(Part::Stroke),
-                (false, false) => None,
-            };
-            if let Some(part) = part {
-                self.found.push(Hit { node: node.id, part });
-            }
-        }
+        let tol = TOLERANCE / ctm.max_stretch().max(f64::MIN_POSITIVE);
         let doc = self.doc;
+        if node.kind == Kind::Text {
+            // The text is what's there, whichever of its elements' glyphs
+            // are: the ones painted last are on top.
+            let runs = text::lay(doc, node, self.view).map(|laid| laid.runs).unwrap_or_default();
+            let part = runs.iter().rev().find_map(|run| self.part(&run.outline, &text::style_of(doc, node, &style, run.node), FillRule::NonZero, local, tol));
+            self.found.extend(part.map(|part| Hit { node: node.id, part }));
+            return;
+        }
+        if node.kind.is_shape()
+            && let Some(part) = self.part(&path_of(node), &style, style.fill_rule, local, tol)
+        {
+            self.found.push(Hit { node: node.id, part });
+        }
         for child in node.elements().filter_map(|id| doc.get(id)) {
             self.walk(child, &style, &ctm);
         }
@@ -175,6 +192,22 @@ mod tests {
         assert_eq!((ring("evenodd"), ring("nonzero")), (vec![], vec![(2, Part::Fill)]));
         // Definitions stand nowhere.
         assert_eq!(hits(r#"<defs><rect width="10" height="10"/></defs>"#, 5.0, 5.0), []);
+    }
+
+    #[test]
+    fn a_text_is_there_where_its_glyphs_are() {
+        crate::text::tests::test_fonts();
+        // At size 10 a capital is a box 1..5 across, 7 tall, standing on
+        // y; the next one starts 6 on.
+        let inner = r##"<g font-family="Ink Test" font-size="10"><text x="2" y="12">H<tspan fill="none" stroke="#000" stroke-width="2">H</tspan></text></g><clipPath id="word"><text x="2" y="12" font-family="Ink Test" font-size="10">H</text></clipPath><rect width="20" height="20" clip-path="url(#word)" transform="translate(0 9)"/>"##;
+        assert_eq!(hits(inner, 5.0, 8.0), [(3, Part::Fill)], "in the first glyph: the text, not a span of it");
+        assert_eq!(hits(inner, 7.5, 8.0), [], "between two glyphs is nowhere");
+        assert_eq!(hits(inner, 11.0, 8.0), [], "a span with no fill has none to hit");
+        assert_eq!(hits(inner, 13.5, 8.0), [(3, Part::Stroke)], "but its stroke is there, a unit either side of its outline");
+        // A text in a clip path lets through what its glyphs cover
+        // (here 9 further down, with what it clips).
+        assert_eq!(hits(inner, 5.0, 17.0), [(7, Part::Fill)]);
+        assert_eq!(hits(inner, 8.0, 17.0), []);
     }
 
     #[test]

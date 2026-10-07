@@ -39,7 +39,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     `ink-core/tests/m1.rs`.
   - **Not drawn yet:** `<text>`, `<style>` rules and classes,
     `feGaussianBlur`, `<use>`, masks, patterns, images, markers. That is
-    `lntrn-svg`'s set exactly; the first three are due in M3.
+    `lntrn-svg`'s set exactly; the first three are due in M3 (and are
+    drawn now: rules and blurs since M3b, text since M3d).
   - **Found on the way** (other projects, so told to Alva, not touched):
     LS3's vector rasterizer counts a pixel twice where a stroke's pieces
     overlap in part of it (the inside of a curved stroke comes out
@@ -103,8 +104,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     binary to `~/.lantern/bin/lantern-ink-mcp.new` and `mv` it over.
   - `~/.lantern/bin/lantern-ink` is the May 2026 iced prototype's
     binary, not ours: left alone until M4's window takes the name.
-- **M3 (operations) is under way** (a, b and c built; d text and e
-  tidy to go), in five slices, in the order Alva
+- **M3 (operations) is under way** (a, b and c built; d text under
+  way, e tidy to go), in five slices, in the order Alva
   chose 2026-10-06: **a** structure and transforms, **b** paint (styles,
   gradients, clips, filters; the renderer learns `feGaussianBlur` and
   `<style>` rules), **c** paths (anchors, editing, boolean ops), **d**
@@ -283,7 +284,7 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   is built**: outline stroke and simplify. `Command::OutlineStroke`
   (`ink-doc/src/stroking.rs`) and `Command::Simplify` (`paths.rs`),
   and `path_op`'s `outline` and `simplify` (with `tolerance`).
-  **M3d (text) is next.**
+  **M3d (text) came next.**
   - A stroke's outline is `ink-geom/src/offset.rs`: a ribbon along
     each piece, a join at each corner, a cap at each open end, made
     one by `combine`. Its edge is a line beside a line and an arc
@@ -339,7 +340,59 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     with nine to eleven significant digits can do it) may be refused
     (`Tangled`) rather than guessed. Nothing in the corpus does.
 
+- **M3d (text) is under way**, in three pieces, the renderer first:
+  **d1** the renderer draws `<text>`, **d2** `SetText` and the tools
+  `text_add`, `text_set` and `font_list` (and a text taking a move into
+  its `x` and `y`, and saying which font it ended up in), **d3**
+  `TextToPath` and `text_to_path`. Alva's calls, 2026-10-07: **plain
+  text and `<tspan>`s** (text on a path and characters placed one by
+  one stay in the file, not drawn, until something needs them); **the
+  generic families are Lantern's fonts**, not fontconfig's; **one new
+  method in LUI2's `lntrn-text`** (`line_glyphs`, U085); and **each
+  finished piece is committed once it's tested and deployed, without
+  asking first** ("M3d text rendering", "M3d text editing", "M3d text
+  to path"), telling her after.
+- **M3d's d1 is built** (2026-10-07, 324 tests): the renderer draws
+  `<text>`. ARCHITECTURE §5.5 is the design.
+  - The fonts are `ink-doc/src/fonts.rs`: the machine's, in one
+    `lntrn-text` engine for the process. `sans-serif` is the desktop's
+    font from `lantern.toml` (Inter where it names none; `ink-mcp`
+    reads it at start), `monospace` JetBrains Mono, `serif` the first
+    installed of a short list. Two weights (600 up is bold): that's
+    `lntrn-text`'s limit.
+  - A text is set by `text::lay` (`ink-doc/src/text.rs`,
+    `text/font.rs`, `text/lay.rs`): each element's glyphs as a `Path`
+    in the text's coordinates, and the box round the glyphs' cells.
+    The renderer, clip paths, `hit::at` and `page_bounds` all read
+    that; `geometry::outline_of` is a shape's outline or a text's.
+  - `doc_info`'s box for a text is round its glyphs (its ink), like
+    a shape's; what a gradient is measured across is the cells' box,
+    as SVG says. Two boxes on purpose.
+  - A text Ink can't set (`text::Unset`: on a path, characters placed
+    one by one, top to bottom, stretched) isn't drawn, and `doc_info`
+    says why. A `<tspan>` has no box: it's part of its text.
+  - **Tests set text in "Ink Test"** (`tests/fonts/`, made by
+    `ink-doc/tests/font.rs`: boxes and a ring, no kerning; its header
+    says every glyph's numbers). Never test a box or a picture in a
+    real font: it's another machine's failure. After changing the
+    fonts: `INK_BLESS=1 cargo test -p ink-doc --test font`.
+  - A heart or an emoji comes back from `lntrn-text` as a picture
+    (its fallback order puts the colour font first): `fonts::shape`
+    asks again in families that draw outlines. Ink draws no pictures.
+  - **Not yet:** a text moved by `node_transform` keeps a
+    `transform` (d2 puts a move in its `x` and `y`); a missing font
+    gives way without a word (d2's tools say which font was used);
+    `clip_set` still takes shapes only, though a clip path with a
+    text in it is drawn.
+  - **Found on the way:** LUI2's `lntrn-text/src/engine.rs` is 545
+    lines (it was 541 before `mod glyphs;` went in): past its 500, told
+    to Alva.
+
 ## Working here
+- **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a
+  machine whose LUI2 is behind won't even load the workspace (it was
+  `lntrn-mcp` missing on genforge, 2026-10-07). Pulling LUI2 is
+  Alva's to say yes to.
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.
 - **The corpus** is `tests/corpus/` (144 SVGs from the Lantern projects;
   `SOURCES.txt` says where each came from). Every layer is tested on it.

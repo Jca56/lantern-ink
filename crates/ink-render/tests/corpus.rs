@@ -60,12 +60,12 @@ fn diff(a: &Image, b: &Image) -> Diff {
 }
 
 /// Whether `text` has in it what Ink draws and `lntrn-svg` doesn't:
-/// `<style>` rules, and filters that are more than drop shadows. On
-/// those files the two can't agree; `rsvg-convert` is what Ink is read
-/// against there (`third_opinion`).
+/// `<style>` rules, filters that are more than drop shadows, and
+/// `<text>`. On those files the two can't agree; `rsvg-convert` is what
+/// Ink is read against there (`third_opinion`).
 fn past_lntrn_svg(text: &str) -> bool {
     let doc = Document::parse(DocId(1), text).unwrap();
-    doc.descendants(doc.root()).into_iter().filter_map(|id| doc.get(id)).any(|n| n.kind == Kind::Style || (n.kind == Kind::FilterPrimitive && !matches!(n.local(), "feDropShadow")))
+    doc.descendants(doc.root()).into_iter().filter_map(|id| doc.get(id)).any(|n| matches!(n.kind, Kind::Style | Kind::Text) || (n.kind == Kind::FilterPrimitive && !matches!(n.local(), "feDropShadow")))
 }
 
 /// Ink and `lntrn-svg` agree on every file both draw all of (D22), as
@@ -81,14 +81,17 @@ fn past_lntrn_svg(text: &str) -> bool {
 /// the picture's edge (`lntrn-svg`, like `rsvg-convert`, has nothing
 /// there to throw).
 ///
-/// Nine files are left out: the ones with blurs, glows and `<style>`
-/// rules, which Ink draws since M3b and `lntrn-svg` doesn't. Against
+/// Twenty-six files are left out. Nine have blurs, glows or `<style>`
+/// rules, which Ink draws since M3b and `lntrn-svg` doesn't: against
 /// `rsvg-convert` (2026-10-06, 256 px) Ink's eight with blurs are 0.27
 /// to 0.61 levels apart on average, where `lntrn-svg`'s are 0.63 to 9.3.
+/// Nineteen have `<text>` (two of them among the nine), which Ink draws
+/// since M3d: in Lantern's fonts, where `rsvg-convert` asks fontconfig,
+/// so there the two are read side by side, not measured.
 #[test]
 fn ink_and_lntrn_svg_agree_on_every_file() {
     let (beyond, both): (Vec<_>, Vec<_>) = corpus().into_iter().partition(|(_, text)| past_lntrn_svg(text));
-    assert_eq!(beyond.len(), 9, "the files lntrn-svg can't draw all of: {:?}", beyond.iter().map(|(name, _)| name).collect::<Vec<_>>());
+    assert_eq!(beyond.len(), 26, "the files lntrn-svg can't draw all of: {:?}", beyond.iter().map(|(name, _)| name).collect::<Vec<_>>());
     for (size, mean, far) in [(64, 1.25, 0.04), (256, 0.5, 0.015)] {
         for (name, text) in &both {
             let d = diff(&ink(text, size), &lntrn_svg::render(text, size).unwrap());

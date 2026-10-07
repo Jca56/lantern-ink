@@ -6,7 +6,7 @@ mod common;
 use common::{ok, refused, server, text};
 use lntrn_data::Doc;
 
-const DRAWING: &str = r##"<defs><linearGradient id='glow'><stop offset='0' stop-color='#fff'/></linearGradient><clipPath id='left'><rect width='12' height='24'/></clipPath></defs><g id='lamp' transform='translate(2 3)' stroke='#12100e' stroke-width='2'><rect id='pane' x='4' y='4' width='8' height='8' fill='url(#glow)' clip-path='url(#left)' style='stroke: url(#nothing)'/><text id='label'>hi</text></g><circle id='dot' cx='20' cy='20' r='2' stroke='#fff' stroke-width='2'/><use href='#pane'/>"##;
+const DRAWING: &str = r##"<defs><linearGradient id='glow'><stop offset='0' stop-color='#fff'/></linearGradient><clipPath id='left'><rect width='12' height='24'/></clipPath></defs><g id='lamp' transform='translate(2 3)' stroke='#12100e' stroke-width='2'><rect id='pane' x='4' y='4' width='8' height='8' fill='url(#glow)' clip-path='url(#left)' style='stroke: url(#nothing)'/><text id='label' font-family='Ink Test' font-size='10'>hi</text></g><circle id='dot' cx='20' cy='20' r='2' stroke='#fff' stroke-width='2'/><use href='#pane'/>"##;
 
 #[test]
 fn a_node_says_everything_about_itself() {
@@ -30,7 +30,10 @@ fn a_node_says_everything_about_itself() {
     assert_eq!((info.path("structuredContent.parent").and_then(Doc::as_str), info.path("structuredContent.attrs.x").and_then(Doc::as_str), info.path("structuredContent.uses[1]").and_then(Doc::as_str)), (Some("N7"), Some("4"), Some("N5")));
     // What shows nowhere says why; the root is the root.
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#)).contains("\nShows nowhere itself: it's something others use, or words about the picture.\nUsed by: N8 <rect id=\"pane\">."));
-    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N9"}"#)).contains("From the groups above: stroke=\"#12100e\" (N7), stroke-width=\"2\" (N7)\nShows nowhere (not drawn yet)."));
+    // A text shows where its glyphs are (the test font's h and i at
+    // size 10, through the group's move).
+    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N9"}"#)).contains("From the groups above: stroke=\"#12100e\" (N7), stroke-width=\"2\" (N7)\nShows at 3,-4 7×7 in the drawing's coordinates (strokes aside)."));
+    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N11"}"#)).contains("\nShows nowhere (not drawn yet)."));
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N1"}"#)).starts_with("N1 <svg>, the drawing's root; 10 inside."));
     // A long value is cut, and says where to read it whole.
     ok(&mut s, "node_add", &format!(r#"{{"doc_id":"d1","element":"path","attrs":{{"d":"M0 0{}"}}}}"#, " L1 1".repeat(60)));
@@ -98,4 +101,32 @@ fn the_page_is_set_and_the_drawing_fitted_to_it() {
     ok(&mut s, "doc_open", r#"{"path":"plain.svg"}"#);
     ok(&mut s, "doc_set", r#"{"doc_id":"d2","decimals":2}"#);
     assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d2"}"#)), "<svg viewBox=\"0 0 8 8\" xmlns:ink=\"urn:lantern:ink\" ink:decimals=\"2\"/>");
+}
+
+/// Set in the tests' own font: at size 10 a capital is a box 4 by 7
+/// standing on the line a unit in from its pen, and an `o` a ring 5
+/// across.
+#[test]
+fn a_text_says_its_words_and_shows_where_its_glyphs_are() {
+    let (mut s, _) = server("text");
+    ok(&mut s, "doc_new", "{}");
+    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<g font-family='Ink Test' font-size='10'><text id='label' x='2' y='12' fill='#223'>\n  Hop <tspan fill='#c33'>on</tspan>\n</text><text x='1 2'>no</text><text> </text></g>"}"##);
+    let listed = text(&ok(&mut s, "doc_info", r#"{"doc_id":"d1"}"#)).to_owned();
+    for line in [
+        "    N3 text #label \"Hop on\"  fill #223  at 3,5 31×9",
+        "      N4 tspan  fill #c33  (drawn as part of its <text>)",
+        "    N5 text \"no\"  (not drawn: its characters are placed or turned one by one (rotate, or a list in x, y, dx or dy))",
+        "    N6 text \"\"",
+    ] {
+        assert!(listed.lines().any(|l| l == line), "no line {line:?} in:\n{listed}");
+    }
+    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#)).contains("\nShows at 3,5 31×9 in the drawing's coordinates (strokes aside)."));
+    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N6"}"#)).contains("\nShows nowhere: it draws nothing as it is."));
+    let at = |s: &mut _, x: f64, y: f64| text(&ok(s, "doc_query", &format!(r#"{{"doc_id":"d1","point":[{x},{y}]}}"#))).to_owned();
+    assert_eq!(at(&mut s, 5.0, 8.0), "At 5,8, front to back: N3 <text id=\"label\"> (its fill), in N2.");
+    assert_eq!(at(&mut s, 26.0, 8.5), "Nothing is drawn at 26,8.5.", "the hole in the o");
+    assert_eq!(at(&mut s, 24.0, 8.5), "At 24,8.5, front to back: N3 <text id=\"label\"> (its fill), in N2.", "a span's glyphs are its text's");
+    // A text lines up by its box like anything else.
+    ok(&mut s, "node_align", r#"{"doc_id":"d1","node_ids":["N3"],"x":"left","to":"page"}"#);
+    assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N3"}"#)).lines().next(), Some("<text id='label' x='2' y='12' fill='#223' transform=\"translate(-3 0)\">"));
 }

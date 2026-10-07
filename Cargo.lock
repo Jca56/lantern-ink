@@ -17,6 +17,7 @@ version = "0.1.0"
 dependencies = [
  "ink-geom",
  "lntrn-math",
+ "lntrn-text",
 ]
 
 [[package]]
@@ -33,6 +34,7 @@ dependencies = [
  "ink-core",
  "ink-tools",
  "lntrn-core",
+ "lntrn-data",
  "lntrn-mcp",
 ]
 
@@ -101,5 +103,13 @@ dependencies = [
 name = "lntrn-svg"
 version = "0.2.0"
 dependencies = [
+ "lntrn-image",
+]
+
+[[package]]
+name = "lntrn-text"
+version = "0.2.0"
+dependencies = [
+ "lntrn-core",
  "lntrn-image",
 ]

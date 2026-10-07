@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use ink_core::ink_doc::geometry::page_bounds;
 use ink_core::ink_doc::outline::Link;
 use ink_core::ink_doc::style::prop;
-use ink_core::ink_doc::{Document, Kind, Node, Precision, Viewport};
+use ink_core::ink_doc::{Document, Kind, Node, Precision, Viewport, text};
 use ink_core::{Actor, Core, DocId, NodeId};
 use ink_geom::{Rect, number};
 use lntrn_data::{Doc, Map};
@@ -42,13 +42,28 @@ pub(crate) fn tag(node: &Node) -> String {
     }
 }
 
-/// Why a node doesn't show, if it's of a kind that doesn't.
-pub(crate) fn undrawn(node: &Node) -> Option<&'static str> {
+/// Why a node doesn't show, if it's of a kind that doesn't (or a text
+/// that can't be set).
+pub(crate) fn undrawn(doc: &Document, node: &Node) -> Option<String> {
     match node.kind {
-        Kind::Text | Kind::TSpan | Kind::Image | Kind::Use => Some("not drawn yet"),
-        Kind::Other => Some("kept as it is, not drawn"),
-        _ if prop(node, "display") == Some("none") => Some("display: none"),
+        Kind::Image | Kind::Use => Some("not drawn yet".to_owned()),
+        Kind::Other => Some("kept as it is, not drawn".to_owned()),
+        _ if prop(node, "display") == Some("none") => Some("display: none".to_owned()),
+        Kind::Text => text::unset(doc, node).map(|why| format!("not drawn: {why}")),
+        Kind::TSpan => Some("drawn as part of its <text>".to_owned()),
         _ => None,
+    }
+}
+
+/// The most of a text's words one line quotes.
+const MAX_WORDS: usize = 40;
+
+/// What a text says, in quotes, cut short if it's long.
+pub(crate) fn words(doc: &Document, node: &Node) -> String {
+    let said = text::said(doc, node);
+    match said.char_indices().nth(MAX_WORDS) {
+        Some((cut, _)) => format!("\"{}…\"", &said[..cut]),
+        None => format!("\"{said}\""),
     }
 }
 
@@ -115,12 +130,16 @@ pub(crate) fn painted(node: &Node) -> String {
     if said.is_empty() { "no fill, stroke or opacity of its own".to_owned() } else { said.trim_start().replace("  ", ", ") }
 }
 
-/// One line about a node: its id, what it is, the paint it gives itself
-/// (or, for a definition, its attributes), and where it shows.
-fn node_line(node: &Node, bounds: Option<&Rect>) -> String {
+/// One line about a node: its id, what it is (a text: what it says),
+/// the paint it gives itself (or, for a definition, its attributes),
+/// and where it shows.
+fn node_line(doc: &Document, node: &Node, bounds: Option<&Rect>) -> String {
     let mut line = format!("{} {}", node.id, node.name);
     if let Some(id) = node.attr("id") {
         line += &format!(" #{id}");
+    }
+    if node.kind == Kind::Text {
+        line += &format!(" {}", words(doc, node));
     }
     if is_definition(node.kind) {
         let attrs = attributes(node);
@@ -136,7 +155,7 @@ fn node_line(node: &Node, bounds: Option<&Rect>) -> String {
     if let Some(b) = bounds {
         line += &format!("  at {}", rect(b));
     }
-    if let Some(why) = undrawn(node) {
+    if let Some(why) = undrawn(doc, node) {
         line += &format!("  ({why})");
     }
     line
@@ -180,7 +199,7 @@ impl Listing<'_> {
             return;
         }
         self.left -= 1;
-        self.lines.push(format!("{}{}", "  ".repeat(depth), node_line(node, self.bounds.get(&id))));
+        self.lines.push(format!("{}{}", "  ".repeat(depth), node_line(self.doc, node, self.bounds.get(&id))));
         self.data.push(node_data(node, depth, self.bounds.get(&id)));
         let mut children: Vec<NodeId> = node.elements().collect();
         if !in_file_order(node.kind) {

@@ -16,8 +16,9 @@
 //! Typed views say what a node means, read from its attributes when
 //! asked: [`style`] (the properties a shape inherits), [`geometry`] (the
 //! outline it draws), [`transform`], [`gradient`], [`filter`], [`color`],
-//! [`length`], [`Viewport`] (how the drawing sits on its page) and
-//! [`refs`] (what a `url(#…)` points at).
+//! [`length`], [`Viewport`] (how the drawing sits on its page),
+//! [`refs`] (what a `url(#…)` points at) and [`text`] (the outlines a
+//! `<text>` draws, set in the machine's [`fonts`]).
 
 mod clip;
 mod boolean;
@@ -27,6 +28,7 @@ mod document;
 mod edit;
 mod error;
 pub mod filter;
+pub mod fonts;
 mod foreign;
 pub mod geometry;
 pub mod gradient;
@@ -48,6 +50,7 @@ mod structure;
 mod stroking;
 pub mod style;
 pub mod styling;
+pub mod text;
 pub mod transform;
 pub mod value;
 mod viewport;

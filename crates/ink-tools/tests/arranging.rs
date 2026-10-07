@@ -13,7 +13,7 @@ use lntrn_mcp::Server;
 fn nodes_move_scale_and_turn_on_the_page() {
     let (mut s, _) = server("transform");
     ok(&mut s, "doc_new", "{}");
-    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<rect id='a' x='4' y='4' width='8' height='8' rx='2'/><g id='g'><path id='p' d='M4 14 H12' stroke='#000'/></g><text id='t'>hi</text>"}"##);
+    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<rect id='a' x='4' y='4' width='8' height='8' rx='2'/><g id='g'><path id='p' d='M4 14 H12' stroke='#000'/></g><text id='t'> </text>"}"##);
     let node = |s: &mut Server<Ink>, id: &str| text(&ok(s, "doc_source", &format!(r#"{{"doc_id":"d1","node_id":"{id}"}}"#))).to_owned();
     // A move goes into a shape's own numbers.
     let moved = ok(&mut s, "node_transform", r#"{"doc_id":"d1","node_ids":["N2"],"move":[2,3]}"#);

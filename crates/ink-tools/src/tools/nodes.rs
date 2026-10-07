@@ -93,10 +93,10 @@ fn about(doc: &Document, id: NodeId, boxes: &std::collections::HashMap<NodeId, i
     if inside > 0 {
         text += &format!(" with {inside} inside");
     }
-    match (boxes.get(&id), undrawn(node)) {
+    match (boxes.get(&id), undrawn(doc, node)) {
         (_, Some(why)) => text += &format!(" ({why})"),
         (Some(b), None) => text += &format!(" at {}", rect(b)),
-        (None, None) if node.kind.is_shape() || node.kind.is_group() => text += " (it draws nothing as it is)",
+        (None, None) if node.kind.is_shape() || node.kind.is_group() || node.kind == ink_core::ink_doc::Kind::Text => text += " (it draws nothing as it is)",
         (None, None) => {}
     }
     text

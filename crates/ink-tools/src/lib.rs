@@ -36,10 +36,10 @@ node_duplicate copies; node_group and node_ungroup group and ungroup. \
 Ask doc_info (every node, front to back, with its box), node_info (all about one), \
 doc_query (what's at a point) and doc_source (the markup); doc_set sets the page. \
 Workflow: doc_new or doc_open, then edit, then doc_preview to look (at milestones, not after every call; \
-renderer \"lantern\": as Lantern's apps draw it at icon sizes), then doc_save (.svg) or doc_export (a picture). \
+renderer \"lantern\": as Lantern's apps draw it at icon sizes, no <text>), then doc_save (.svg) or doc_export (a picture). \
 Use batch for many edits: one undo step, all or nothing; name what a step makes with \"as\" and refer to it as \"@name\". \
 Every edit is undoable (history_undo). Refused calls say how to fix them. \
-Not drawn yet (but kept): <text>, <use>, <image>, masks, patterns, the rarer filter steps. \
+Not drawn yet (but kept): <use>, <image>, masks, patterns, the rarer filter steps. \
 Unsaved drawings live only in this server: save what matters.";
 
 /// Ink as an MCP server's host: a core, and the tools that work on it.

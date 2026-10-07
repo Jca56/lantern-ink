@@ -5,8 +5,9 @@ use ink_geom::number::scan;
 
 /// User units in an inch (CSS's reference pixel).
 const PER_INCH: f64 = 96.0;
-/// The font size `em` is taken against until text brings a real one.
-const EM: f64 = 16.0;
+/// The font size `em` is taken against where nothing says a font: what
+/// `font-size: medium` comes to.
+pub const EM: f64 = 16.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Length {
@@ -19,6 +20,12 @@ pub enum Length {
 impl Length {
     /// `12`, `12px`, `1.5pt`, `50%`. `None` for anything else.
     pub fn parse(s: &str) -> Option<Length> {
+        Length::parse_in(s, EM)
+    }
+
+    /// As [`Length::parse`], where the font's size is `em`: what text
+    /// measures `em` and `ex` against.
+    pub fn parse_in(s: &str, em: f64) -> Option<Length> {
         let bytes = s.trim().as_bytes();
         let mut i = 0;
         let v = scan(bytes, &mut i)?;
@@ -32,8 +39,8 @@ impl Length {
             "cm" => PER_INCH / 2.54,
             "mm" => PER_INCH / 25.4,
             "q" => PER_INCH / 101.6,
-            "em" => EM,
-            "ex" => EM / 2.0,
+            "em" => em,
+            "ex" => em / 2.0,
             _ => return None,
         };
         Some(Length::Px(v * per)).filter(|_| (v * per).is_finite())
@@ -90,6 +97,7 @@ mod tests {
         assert_eq!(number("1in"), Some(96.0));
         assert_eq!(number("25.4mm"), Some(96.0));
         assert_eq!(number("2em"), Some(32.0));
+        assert_eq!((Length::parse_in("1.5em", 10.0), Length::parse_in("1ex", 10.0), Length::parse_in("3", 10.0)), (Some(Length::Px(15.0)), Some(Length::Px(5.0)), Some(Length::Px(3.0))));
         for bad in ["", "px", "12 px", "12furlongs", "nan", "inf", "1e999", "12%%"] {
             assert_eq!(Length::parse(bad), None, "{bad:?}");
         }

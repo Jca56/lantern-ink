@@ -9,7 +9,20 @@ use ink_tools::{Env, Ink};
 use lntrn_data::{Doc, json};
 use lntrn_mcp::Server;
 
+/// The fonts the tests set text in, family "Ink Test"
+/// (`ink-doc/tests/font.rs` makes them and says what's in them).
+pub fn test_fonts() {
+    static ADDED: std::sync::Once = std::sync::Once::new();
+    ADDED.call_once(|| {
+        for font in ["InkTest-Regular.ttf", "InkTest-Bold.ttf"] {
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fonts").join(font);
+            ink_core::ink_doc::fonts::add(std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))).unwrap();
+        }
+    });
+}
+
 pub fn server(test: &str) -> (Server<Ink>, PathBuf) {
+    test_fonts();
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ink-transcripts").join(test);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();

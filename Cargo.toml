@@ -27,6 +27,7 @@ lntrn-image = { path = "../lantern-ui-2/crates/lntrn-image" }
 lntrn-math = { path = "../lantern-ui-2/crates/lntrn-math" }
 lntrn-mcp = { path = "../lantern-ui-2/crates/lntrn-mcp" }
 lntrn-svg = { path = "../lantern-ui-2/crates/lntrn-svg" }
+lntrn-text = { path = "../lantern-ui-2/crates/lntrn-text" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"

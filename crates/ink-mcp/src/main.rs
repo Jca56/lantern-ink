@@ -1,10 +1,11 @@
 //! `lantern-ink-mcp`: Lantern Ink's MCP server over stdio (ARCHITECTURE
 //! §6). `lntrn-mcp` speaks the protocol and runs the loop; `ink-tools`
 //! is the tools; this is where they meet a process: its log, its
-//! folders, its autosave. stdout carries only protocol: log lines go to
-//! stderr and `~/.lantern/log/lantern-ink-mcp.log`. Unsaved drawings are
-//! autosaved while it runs and once more when stdin closes, then it
-//! exits. No GPU, no window.
+//! folders, its autosave, the desktop's font. stdout carries only
+//! protocol: log lines go to stderr and
+//! `~/.lantern/log/lantern-ink-mcp.log`. Unsaved drawings are autosaved
+//! while it runs and once more when stdin closes, then it exits. No GPU,
+//! no window.
 
 #![deny(clippy::print_stdout)]
 
@@ -25,6 +26,11 @@ fn main() {
     let log = Log::open(&home.join(".lantern/log/lantern-ink-mcp.log"));
     let epoch = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
     log.line(&format!("start: pid {}, unix time {epoch}", std::process::id()));
+    // Text that asks for `sans-serif` is set in the desktop's own font.
+    if let Some(font) = desktop_font(&home) {
+        ink_core::ink_doc::fonts::defaults(Some(&font), None);
+        log.line(&format!("sans-serif is {font} (lantern.toml)"));
+    }
     let env = Env::from_process();
     prune(&env.previews, &log);
     let mut server = Server::new(Ink::new(Core::headless(), env));
@@ -42,6 +48,17 @@ fn main() {
         }
     });
     log.line("exit");
+}
+
+/// The family Lantern's desktop is set in, where `lantern.toml` names
+/// one (`[appearance] font_family`). A generic name there names none:
+/// Lantern's default stands.
+fn desktop_font(home: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(home.join(".lantern/config/lantern.toml")).ok()?;
+    let config = lntrn_data::toml::parse(&text).ok()?;
+    let family = config.path("appearance.font_family")?.as_str()?.trim();
+    let generic = matches!(family.to_ascii_lowercase().as_str(), "" | "sans-serif" | "serif" | "monospace" | "system-ui");
+    (!generic).then(|| family.to_owned())
 }
 
 /// Clear previews older than a day: every run leaves its newest.
