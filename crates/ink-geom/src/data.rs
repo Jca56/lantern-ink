@@ -3,7 +3,8 @@
 
 use lntrn_math::Vec2;
 
-use crate::number::{self, scan, skip_separators};
+use crate::arc::{Shape, shape};
+use crate::number::{self, MAX_DECIMALS, scan, skip_separators};
 use crate::path::{ArcTo, Path, Seg};
 
 /// A path read from path data.
@@ -41,6 +42,54 @@ fn pair(s: &[u8], i: &mut usize) -> Option<Vec2> {
 /// `c` mirrored through `p` (the control point of a smooth curve).
 fn mirror(p: Vec2, c: Vec2) -> Vec2 {
     p * 2.0 - c
+}
+
+/// The middle of the arc from `from` to `to`, if it is one.
+fn apex(from: Vec2, arc: &ArcTo, to: Vec2) -> Option<Vec2> {
+    match shape(from, arc, to) {
+        Shape::Arc(c) => Some(c.at(c.theta + c.delta / 2.0, 1.0)),
+        _ => None,
+    }
+}
+
+/// An arc's radii as they're written, to `decimals` places or as many
+/// more as it takes. An arc is given by its ends, so its ends rounded a
+/// hair closer together (or a radius rounded a hair up) pull it flat,
+/// by far more than the rounding: twenty times, near a half turn. So
+/// the radii written are the first of these that keep the arc's middle
+/// where it was meant, within one unit of the last place: to the
+/// nearest; rounded down (radii that fall short of the ends grow to
+/// just reach them, which is a half turn exactly); then the same with
+/// one more decimal, and so on.
+fn radii(from: Vec2, arc: &ArcTo, to: Vec2, decimals: usize) -> (String, String) {
+    let n = |v: f64, places: usize| number::format(v, places);
+    let read = |text: &str| number::parse(text).unwrap_or(0.0);
+    let plain = (n(arc.rx, decimals), n(arc.ry, decimals));
+    let written = |p: Vec2| Vec2::new(read(&n(p.x, decimals)), read(&n(p.y, decimals)));
+    let (w_from, w_to, rotation) = (written(from), written(to), read(&n(arc.rotation, decimals)));
+    // What's meant: the same sweep of the same ellipse, between the
+    // ends as they're written. In the ellipse's own frame (unturned,
+    // its radii 1) a sweep's chord is 2 sin(sweep / 2) long.
+    let Shape::Arc(meant) = shape(from, arc, to) else { return plain };
+    let (sin, cos) = rotation.to_radians().sin_cos();
+    let chord = (w_to - w_from) * 0.5;
+    let half = ((cos * chord.x + sin * chord.y) / meant.rx).hypot((cos * chord.y - sin * chord.x) / meant.ry);
+    let fit = half / (meant.delta.abs() * 0.5).sin();
+    let exact = ArcTo { rx: meant.rx * fit, ry: meant.ry * fit, rotation, ..*arc };
+    let Some(middle) = apex(w_from, &exact, w_to).filter(|_| fit.is_finite() && fit > 0.0) else { return plain };
+    let within = 10f64.powi(-(decimals as i32));
+    for places in decimals..=MAX_DECIMALS {
+        let unit = 10f64.powi(places as i32);
+        for down in [false, true] {
+            let cut = |v: f64| n(if down { (v * unit).floor() / unit } else { v }, places);
+            let (rx, ry) = if places == decimals && !down { plain.clone() } else { (cut(exact.rx), cut(exact.ry)) };
+            let tried = ArcTo { rx: read(&rx), ry: read(&ry), rotation, ..*arc };
+            if apex(w_from, &tried, w_to).is_some_and(|at| at.distance(middle) <= within) {
+                return (rx, ry);
+            }
+        }
+    }
+    plain
 }
 
 impl Path {
@@ -137,7 +186,9 @@ impl Path {
     }
 
     /// The path as path data, numbers to `decimals` places: absolute
-    /// commands, `H` and `V` where a line is level or upright.
+    /// commands, `H` and `V` where a line is level or upright. An arc's
+    /// radii take more places where it would otherwise be drawn
+    /// somewhere else (see [`radii`]).
     pub fn to_data(&self, decimals: usize) -> String {
         let n = |v: f64| number::format(v, decimals);
         let xy = |p: Vec2| format!("{} {}", n(p.x), n(p.y));
@@ -154,7 +205,10 @@ impl Path {
                     Seg::Line { to } => format!("L{}", xy(to)),
                     Seg::Quad { c, to } => format!("Q{} {}", xy(c), xy(to)),
                     Seg::Cubic { c1, c2, to } => format!("C{} {} {}", xy(c1), xy(c2), xy(to)),
-                    Seg::Arc { arc, to } => format!("A{} {} {} {} {} {}", n(arc.rx), n(arc.ry), n(arc.rotation), arc.large as u8, arc.sweep as u8, xy(to)),
+                    Seg::Arc { arc, to } => {
+                        let (rx, ry) = radii(at, &arc, to, decimals);
+                        format!("A{rx} {ry} {} {} {} {}", n(arc.rotation), arc.large as u8, arc.sweep as u8, xy(to))
+                    }
                 });
                 at = seg.to();
             }
@@ -254,5 +308,37 @@ mod tests {
         assert_eq!(p.to_data(0), "M0 0 H10 V5");
         // A line that goes nowhere is still written as a line.
         assert_eq!(read("M1 1 L1 1").to_data(3), "M1 1 L1 1");
+    }
+
+    #[test]
+    fn an_arc_is_written_so_that_it_stays_where_it_was() {
+        // How far the middle of `d`'s first arc is from the same arc's
+        // as written to three places.
+        let moved = |path: &Path| {
+            let middle = |p: &Path| match p.subpaths[0].segs[0] {
+                Seg::Arc { ref arc, to } => apex(p.subpaths[0].start, arc, to).unwrap(),
+                _ => panic!(),
+            };
+            (path.to_data(3), middle(path).distance(middle(&read(&path.to_data(3)))))
+        };
+        // A half circle, its ends turned to where three places put them
+        // a hair closer together than its radius reaches: written with
+        // the radius cut short, which grows to a half turn exactly.
+        let turned = read("M8 7 A4 4 0 0 1 16 7").transformed(&crate::Affine::rotate(30f64.to_radians()));
+        let (text, off) = moved(&turned);
+        assert_eq!(text, "M3.428 10.062 A3.999 3.999 0 0 1 10.356 14.062");
+        assert!(off < 2e-3, "{off}");
+        // Written to the nearest it would have sagged by twenty times
+        // what was rounded away.
+        let sagging = read("M3.428 10.062 A4 4 0 0 1 10.356 14.062");
+        assert!(apex(sagging.subpaths[0].start, &ArcTo { rx: 4.0, ry: 4.0, rotation: 0.0, large: false, sweep: true }, v(10.356, 14.062)).unwrap().distance(apex(turned.subpaths[0].start, &ArcTo { rx: 4.0, ry: 4.0, rotation: 0.0, large: false, sweep: true }, turned.subpaths[0].segs[0].to()).unwrap()) > 0.01);
+        // Nearly a half turn: more places, as many as it takes.
+        let nearly = read("M0 0 A5.0031 5.0031 0 0 1 10 0").transformed(&crate::Affine::rotate(1.0));
+        let (text, off) = moved(&nearly);
+        assert_eq!(text, "M0 0 A5.0032 5.0032 0 0 1 5.403 8.415");
+        assert!(off < 2e-3, "{off}");
+        // An ordinary arc, and one whose radii never reached: as ever.
+        assert_eq!(read("M10 0 A10 10 0 0 1 0 10").transformed(&crate::Affine::rotate(0.3)).to_data(3), "M9.553 2.955 A10 10 0 0 1 -2.955 9.553");
+        assert_eq!(read("M0 0 A1 2 30 0 1 10 0").to_data(3), "M0 0 A1 2 30 0 1 10 0");
     }
 }

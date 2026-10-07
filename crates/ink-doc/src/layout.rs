@@ -72,6 +72,28 @@ fn line_up(gap: &str, inner: &str, last: &str) -> String {
     }
 }
 
+/// `gap` with every line that starts in it and is indented by `was`
+/// (or by more) indented by `now` instead, what's more kept.
+fn reindent(gap: &str, was: &str, now: &str) -> String {
+    let mut out = String::with_capacity(gap.len() + now.len());
+    let mut rest = gap;
+    while !rest.is_empty() {
+        let (run, after) = rest.split_at(rest.len() - rest.trim_start_matches(SPACE).len());
+        match indentation(run).and_then(|tail| tail.trim_start_matches(['\r', '\n']).strip_prefix(was).map(|more| (tail, more))) {
+            Some((tail, more)) => {
+                out.push_str(&run[..run.len() - tail.trim_start_matches(['\r', '\n']).len()]);
+                out.push_str(now);
+                out.push_str(more);
+            }
+            None => out.push_str(run),
+        }
+        let (kept, more) = after.split_at(piece(after).min(after.len()));
+        out.push_str(kept);
+        rest = more;
+    }
+    out
+}
+
 /// Whether `raw` is only white space, comments and processing
 /// instructions: nothing that is said.
 fn is_gap(raw: &str) -> bool {
@@ -109,6 +131,45 @@ impl Document {
         let Some(own) = siblings.iter().position(|c| *c == Child::Node(id)).and_then(|i| indent_before(siblings, i)) else { return Ok(()) };
         let unit = self.unit(id, own.trim_start_matches(['\r', '\n']));
         self.lay_inside(id, &own, &unit)
+    }
+
+    /// The line break and indentation `id`'s own line starts with, when
+    /// it has a line of its own.
+    pub(crate) fn own_line(&self, id: NodeId) -> Option<String> {
+        let siblings = &self.get(self.get(id)?.parent?)?.children;
+        siblings.iter().position(|c| *c == Child::Node(id)).and_then(|i| indent_before(siblings, i))
+    }
+
+    /// Shift the lines inside `id` along with it: it stood on a line
+    /// indented by `was` and now stands on one indented by `now` (each
+    /// as [`Document::own_line`] gives it). What's inside keeps its
+    /// layout, as far in or out as `id` itself went. Words are left
+    /// alone, as ever.
+    pub(crate) fn shift(&mut self, id: NodeId, was: &str, now: &str) -> Result<(), DocError> {
+        let (was, now) = (was.trim_start_matches(['\r', '\n']), now.trim_start_matches(['\r', '\n']));
+        if was == now {
+            return Ok(());
+        }
+        let mut inside = vec![id];
+        while let Some(id) = inside.pop() {
+            let node = self.node(id)?;
+            if !takes_lines(node) {
+                continue;
+            }
+            inside.extend(node.elements());
+            let shifted: Vec<Child> = node
+                .children
+                .iter()
+                .map(|child| match child {
+                    Child::Text(gap) => Child::Text(reindent(gap, was, now)),
+                    Child::Node(id) => Child::Node(*id),
+                })
+                .collect();
+            if shifted != node.children {
+                self.edit(id)?.children = shifted;
+            }
+        }
+        Ok(())
     }
 
     /// The same, for a node whose line starts with `own` (its line break
@@ -190,6 +251,21 @@ mod tests {
         assert_eq!(put("<svg>\n</svg>", other), format!("<svg>\n  {other}\n</svg>"));
         // Stray character data keeps a group as it was written.
         assert_eq!(put("<svg>\n</svg>", "<g>&#32;<a/></g>"), "<svg>\n  <g>&#32;<a/></g>\n</svg>");
+    }
+
+    #[test]
+    fn what_is_inside_a_moved_node_moves_in_or_out_with_it() {
+        let mut d = Document::parse(DocId(1), "<svg>\n  <g>\n    <a>\n      <!-- note -->\n      <b/>\n\n    </a>\n  </g>\n  <defs>\n   <path/>\n  </defs>\n  <text>\n    words\n  </text>\n</svg>").unwrap();
+        let ids: std::collections::HashMap<String, NodeId> = d.descendants(d.root()).into_iter().map(|id| (d.node(id).unwrap().name.clone(), id)).collect();
+        // Out of its group, to the root: one step out, all the way down.
+        d.apply(&Command::Move { nodes: vec![ids["a"]], place: Place::Before(ids["g"]) }).unwrap();
+        assert!(d.to_svg().starts_with("<svg>\n  <a>\n    <!-- note -->\n    <b/>\n\n  </a>\n  <g>\n  </g>\n"), "{}", d.to_svg());
+        // Into it again, with what was laid out its own way and a
+        // <text>'s words as they were.
+        d.apply(&Command::Move { nodes: vec![ids["a"], ids["defs"], ids["text"]], place: Place::LastIn(ids["g"]) }).unwrap();
+        assert_eq!(d.to_svg(), "<svg>\n  <g>\n    <a>\n      <!-- note -->\n      <b/>\n\n    </a>\n    <defs>\n     <path/>\n    </defs>\n    <text>\n    words\n  </text>\n  </g>\n</svg>");
+        assert_eq!(reindent("\n\t\t<!-- a\n b -->\n\t\t\t", "\t\t", " "), "\n <!-- a\n b -->\n \t");
+        assert_eq!(reindent("\n  ", "    ", ""), "\n  ", "a line not indented that far stays");
     }
 
     #[test]

@@ -103,6 +103,35 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     binary to `~/.lantern/bin/lantern-ink-mcp.new` and `mv` it over.
   - `~/.lantern/bin/lantern-ink` is the May 2026 iced prototype's
     binary, not ours: left alone until M4's window takes the name.
+- **M3 (operations) is under way**, in five slices, in the order Alva
+  chose 2026-10-06: **a** structure and transforms, **b** paint (styles,
+  gradients, clips, filters; the renderer learns `feGaussianBlur` and
+  `<style>` rules), **c** paths (anchors, editing, boolean ops), **d**
+  text, **e** tidy. D13 (bake a move into the geometry whenever that's
+  exact; groups pass it down), D14 (a property is written where the node
+  has it) and D15 (three decimals) are decided; D18 and D19 wait for
+  their slices.
+- **M3a, so far** (2026-10-06): `Command::Transform`, `Duplicate`,
+  `Group`, `Ungroup`, and `Move` keeping a node where it shows; the tools
+  `node_transform`, `node_align`, `node_duplicate`, `node_group`,
+  `node_ungroup` (22 tools in all). **Still to come in M3a:**
+  `node_info`, `doc_set`, `doc_query` (which needs hit tests).
+  - Where a transform is written is `ink-doc/src/settle.rs`, and its
+    rules are ARCHITECTURE §3.4. Its done-test draws the corpus:
+    `cargo test --release -p ink-render --test settle` (and `report`, or
+    `inspect` with `INK_FILE=name.svg`, each with `-- --ignored
+    --nocapture`, to read how far apart the pictures are, file by file
+    or node by node).
+  - `ink-geom` writes an arc's radii as finely as it takes to keep the
+    arc where it was (`data.rs`): one near a half turn is pulled flat
+    by its ends being rounded, by twenty times what was rounded away.
+  - `ink:decimals` on the root sets a document's precision (D15); only
+    `node_set` writes it so far.
+  - **Not yet:** a shape painted by a gradient in its own coordinates
+    (`userSpaceOnUse`, 18 corpus files) keeps even a move in its
+    `transform`, until M3b can move the gradient with it. `ToPath` and
+    `SetGeometry` have no Command: nothing needs them before M3c's path
+    tools and M4's handles.
 
 ## Working here
 - `cargo test --workspace`, `cargo clippy --workspace --all-targets`.
@@ -129,3 +158,6 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
 - **Don't launch the GUI without asking**, and never capture the screen.
 - **No GPU code below `ink-app`**, and `ink-doc`, `ink-render` and
   `ink-core` never depend on `lntrn-ui` or `lntrn-app` (ARCHITECTURE §2).
+- **The 500 / 600 line rule is for code.** Docs aren't counted (this
+  file, `docs/*.md`): they aren't code, and a design doc reads best
+  whole (Alva, 2026-10-06).

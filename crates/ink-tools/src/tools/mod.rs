@@ -3,7 +3,9 @@
 //! it builds one Command from its arguments, which the core applies as
 //! one undo step, and which a batch can hold.
 
+mod arrange;
 mod docs;
+mod groups;
 mod history;
 mod nodes;
 
@@ -34,6 +36,11 @@ pub(crate) struct Entry {
     pub handler: Handler,
 }
 
+/// An edit, as a tool.
+pub(crate) fn edit(name: &'static str, title: &'static str, description: &'static str, schema: fn() -> lntrn_data::Doc, kind: lntrn_mcp::Kind, build: Build, report: Report) -> Entry {
+    Entry { spec: Tool { name, title, description, schema, kind }, handler: Handler::Edit { build, report } }
+}
+
 pub(crate) struct Ctx<'a> {
     pub core: &'a mut Core,
     pub env: &'a Env,
@@ -43,6 +50,8 @@ pub(crate) struct Ctx<'a> {
 pub(crate) fn all() -> Vec<Entry> {
     let mut tools = docs::tools();
     tools.extend(nodes::tools());
+    tools.extend(arrange::tools());
+    tools.extend(groups::tools());
     tools.extend(history::tools());
     tools
 }

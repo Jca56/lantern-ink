@@ -11,6 +11,8 @@
 //! - [`stroke()`]: a stroke's outline as polygons, with joins, caps and
 //!   dashes.
 //! - [`Path::bounds`]: the exact box around a path.
+//! - [`Path::transformed`]: a path through a transform, its segments
+//!   still the kinds they were.
 
 mod affine;
 mod arc;
@@ -18,11 +20,12 @@ mod bounds;
 mod dash;
 mod data;
 mod flatten;
+mod map;
 pub mod number;
 mod path;
 mod stroke;
 
-pub use affine::Affine;
+pub use affine::{Affine, Axes};
 pub use data::Parsed;
 pub use flatten::Polyline;
 pub use lntrn_math::{Rect, Vec2};

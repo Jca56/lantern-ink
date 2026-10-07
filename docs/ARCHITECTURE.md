@@ -96,7 +96,8 @@ ink-mcp → bin lantern-ink-mcp      ink-app → bin lantern-ink
   (D8).
 - **`ink-doc`, `ink-render` and `ink-core` never depend on `lntrn-ui` or
   `lntrn-app`.** Headless builds link no window code.
-- **The 500 / 600 line file rule applies throughout.**
+- **The 500 / 600 line file rule applies to every source file.** Docs
+  aren't code and aren't counted.
 
 **What exists already, and what we do with it** (from the audit):
 
@@ -184,7 +185,8 @@ enum  Child { Node(NodeId), Text(String) /* text, comments, CDATA, as written */
 - Inside `style="…"`, one declaration is rewritten and the rest are kept.
 - New nodes take their indentation from their siblings, and markup put
   in whole is laid out the same way all the way down (never among a
-  `<text>`'s words, where white space means something).
+  `<text>`'s words, where white space means something). A node moved
+  to another depth takes what's inside it in or out as far as it went.
 - UTF-8 only (a BOM and CRLF line ends are kept as found); other encodings
   are refused with a clear message.
 - **Numbers Ink writes** are rounded to a per-document precision (D15),
@@ -208,7 +210,9 @@ enum  Child { Node(NodeId), Text(String) /* text, comments, CDATA, as written */
   open groups, guides being dragged. The selection is not undoable and
   never Claude's (every Command names its nodes).
 - **Ink's own extras** are attributes in an `ink:` namespace that other
-  programs ignore: `ink:locked`, `ink:label`, guides on the root (D19).
+  programs ignore: `ink:locked`, `ink:label`, guides on the root (D19),
+  and `ink:decimals` on the root, which is D15's "settable per document"
+  (read since M3a; nothing sets it yet but `node_set`).
   The root declares `xmlns:ink` in a document Ink made, in one it took
   over from another editor (D25), and from the first time an `ink:`
   attribute is needed; a file from elsewhere is otherwise left unstamped.
@@ -236,6 +240,39 @@ where a property goes (D14), so no Command formats numbers itself.
 **As built in M1:** `SetAttr`, `Insert`, `Delete`, `Move` and `Batch`
 (the structure and the raw rows). The typed ones come with the tools
 that need them, in M2 and M3.
+
+**As built in M3a:** `Transform`, `Duplicate`, `Group`, `Ungroup`, and
+`Move` keeping a node where it shows. The writer is `ink-doc`'s
+`value.rs` (numbers, points, path data and transforms as text, at the
+document's `Precision`) and `props.rs` (a property set where the node
+has it, D14); `shape.rs` is the typed view of a shape's own numbers.
+
+**Where a transform is written** (D13, `settle.rs`). A node put through
+a transform looks exactly as SVG says it would with that transform on
+it, so:
+- **A shape takes it into its own numbers** when they can say the same
+  picture: a path, a line and a polygon anything; a circle while it
+  stays round; a rect and an ellipse a move, a scale along their sides
+  and a quarter turn. Any other turn of those two stays as one `rotate`
+  about their middle; a skew stays whole, as a `matrix`.
+- **How it's drawn goes with it.** A stroke grows with its shape, so a
+  stroked shape takes only an even scale into its numbers. A gradient
+  across its box wouldn't turn with them, nor dashes along a rect's
+  fixed outline, so a turn or a mirror then stays in `transform`. A clip
+  path, a mask, markers and a gradient or filter in the node's own
+  coordinates would be left behind, so everything stays there; a shadow
+  wouldn't turn or grow, so a filtered node takes only a move.
+- **A group passes it down** when everything in it can take it without
+  being left a transform it didn't have, and keeps it otherwise.
+- **A transform another editor left is taken in** the first time its
+  node is moved, when that's exact.
+- **"The same" is to the document's precision:** half a unit in the
+  last place written, at the drawing's far edge.
+
+Its done-test is `ink-render/tests/settle.rs`: every corpus file put
+through seven transforms draws what the transform itself would (the
+worst of 1008 pictures 0.08 levels apart), and every group that can be
+taken away leaves its picture as it was.
 
 ---
 
@@ -392,7 +429,7 @@ carries over; only the differences and the tool list are new here.
 | Group | Tools |
 |---|---|
 | Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set` (viewBox, size) |
-| Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`, `node_move`\*, `node_duplicate`, `node_delete`\*, `node_group`, `node_ungroup`, `node_transform`, `node_align` |
+| Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
 | Paths | `path_set`, `path_edit` (anchors and handles), `path_op` (boolean ops, outline stroke, simplify, reverse, to path) |
 | Paint | `gradient_add`, `gradient_set`, `clip_set`, `filter_set` |
 | Text | `text_add`, `text_set`, `text_to_path`, `font_list` |
@@ -538,8 +575,8 @@ the foundation; the rest wait for their milestone.
 | D10 | Addresses | ✅ **Decided 2026-10-05, as recommended:** docs `d1` / `w1`, nodes `N7`, alive while the document is open and not written to the file; an element's own `id` is just an attribute | Before M1 |
 | D11 | MCP plumbing | ✅ **Decided 2026-10-06, as recommended: a new LUI2 crate, `lntrn-mcp`** (JSON-RPC lines, both protocol eras, schema pieces, cancellation, the socket pipe): additive, nothing existing changes, and LS3 can move onto it whenever you like. The alternative is copying about 1.5k lines out of `studio-tools`, to be fixed twice whenever MCP changes | M2 |
 | D12 | The Studio look | **Copy** LS3's theme, layout, chrome and controls into `ink-app` (about 1.8k lines); consider a shared crate once we see what the two apps really share. U004 and U042 keep app looks out of LUI2 | M4 |
-| D13 | Moving and scaling | ✅ **Decided 2026-10-06, as recommended: bake into the geometry whenever that's exact**; keep a `transform` only where it isn't (a rotated rect stays a `<rect>` with a `rotate`, so its radius stays adjustable). The alternatives were always a `transform` (the numbers stop saying where things are) and always baking (a rotated rect becomes a path) | M3 |
-| D14 | Where a style is written | Where that node already has it (`style=""` or the attribute); a new property goes in as a presentation attribute | M3 |
+| D13 | Moving and scaling | ✅ **Decided 2026-10-06, as recommended: bake into the geometry whenever that's exact**; keep a `transform` only where it isn't (a rotated rect stays a `<rect>` with a `rotate`, so its radius stays adjustable). The alternatives were always a `transform` (the numbers stop saying where things are) and always baking (a rotated rect becomes a path). **For groups, decided the same day: passed down** to what's in them when all of it can take it exactly, kept as the group's own `transform` otherwise (§3.4) | M3 |
+| D14 | Where a style is written | ✅ **Decided 2026-10-06, as recommended:** where that node already has it (`style=""` or the attribute); a new property goes in as a presentation attribute | M3 |
 | D15 | Numbers Ink writes | ✅ **Decided 2026-10-06, as recommended:** three decimals, trailing zeros dropped, settable per document | M3 |
 | D16 | Coordinates Claude and the GUI speak | ✅ **Decided 2026-10-06, revising my first recommendation:** attributes are as the file writes them (the node's own coordinates, as in any SVG), which is also what `node_add_svg`'s raw markup means; what's reported back is where things show in the document's coordinates (§3.3) | M2 |
 | D17 | Pen tool | Click points, bend the segments after (your May preference); no click-drag handles while placing. Still what you want? | M4 |

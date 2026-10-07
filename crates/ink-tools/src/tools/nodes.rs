@@ -3,18 +3,14 @@
 //! step, and a step a batch can hold.
 
 use ink_core::ink_doc::geometry::page_bounds;
-use ink_core::ink_doc::{Document, Element, elements};
+use ink_core::ink_doc::{Document, Element, Precision, elements};
 use ink_core::{Applied, Command, NodeId};
 use lntrn_data::{Doc, Map};
-use lntrn_mcp::{Kind, Reply, Tool, ToolError, fail, schema};
+use lntrn_mcp::{Kind, Reply, ToolError, fail, schema};
 
 use crate::describe::{rect, tag, undrawn};
 use crate::input::{In, attr_value, common, refused_edit};
-use crate::tools::{Build, Entry, Handler, Report};
-
-fn edit(name: &'static str, title: &'static str, description: &'static str, schema: fn() -> Doc, kind: Kind, build: Build, report: Report) -> Entry {
-    Entry { spec: Tool { name, title, description, schema, kind }, handler: Handler::Edit { build, report } }
-}
+use crate::tools::{Entry, edit};
 
 pub(super) fn tools() -> Vec<Entry> {
     vec![
@@ -45,7 +41,7 @@ pub(super) fn tools() -> Vec<Entry> {
             set,
             changed,
         ),
-        edit("node_move", "Move in the stack", "Move nodes, each with everything in it, to another place in the drawing's order or into another group: just above or below a node, into one, or to the top or bottom of the whole drawing. Later in the file is further up the picture. (This moves them in the stack, not on the page.)", move_schema, Kind::Set, relocate, moved),
+        edit("node_move", "Move in the stack", "Move nodes, each with everything in it, to another place in the drawing's order or into another group: just above or below a node, into one, or to the top or bottom of the whole drawing. Later in the file is further up the picture. This moves them in the stack, not on the page: each stays where it shows, so one that lands in a group with a transform has its own numbers (or its transform) changed to make up for it. It takes on its new group's inherited paint.", move_schema, Kind::Set, relocate, moved),
         edit("node_delete", "Delete nodes", "Delete nodes, each with everything in it. Undoable with history_undo.", delete_schema, Kind::Destroy, delete, deleted),
     ]
 }
@@ -65,9 +61,10 @@ fn add_schema() -> Doc {
 fn add(doc: &Document, input: &In) -> Result<Command, ToolError> {
     let name = input.args.str("element")?;
     check_element(name)?;
+    let decimals = Precision::of(doc).decimals;
     let mut element = Element::new(name);
     for (attr, value) in input.args.opt_map("attrs", "attribute names and values")?.into_iter().flat_map(Map::iter) {
-        let Some(value) = attr_value(attr, value)? else { return fail(format!("the attribute \"{attr}\" is null: a new element has nothing to take off")) };
+        let Some(value) = attr_value(attr, value, decimals)? else { return fail(format!("the attribute \"{attr}\" is null: a new element has nothing to take off")) };
         element = element.with(attr, value);
     }
     Ok(Command::Insert { place: input.place(doc)?, elements: vec![element] })
@@ -123,13 +120,14 @@ fn set_schema() -> Doc {
     common::edit(&["node_id", "attrs"], vec![("node_id", common::node_id("The node")), ("attrs", schema::map(common::value("Its new value: a string or a number; null takes the attribute off", true), "The attributes to set, by name"))])
 }
 
-fn set(_: &Document, input: &In) -> Result<Command, ToolError> {
+fn set(doc: &Document, input: &In) -> Result<Command, ToolError> {
     let node = input.node("node_id")?;
+    let decimals = Precision::of(doc).decimals;
     let attrs = input.args.opt_map("attrs", "attribute names and values")?.ok_or_else(|| ToolError("\"attrs\" is required".into()))?;
     if attrs.is_empty() {
         return fail("\"attrs\" is empty: name at least one attribute to set");
     }
-    let sets: Vec<Command> = attrs.iter().map(|(name, value)| Ok(Command::SetAttr { node, name: name.to_owned(), value: attr_value(name, value)? })).collect::<Result<_, ToolError>>()?;
+    let sets: Vec<Command> = attrs.iter().map(|(name, value)| Ok(Command::SetAttr { node, name: name.to_owned(), value: attr_value(name, value, decimals)? })).collect::<Result<_, ToolError>>()?;
     Ok(Command::Batch(sets))
 }
 
@@ -179,7 +177,12 @@ fn moved(doc: &Document, applied: &Applied) -> Reply {
     }).collect();
     let mut m = Map::new();
     m.insert("node_ids", ids(&applied.moved));
-    Reply::text(format!("Moved {}.", places.join(", "))).data(Doc::Map(m))
+    // One that landed under other transforms was changed to stay put.
+    let kept = match applied.changed.as_slice() {
+        [] => String::new(),
+        changed => format!(" To stay where {} showed, {} changed to make up for the transforms there.", if changed.len() == 1 { "it" } else { "they" }, changed.iter().map(NodeId::to_string).collect::<Vec<_>>().join(", ")),
+    };
+    Reply::text(format!("Moved {}.{kept}", places.join(", "))).data(Doc::Map(m))
 }
 
 fn delete_schema() -> Doc {

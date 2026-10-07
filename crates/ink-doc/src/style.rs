@@ -9,16 +9,57 @@ use crate::color;
 use crate::length::{number, numbers, unit};
 use crate::node::Node;
 
+/// One `name: value` of a `style` attribute.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Decl<'a> {
+    pub name: &'a str,
+    /// What it's set to, any `!important` left off.
+    pub value: &'a str,
+    /// Where in the style the declaration is written (what's between
+    /// two `;`), and where in it that value is.
+    pub at: std::ops::Range<usize>,
+    pub value_at: std::ops::Range<usize>,
+}
+
+/// The declarations of a `style` attribute, in order. They part at each
+/// `;` that isn't inside quotes or brackets (a `url("data:…;base64,…")`
+/// is one value); what has no `:` isn't one.
+pub(crate) fn declarations(style: &str) -> impl Iterator<Item = Decl<'_>> {
+    let bytes = style.as_bytes();
+    let mut from = 0;
+    std::iter::from_fn(move || {
+        while from < bytes.len() {
+            let (mut end, mut quote, mut depth) = (from, 0u8, 0usize);
+            while end < bytes.len() {
+                match bytes[end] {
+                    b if quote != 0 => quote = if b == quote { 0 } else { quote },
+                    q @ (b'"' | b'\'') => quote = q,
+                    b'(' => depth += 1,
+                    b')' => depth = depth.saturating_sub(1),
+                    b';' if depth == 0 => break,
+                    _ => {}
+                }
+                end += 1;
+            }
+            let at = from..end;
+            from = end + 1;
+            let chunk = &style[at.clone()];
+            let Some(colon) = chunk.find(':') else { continue };
+            let said = chunk[colon + 1..].trim_end();
+            let said = said.strip_suffix("!important").map_or(said, str::trim_end);
+            let lead = said.len() - said.trim_start().len();
+            let start = at.start + colon + 1 + lead;
+            return Some(Decl { name: chunk[..colon].trim(), value: &said[lead..], value_at: start..start + said.len() - lead, at });
+        }
+        None
+    })
+}
+
 /// A property of `node`: from its `style` attribute, which wins, or the
 /// attribute of that name. Of the same property twice in a `style`, the
 /// later one counts.
 pub fn prop<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
-    let styled = node.attr("style").and_then(|style| {
-        style.split(';').rev().find_map(|decl| {
-            let (key, value) = decl.split_once(':')?;
-            (key.trim() == name).then(|| value.trim().trim_end_matches("!important").trim_end())
-        })
-    });
+    let styled = node.attr("style").and_then(|style| declarations(style).filter(|d| d.name == name).last().map(|d| d.value));
     styled.or_else(|| node.attr(name).map(str::trim))
 }
 
@@ -163,6 +204,16 @@ mod tests {
         assert_eq!(prop(n, "stroke-width"), Some("2px"));
         assert_eq!(prop(n, "stroke"), Some("blue"), "the attribute, when the style doesn't say");
         assert_eq!(prop(n, "opacity"), None);
+    }
+
+    #[test]
+    fn a_style_parts_at_its_semicolons_but_not_inside_a_value() {
+        let style = "fill: url(\"data:image/png;base64,AA==\") ; stroke :red!important;;font-family: 'a;b' ; nonsense;x:";
+        let all: Vec<Decl> = declarations(style).collect();
+        assert_eq!(all.iter().map(|d| (d.name, d.value)).collect::<Vec<_>>(), [("fill", "url(\"data:image/png;base64,AA==\")"), ("stroke", "red"), ("font-family", "'a;b'"), ("x", "")]);
+        assert_eq!((&style[all[1].at.clone()], &style[all[1].value_at.clone()]), (" stroke :red!important", "red"));
+        assert_eq!(&style[all[0].value_at.clone()], all[0].value);
+        assert_eq!(declarations("").count(), 0);
     }
 
     #[test]

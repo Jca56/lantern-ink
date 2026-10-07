@@ -15,9 +15,6 @@ use crate::env::Env;
 /// Nodes named by earlier steps of a batch (`"as": "sun"` → `"@sun"`).
 pub(crate) type Names = HashMap<String, NodeId>;
 
-/// How many decimals a number given to a tool is written with (D15).
-pub(crate) const DECIMALS: usize = 3;
-
 /// A core's refusal, in words that say what to do next.
 pub(crate) fn refused(e: CoreError) -> ToolError {
     match e {
@@ -94,13 +91,14 @@ impl In<'_> {
 }
 
 /// An attribute's value as a tool is given it: a string as it is, a
-/// number written as short as it can be. `None` for null: take it off.
-pub(crate) fn attr_value(name: &str, value: &Doc) -> Result<Option<String>, ToolError> {
+/// number written as short as it can be, to the `decimals` its document
+/// keeps (D15). `None` for null: take it off.
+pub(crate) fn attr_value(name: &str, value: &Doc, decimals: usize) -> Result<Option<String>, ToolError> {
     match value {
         Doc::Null => Ok(None),
         Doc::Str(s) => Ok(Some(s.clone())),
         Doc::Int(n) => Ok(Some(n.to_string())),
-        Doc::Float(v) if v.is_finite() => Ok(Some(number::format(*v, DECIMALS))),
+        Doc::Float(v) if v.is_finite() => Ok(Some(number::format(*v, decimals))),
         _ => fail(format!("the attribute \"{name}\" should be a string or a number (or null, to take it off)")),
     }
 }
@@ -216,7 +214,7 @@ mod tests {
 
     #[test]
     fn attribute_values_are_written_short() {
-        let v = |text: &str| attr_value("x", &json::parse(text).unwrap());
+        let v = |text: &str| attr_value("x", &json::parse(text).unwrap(), 3);
         assert_eq!(v("\"#ffc800\""), Ok(Some("#ffc800".into())));
         assert_eq!(v("12"), Ok(Some("12".into())));
         assert_eq!(v("12.50004"), Ok(Some("12.5".into())));
@@ -224,5 +222,6 @@ mod tests {
         assert_eq!(v("null"), Ok(None));
         assert!(v("true").unwrap_err().0.contains("string or a number"));
         assert!(v("[1]").is_err());
+        assert_eq!(attr_value("x", &json::parse("12.50004").unwrap(), 5), Ok(Some("12.50004".into())));
     }
 }

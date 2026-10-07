@@ -2,69 +2,12 @@
 //! (ARCHITECTURE §10). The protocol itself is tested in `lntrn-mcp`;
 //! these are Ink's tools.
 
-use std::path::PathBuf;
+mod common;
 
-use ink_core::Core;
-use ink_tools::{Env, INSTRUCTIONS, Ink};
+use common::{data, ok, picture, refused, server, text};
+use ink_tools::{INSTRUCTIONS, Ink};
 use lntrn_data::{Doc, json};
 use lntrn_mcp::{MAX_INSTRUCTIONS, Server};
-
-fn server(test: &str) -> (Server<Ink>, PathBuf) {
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ink-transcripts").join(test);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let mut s = Server::new(Ink::new(Core::headless(), Env::new(dir.join("previews"), Some(dir.clone()), "test")));
-    s.set_log(|_| {});
-    (s, dir)
-}
-
-/// A tools/call on the 2026-07-28 protocol; its result.
-fn call(s: &mut Server<Ink>, tool: &str, args: &str) -> Doc {
-    let line = format!(r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{tool}","arguments":{args},"_meta":{{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{{}}}}}}}}"#);
-    let out = s.handle_line(&line);
-    assert_eq!(out.len(), 1, "{tool}: {out:?}");
-    assert!(!out[0].contains('\n'), "one line per message");
-    let reply = json::parse(&out[0]).unwrap();
-    reply.get("result").cloned().unwrap_or_else(|| panic!("{tool}: {}", out[0]))
-}
-
-fn text(result: &Doc) -> &str {
-    result.get("content").and_then(Doc::as_list).unwrap().iter().rev().find_map(|b| b.get("text").and_then(Doc::as_str)).unwrap()
-}
-
-fn is_error(result: &Doc) -> bool {
-    result.get("isError").and_then(Doc::as_bool) == Some(true)
-}
-
-/// A successful call (panics on a refusal, showing it).
-fn ok(s: &mut Server<Ink>, tool: &str, args: &str) -> Doc {
-    let r = call(s, tool, args);
-    assert!(!is_error(&r), "{tool} refused: {}", text(&r));
-    // Claude Code shows the model only the structured data when there is
-    // any, so the text must be in it too.
-    if let Some(d) = r.get("structuredContent") {
-        assert_eq!(d.get("message").and_then(Doc::as_str), Some(text(&r)), "{tool}: its text is in its data");
-    }
-    r
-}
-
-/// A refused call's reason, without the tool's name in front.
-fn refused(s: &mut Server<Ink>, tool: &str, args: &str) -> String {
-    let r = call(s, tool, args);
-    assert!(is_error(&r), "{tool} wasn't refused: {}", text(&r));
-    text(&r).strip_prefix(&format!("{tool} refused: ")).unwrap_or_else(|| panic!("{}", text(&r))).to_owned()
-}
-
-fn data<'a>(result: &'a Doc, key: &str) -> &'a str {
-    result.get("structuredContent").and_then(|d| d.get(key)).and_then(Doc::as_str).unwrap_or_else(|| panic!("no \"{key}\" in {}", json::write(result)))
-}
-
-/// A result's picture: its MIME type and pixels.
-fn picture(result: &Doc) -> (String, lntrn_image::Image) {
-    let image = result.path("content[0]").expect("an image block");
-    let bytes = lntrn_core::encoding::base64_decode(image.get("data").and_then(Doc::as_str).unwrap()).unwrap();
-    (image.get("mimeType").and_then(Doc::as_str).unwrap().to_owned(), lntrn_image::decode(&bytes).unwrap())
-}
 
 #[test]
 fn the_tool_list_is_fixed_and_fits_claude_codes_limits() {
@@ -74,7 +17,7 @@ fn the_tool_list_is_fixed_and_fits_claude_codes_limits() {
     let list = json::parse(&out[0]).unwrap();
     let tools = list.path("result.tools").and_then(Doc::as_list).unwrap();
     let names: Vec<&str> = tools.iter().filter_map(|t| t.get("name").and_then(Doc::as_str)).collect();
-    assert_eq!(names, ["doc_new", "doc_open", "doc_list", "doc_info", "doc_source", "doc_preview", "doc_save", "doc_export", "doc_close", "node_add", "node_add_svg", "node_set", "node_move", "node_delete", "history_undo", "history_redo", "batch"]);
+    assert_eq!(names, ["doc_new", "doc_open", "doc_list", "doc_info", "doc_source", "doc_preview", "doc_save", "doc_export", "doc_close", "node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "history_undo", "history_redo", "batch"]);
     for t in tools {
         let name = t.get("name").and_then(Doc::as_str).unwrap();
         assert!(t.get("description").and_then(Doc::as_str).is_some_and(|d| d.len() <= 2048), "{name}'s description is too long");
@@ -245,7 +188,7 @@ fn a_batch_is_one_step_with_names_between_its_steps() {
     assert!(text(&ok(&mut s, "doc_info", r#"{"doc_id":"d1"}"#)).contains("1 nodes. Undo: 0."));
     for (steps, says) in [
         (r#"[]"#, "a batch holds 1 to 200 steps, not 0"),
-        (r#"[{"tool":"doc_save","args":{}}]"#, "step 1: doc_save can't go in a batch; only edits can (node_add, node_add_svg, node_set, node_move, node_delete)"),
+        (r#"[{"tool":"doc_save","args":{}}]"#, "step 1: doc_save can't go in a batch; only edits can (node_add, node_add_svg, node_set, node_move, node_delete, node_transform, node_align, node_duplicate, node_group, node_ungroup)"),
         (r#"[{"tool":"node_add","args":{"element":"g","preview":true}}]"#, "step 1 (node_add): preview goes on the batch, not on a step"),
         (r#"[{"tool":"node_add","args":{"element":"g","doc_id":"d2"}}]"#, "step 1 (node_add): a batch works on one drawing, d1"),
         (r#"[{"tool":"node_add","args":{"element":"g","into":"@nobody"}}]"#, "step 1 (node_add): \"@nobody\": no earlier step of this batch is named \"nobody\" (name one with \"as\")"),

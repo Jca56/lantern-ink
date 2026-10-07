@@ -3,11 +3,14 @@
 //! Command names its nodes, carries all it needs, and applies whole or
 //! not at all.
 
+use ink_geom::Affine;
+
 use crate::document::Document;
 use crate::edit::Place;
 use crate::error::{DocError, invalid};
 use crate::id::NodeId;
 use crate::node::{Content, Element};
+use crate::settle;
 use crate::xml::parse::parse_fragment;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -21,8 +24,27 @@ pub enum Command {
     /// Take `nodes` out, with everything in them.
     Delete { nodes: Vec<NodeId> },
     /// Move `nodes` to `place`, in the order given, with everything in
-    /// them.
+    /// them. Each stays where it shows: one that lands under other
+    /// transforms than it was under changes to make up for them (as
+    /// [`Command::Transform`] writes it). What it inherits is its new
+    /// parent's.
     Move { nodes: Vec<NodeId>, place: Place },
+    /// Copy each of `nodes`, with everything in it, right on top of
+    /// itself. A copy's `id`s are its own.
+    Duplicate { nodes: Vec<NodeId> },
+    /// Put `nodes` (which share a parent) into a new group where the
+    /// topmost of them was.
+    Group { nodes: Vec<NodeId> },
+    /// Take each of the groups `nodes` away from around what's in it,
+    /// which looks as it did. What only a group can hold for its
+    /// children (a filter, a clip path, a mask, an opacity over several)
+    /// refuses, unless `drop` says to lose it.
+    Ungroup { nodes: Vec<NodeId>, drop: bool },
+    /// Put `nodes` through `by`, a transform in the document's
+    /// coordinates. Each looks exactly as SVG says it would with that
+    /// transform on it; it goes into the node's own numbers where they
+    /// can say so, and into its `transform` where they can't (D13).
+    Transform { nodes: Vec<NodeId>, by: Affine },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -44,6 +66,15 @@ impl Applied {
     /// The document is as it was: there's nothing to undo.
     pub fn is_nothing(&self) -> bool {
         self.changed.is_empty() && self.created.is_empty() && self.removed.is_empty() && self.moved.is_empty()
+    }
+
+    /// These nodes' own attributes changed too.
+    pub(crate) fn note(&mut self, changed: Vec<NodeId>) {
+        for id in changed {
+            if !self.changed.contains(&id) {
+                self.changed.push(id);
+            }
+        }
     }
 
     /// The tree's shape changed, not just a node's attributes.
@@ -120,11 +151,45 @@ impl Document {
             Command::Move { nodes, place } => {
                 let mut place = *place;
                 for &id in nodes {
-                    if self.relocate(id, place)? && !applied.moved.contains(&id) {
-                        applied.moved.push(id);
+                    let was = settle::parent_to_doc(self, id)?;
+                    if self.relocate(id, place)? {
+                        if !applied.moved.contains(&id) {
+                            applied.moved.push(id);
+                        }
+                        let kept = self.make(&settle::keep_place(self, id, &was)?)?;
+                        applied.note(kept);
                     }
                     place = Place::After(id);
                 }
+            }
+            Command::Duplicate { nodes } => {
+                if nodes.is_empty() {
+                    return invalid("there's nothing to copy");
+                }
+                for &id in nodes {
+                    let copy = self.duplicate(id)?;
+                    applied.created.push(copy);
+                }
+            }
+            Command::Group { nodes } => {
+                let group = self.group(nodes)?;
+                applied.created.push(group);
+                applied.moved.extend(self.node(group)?.elements());
+            }
+            Command::Ungroup { nodes, drop } => {
+                if nodes.is_empty() {
+                    return invalid("there's nothing to ungroup");
+                }
+                for &id in nodes {
+                    let (inside, changed) = self.ungroup(id, *drop)?;
+                    applied.removed.push(id);
+                    applied.moved.extend(inside);
+                    applied.note(changed);
+                }
+            }
+            Command::Transform { nodes, by } => {
+                let changed = self.make(&settle::plan(self, nodes, by)?)?;
+                applied.note(changed);
             }
             Command::Batch(commands) => {
                 if depth >= MAX_BATCH_DEPTH {

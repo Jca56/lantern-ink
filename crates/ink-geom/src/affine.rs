@@ -110,6 +110,58 @@ impl Affine {
     }
 }
 
+/// A transform's linear part as a scale along x and y, then a turn:
+/// what a shape with sides of its own (a rect, an ellipse) can take
+/// into its own numbers and one `rotate`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Axes {
+    /// Radians, clockwise on screen.
+    pub angle: f64,
+    /// Along x: more than nothing.
+    pub sx: f64,
+    /// Along y: less than nothing when the transform mirrors.
+    pub sy: f64,
+}
+
+impl Axes {
+    /// The transform this is (with no move).
+    pub fn linear(&self) -> Affine {
+        Affine::scale(self.sx, self.sy).then(&Affine::rotate(self.angle))
+    }
+
+    /// The same scale each way (a mirror aside).
+    pub fn is_uniform(&self, reach: f64, within: f64) -> bool {
+        (self.sx - self.sy.abs()).abs() * reach <= within
+    }
+}
+
+impl Affine {
+    /// The scale-then-turn nearest this transform's linear part: exactly
+    /// it when the transform doesn't skew ([`Affine::gap`] tells). `None`
+    /// when it squashes x flat.
+    pub fn axes(&self) -> Option<Axes> {
+        let sx = self.a.hypot(self.b);
+        if !(sx > 0.0 && sx.is_finite()) {
+            return None;
+        }
+        let (sin, cos) = (self.b / sx, self.a / sx);
+        Some(Axes { angle: self.b.atan2(self.a), sx, sy: self.d * cos - self.c * sin })
+    }
+
+    /// The most this and `other` can differ in where they put a point
+    /// no further than `reach` from the origin.
+    pub fn gap(&self, other: &Affine, reach: f64) -> f64 {
+        let linear = (self.a - other.a).abs() + (self.b - other.b).abs() + (self.c - other.c).abs() + (self.d - other.d).abs();
+        linear * reach + (self.e - other.e).abs() + (self.f - other.f).abs()
+    }
+
+    /// This transform's linear part alone: where it leaves the origin
+    /// left out.
+    pub fn without_move(&self) -> Affine {
+        Affine::new(self.a, self.b, self.c, self.d, 0.0, 0.0)
+    }
+}
+
 impl Default for Affine {
     fn default() -> Affine {
         Affine::IDENTITY
@@ -147,6 +199,23 @@ mod tests {
         assert!(Affine::scale(1.0, 0.0).inverse().is_none(), "flat");
         assert!(Affine::scale(f64::NAN, 1.0).inverse().is_none());
         assert!(t.linear(Vec2::ZERO) == Vec2::ZERO && t.apply(Vec2::ZERO) == Vec2::new(7.0, -3.0));
+    }
+
+    #[test]
+    fn a_transform_that_does_not_skew_is_a_scale_then_a_turn() {
+        let t = Affine::scale(2.0, -3.0).then(&Affine::rotate(0.5)).then(&Affine::translate(7.0, 1.0));
+        let axes = t.axes().unwrap();
+        assert!((axes.angle - 0.5).abs() < 1e-12 && (axes.sx - 2.0).abs() < 1e-12 && (axes.sy + 3.0).abs() < 1e-12, "{axes:?}");
+        assert!(axes.linear().gap(&t.without_move(), 100.0) < 1e-9);
+        assert!(!axes.is_uniform(1.0, 1e-9) && Affine::scale(-2.0, 2.0).axes().unwrap().is_uniform(1.0, 1e-9));
+        // A mirror in x is a half turn and a mirror in y.
+        let mirror = Affine::scale(-1.0, 1.0).axes().unwrap();
+        assert!((mirror.angle.abs() - std::f64::consts::PI).abs() < 1e-12 && mirror.sy == -1.0);
+        // A skew has a nearest one, and a gap to it.
+        let skew = Affine::skew_x(0.3);
+        assert!(skew.axes().unwrap().linear().gap(&skew, 1.0) > 0.1);
+        assert!(Affine::scale(0.0, 1.0).axes().is_none());
+        assert_eq!(Affine::translate(3.0, 4.0).gap(&Affine::IDENTITY, 100.0), 7.0);
     }
 
     #[test]

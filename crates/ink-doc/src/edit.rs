@@ -262,8 +262,13 @@ impl Document {
             return invalid(format!("{id} can't go inside itself"));
         }
         self.resolve(place)?;
+        let was = self.own_line(id);
         self.detach(id)?;
         self.attach(place, id)?;
+        // What's inside it goes in or out as far as it did.
+        if let (Some(was), Some(now)) = (was, self.own_line(id)) {
+            self.shift(id, &was, &now)?;
+        }
         // Its names may mean something else under other declarations.
         self.rekind(id);
         Ok(true)
