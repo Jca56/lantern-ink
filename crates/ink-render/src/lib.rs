@@ -4,13 +4,15 @@
 //! so its pictures can be tested to the byte.
 //!
 //! [`render`] draws a [`Document`] as a [`View`] says: at what size, and
-//! how the page sits in the picture.
+//! how the page sits in the picture. A [`Plan`] lays a drawing out once
+//! and draws any part of its picture: the window's tiles.
 
 mod coverage;
 mod draw;
 mod filter;
 mod paint;
 mod par;
+mod plan;
 mod raster;
 mod scene;
 
@@ -19,6 +21,8 @@ use core::fmt;
 use ink_doc::{Document, Viewport};
 use ink_geom::Affine;
 use lntrn_image::Image;
+
+pub use plan::{MAX_REACH, Plan};
 
 /// What part of a drawing a picture shows, and how big.
 #[derive(Clone, Copy, Debug, PartialEq)]

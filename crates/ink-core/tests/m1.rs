@@ -150,6 +150,42 @@ fn a_file_has_one_drawing_at_a_time() {
 }
 
 #[test]
+fn a_save_can_be_written_on_another_thread() {
+    let dir = scratch("save-job");
+    let mut core = Core::window(1);
+    let doc = core.new_doc(24.0, 24.0);
+    assert_eq!(core.begin_save(doc, None).unwrap_err(), CoreError::NoPath(doc));
+    let path = dir.join("a.svg");
+    let job = core.begin_save(doc, Some(&path)).unwrap();
+    assert_eq!((job.doc, job.path.as_path()), (doc, path.as_path()));
+    // Set going, nothing has changed yet: the file isn't the drawing's
+    // until it's written and the core is told.
+    assert_eq!((core.path(doc), core.is_modified(doc), path.exists()), (Ok(None), Ok(true), false));
+    // An edit made while the save is on its way stays to be saved.
+    core.apply(doc, &edit(&core, doc), Actor::Alva, "Edit").unwrap();
+    let written = std::thread::spawn(move || job.write().map(|()| job)).join().unwrap().unwrap();
+    core.saved(&written).unwrap();
+    assert_eq!((core.path(doc), core.is_modified(doc)), (Ok(Some(path.as_path())), Ok(true)));
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("circle"), "the file is the drawing as it was when the save began");
+    core.undo(doc).unwrap();
+    assert_eq!(core.is_modified(doc), Ok(false), "back at what's on disk");
+    // A file read elsewhere opens as its own would; one that's open is refused.
+    let text = ink_core::read_text(&path).unwrap();
+    assert_eq!(core.open_read(&path, &text), Err(CoreError::AlreadyOpen { path: path.clone(), doc }));
+    let copy = dir.join("b.svg");
+    std::fs::write(&copy, &text).unwrap();
+    let opened = core.open_read(&copy, &text).unwrap();
+    assert_eq!((core.path(opened.doc), core.is_modified(opened.doc)), (Ok(Some(copy.as_path())), Ok(false)));
+    // A save that lands on a file opened meanwhile isn't taken up.
+    let other = core.new_doc(8.0, 8.0);
+    let late = core.begin_save(other, Some(&dir.join("c.svg"))).unwrap();
+    late.write().unwrap();
+    let third = core.open_file(&dir.join("c.svg")).unwrap().doc;
+    assert_eq!(core.saved(&late), Err(CoreError::AlreadyOpen { path: dir.join("c.svg"), doc: third }));
+    assert_eq!(core.path(other), Ok(None));
+}
+
+#[test]
 fn what_cannot_be_done_says_why_and_leaves_no_step() {
     let dir = scratch("refused");
     let mut core = Core::headless();

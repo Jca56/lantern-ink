@@ -34,6 +34,24 @@ pub struct Opened {
     pub adopted: Adopted,
 }
 
+/// A save set going ([`Core::begin_save`]): the drawing as it was
+/// then, to be written wherever there's time for the disk.
+#[derive(Clone, Debug)]
+pub struct SaveJob {
+    pub doc: DocId,
+    /// The state the file will hold (see [`History::stamp`]).
+    pub stamp: u64,
+    pub path: PathBuf,
+    text: String,
+}
+
+impl SaveJob {
+    /// Write the file, whole or not at all.
+    pub fn write(&self) -> Result<(), CoreError> {
+        file::write(&self.path, self.text.as_bytes())
+    }
+}
+
 pub struct Core {
     docs: BTreeMap<DocId, Open>,
     /// Whether this is the window's core (its documents are `w…`) or a
@@ -99,7 +117,17 @@ impl Core {
         if let Some(doc) = self.doc_at(path) {
             return Err(CoreError::AlreadyOpen { path: path.to_owned(), doc });
         }
-        let opened = self.open_text(&file::read(path)?)?;
+        self.open_read(path, &file::read(path)?)
+    }
+
+    /// Open the file at `path`, whose `text` was read already (by
+    /// [`read_text`], off a window's thread). Refused as
+    /// [`Core::open_file`] refuses.
+    pub fn open_read(&mut self, path: &Path, text: &str) -> Result<Opened, CoreError> {
+        if let Some(doc) = self.doc_at(path) {
+            return Err(CoreError::AlreadyOpen { path: path.to_owned(), doc });
+        }
+        let opened = self.open_text(text)?;
         let open = self.open_mut(opened.doc)?;
         // As opened, it's what's on disk: nothing to save until it's
         // edited, even if marks were taken out of it.
@@ -166,15 +194,36 @@ impl Core {
     /// document as Ink holds it, written whole or not at all. Another
     /// open document's file is refused.
     pub fn save(&mut self, id: DocId, path: Option<&Path>) -> Result<PathBuf, CoreError> {
-        let own = self.open(id)?.path.clone();
-        let path = path.map(Path::to_owned).or(own).ok_or(CoreError::NoPath(id))?;
+        let job = self.begin_save(id, path)?;
+        job.write()?;
+        self.saved(&job)?;
+        Ok(job.path)
+    }
+
+    /// A save of `id` as it is now, to `path` or to its own file
+    /// again, for whoever can't wait for the disk (a window's frame):
+    /// [`SaveJob::write`] on any thread, then [`Core::saved`]. Another
+    /// open document's file is refused.
+    pub fn begin_save(&self, id: DocId, path: Option<&Path>) -> Result<SaveJob, CoreError> {
+        let open = self.open(id)?;
+        let path = path.map(Path::to_owned).or_else(|| open.path.clone()).ok_or(CoreError::NoPath(id))?;
         if let Some(doc) = self.doc_at(&path).filter(|&other| other != id) {
             return Err(CoreError::AlreadyOpen { path, doc });
         }
-        let open = self.open_mut(id)?;
-        file::write(&path, open.doc.to_svg().as_bytes())?;
-        (open.path, open.saved) = (Some(path.clone()), Some(open.history.stamp()));
-        Ok(path)
+        Ok(SaveJob { doc: id, stamp: open.history.stamp(), path, text: open.doc.to_svg() })
+    }
+
+    /// `job` was written: its file is the document's now, and the
+    /// state it held is the one on disk (what's been done since is
+    /// still to save).
+    pub fn saved(&mut self, job: &SaveJob) -> Result<(), CoreError> {
+        // Opened by another document while the save was on its way.
+        if let Some(doc) = self.doc_at(&job.path).filter(|&other| other != job.doc) {
+            return Err(CoreError::AlreadyOpen { path: job.path.clone(), doc });
+        }
+        let open = self.open_mut(job.doc)?;
+        (open.path, open.saved) = (Some(job.path.clone()), Some(job.stamp));
+        Ok(())
     }
 
     /// Write a clean copy of `id` to `path`, to ship

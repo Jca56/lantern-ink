@@ -7,6 +7,7 @@ members = [
     "crates/ink-core",
     "crates/ink-tools",
     "crates/ink-mcp",
+    "crates/ink-app",
 ]
 
 [workspace.package]
@@ -21,13 +22,17 @@ ink-doc = { path = "crates/ink-doc" }
 ink-render = { path = "crates/ink-render" }
 ink-core = { path = "crates/ink-core" }
 ink-tools = { path = "crates/ink-tools" }
+lntrn-app = { path = "../lantern-ui-2/crates/lntrn-app" }
 lntrn-core = { path = "../lantern-ui-2/crates/lntrn-core" }
 lntrn-data = { path = "../lantern-ui-2/crates/lntrn-data" }
 lntrn-image = { path = "../lantern-ui-2/crates/lntrn-image" }
 lntrn-math = { path = "../lantern-ui-2/crates/lntrn-math" }
 lntrn-mcp = { path = "../lantern-ui-2/crates/lntrn-mcp" }
+lntrn-props = { path = "../lantern-ui-2/crates/lntrn-props" }
 lntrn-svg = { path = "../lantern-ui-2/crates/lntrn-svg" }
+lntrn-sys = { path = "../lantern-ui-2/crates/lntrn-sys" }
 lntrn-text = { path = "../lantern-ui-2/crates/lntrn-text" }
+lntrn-ui = { path = "../lantern-ui-2/crates/lntrn-ui" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"

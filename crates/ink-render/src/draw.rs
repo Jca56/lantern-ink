@@ -4,7 +4,7 @@
 //! cut.
 
 use ink_doc::{Document, Viewport};
-use ink_geom::Vec2;
+use ink_geom::{Affine, Vec2};
 
 use crate::filter;
 use crate::coverage::Shape;
@@ -26,33 +26,59 @@ pub(crate) struct Scene {
     /// The shadows look further than the margin could go: only the
     /// picture drawn whole is the same every time.
     whole: bool,
+    /// Where the frame's corner is, in the px the items were laid out
+    /// in (and their paints fitted to).
+    origin: Vec2,
     items: Vec<Item<Shape>>,
+}
+
+/// Everything `doc` draws, through `page_to_px`, in the picture's px,
+/// and how far its shadows look there. `cut` says, of the page's
+/// corners, whether the drawing is cut to them.
+pub(crate) fn lay(doc: &Document, page_to_px: &Affine, cut: impl FnOnce(&[Vec2; 4]) -> bool) -> (Vec<Item<Polys>>, f64) {
+    let Ok(root) = doc.node(doc.root()) else { return (Vec::new(), 0.0) };
+    let viewport = Viewport::of(root);
+    let to_px = viewport.to_page.then(page_to_px);
+    // The page's edge, where the picture shows anything past it.
+    let corners = [Vec2::ZERO, Vec2::new(viewport.size.x, 0.0), viewport.size, Vec2::new(0.0, viewport.size.y)].map(|p| page_to_px.apply(p));
+    let mut builder = Builder::new(doc, viewport.view);
+    let items = builder.root(root, &to_px, cut(&corners).then_some(corners));
+    (items, builder.furthest)
 }
 
 impl Scene {
     pub fn build(doc: &Document, view: &View) -> Scene {
         let (width, height) = (view.width as usize, view.height as usize);
-        let Ok(root) = doc.node(doc.root()) else { return Scene { width, height, margin: 0, whole: true, items: Vec::new() } };
-        let viewport = Viewport::of(root);
-        let to_px = viewport.to_page.then(&view.page_to_px);
-        // The page's edge, where the picture shows anything past it.
-        let corners = [Vec2::ZERO, Vec2::new(viewport.size.x, 0.0), viewport.size, Vec2::new(0.0, viewport.size.y)].map(|p| view.page_to_px.apply(p));
-        let (lo, hi) = corners.iter().fold((corners[0], corners[0]), |(lo, hi), &p| (lo.min(p), hi.max(p)));
-        let upright = view.page_to_px.b == 0.0 && view.page_to_px.c == 0.0;
-        let fills = upright && lo.x <= 1e-3 && lo.y <= 1e-3 && hi.x >= width as f64 - 1e-3 && hi.y >= height as f64 - 1e-3;
-        let mut builder = Builder::new(doc, viewport.view);
-        let items = builder.root(root, &to_px, (view.clip_to_page && !fills).then_some(corners));
+        let fills = |corners: &[Vec2; 4]| {
+            let (lo, hi) = corners.iter().fold((corners[0], corners[0]), |(lo, hi), &p| (lo.min(p), hi.max(p)));
+            let upright = view.page_to_px.b == 0.0 && view.page_to_px.c == 0.0;
+            upright && lo.x <= 1e-3 && lo.y <= 1e-3 && hi.x >= width as f64 - 1e-3 && hi.y >= height as f64 - 1e-3
+        };
+        let (items, furthest) = lay(doc, &view.page_to_px, |corners| view.clip_to_page && !fills(corners));
         // Shadows that look further than the picture is long are cut
         // off there.
-        let (reach, longest) = (builder.furthest.ceil(), width.max(height) as f64);
+        let (reach, longest) = (furthest.ceil(), width.max(height) as f64);
         let (margin, whole) = if reach <= longest { (reach as usize, false) } else { (longest as usize, true) };
+        Scene::fit(&items, Vec2::ZERO, (width, height), margin, whole)
+    }
+
+    /// The part of what `items` draw that is `size` px with its corner
+    /// at `at` (in the px they were laid out in), with `margin` px
+    /// around it for what's out there to cast its shadows in.
+    pub fn fit(items: &[Item<Polys>], at: Vec2, (width, height): (usize, usize), margin: usize, whole: bool) -> Scene {
         let (frame_w, frame_h) = (width + 2 * margin, height + 2 * margin);
-        let offset = Vec2::splat(margin as f64);
-        let fit = |(polys, rule): Polys| {
-            let moved: Vec<Vec<Vec2>> = polys.into_iter().map(|poly| poly.into_iter().map(|p| p + offset).collect()).collect();
-            Shape::new(&moved, rule, frame_w, frame_h)
+        let offset = Vec2::splat(margin as f64) - at;
+        let fit = |(polys, rule): &Polys| {
+            let moved: Vec<Vec<Vec2>> = polys.iter().map(|poly| poly.iter().map(|&p| p + offset).collect()).collect();
+            Shape::new(&moved, *rule, frame_w, frame_h)
         };
-        Scene { width, height, margin, whole, items: fitted(items, &fit) }
+        Scene { width, height, margin, whole, origin: at - Vec2::splat(margin as f64), items: fitted(items, &fit) }
+    }
+
+    /// The picture drawn in one go, on the thread that asks: for a
+    /// part drawn beside others, each on a core of its own.
+    pub fn render_alone(&self) -> Vec<u8> {
+        self.render_in_bands(self.height)
     }
 
     /// The picture, as straight-alpha RGBA8, top row first.
@@ -78,7 +104,7 @@ impl Scene {
         let m = self.margin;
         // The frame's rows for these: the margin above and below too.
         let mut canvas = Canvas::new(self.width + 2 * m, y0, y1 - y0 + 2 * m);
-        draw(&mut canvas, &self.items, Vec2::splat(-(m as f64)));
+        draw(&mut canvas, &self.items, self.origin);
         let all = canvas.finish();
         if m == 0 {
             return all;

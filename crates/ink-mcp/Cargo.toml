@@ -17,5 +17,4 @@ workspace = true
 ink-core.workspace = true
 ink-tools.workspace = true
 lntrn-core.workspace = true
-lntrn-data.workspace = true
 lntrn-mcp.workspace = true

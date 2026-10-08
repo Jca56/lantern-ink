@@ -27,8 +27,7 @@ fn main() {
     let epoch = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
     log.line(&format!("start: pid {}, unix time {epoch}", std::process::id()));
     // Text that asks for `sans-serif` is set in the desktop's own font.
-    if let Some(font) = desktop_font(&home) {
-        ink_core::ink_doc::fonts::defaults(Some(&font), None);
+    if let Some(font) = ink_core::desktop::use_font(&home) {
         log.line(&format!("sans-serif is {font} (lantern.toml)"));
     }
     let env = Env::from_process();
@@ -48,17 +47,6 @@ fn main() {
         }
     });
     log.line("exit");
-}
-
-/// The family Lantern's desktop is set in, where `lantern.toml` names
-/// one (`[appearance] font_family`). A generic name there names none:
-/// Lantern's default stands.
-fn desktop_font(home: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(home.join(".lantern/config/lantern.toml")).ok()?;
-    let config = lntrn_data::toml::parse(&text).ok()?;
-    let family = config.path("appearance.font_family")?.as_str()?.trim();
-    let generic = matches!(family.to_ascii_lowercase().as_str(), "" | "sans-serif" | "serif" | "monospace" | "system-ui");
-    (!generic).then(|| family.to_owned())
 }
 
 /// Clear previews older than a day: every run leaves its newest.

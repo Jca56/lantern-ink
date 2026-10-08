@@ -55,11 +55,15 @@ impl Shape {
     /// `polys` (closed polygons, each implicitly closed) in the px of a
     /// frame `w` × `h`. `None` when they touch none of it.
     pub fn new(polys: &[Vec<Vec2>], rule: FillRule, w: usize, h: usize) -> Option<Shape> {
+        let drawn = |poly: &&Vec<Vec2>| poly.len() >= 3 && poly.iter().all(|p| p.is_finite());
+        // Wholly to one side of the frame, they cover none of it: a
+        // part of a big picture is spared the shapes beside it.
+        let (left, right) = polys.iter().filter(drawn).flatten().fold((f64::MAX, f64::MIN), |(lo, hi), p| (lo.min(p.x), hi.max(p.x)));
+        if right <= 0.0 || left >= w as f64 {
+            return None;
+        }
         let mut edges = Vec::new();
-        for poly in polys {
-            if poly.len() < 3 || poly.iter().any(|p| !p.is_finite()) {
-                continue;
-            }
+        for poly in polys.iter().filter(drawn) {
             for (i, &a) in poly.iter().enumerate() {
                 clip_x(a, poly[(i + 1) % poly.len()], w as f64, &mut edges);
             }

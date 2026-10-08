@@ -60,11 +60,11 @@ pub(crate) struct Clip<S> {
 }
 
 impl Clip<Polys> {
-    fn fitted(self, fit: &impl Fn(Polys) -> Option<Shape>) -> Option<Clip<Shape>> {
+    fn fitted(&self, fit: &impl Fn(&Polys) -> Option<Shape>) -> Option<Clip<Shape>> {
         // A shape off the frame lets nothing of the frame through.
         let shapes: Vec<(Shape, Option<Clip<Shape>>)> = self
             .shapes
-            .into_iter()
+            .iter()
             .filter_map(|(polys, within)| {
                 let shape = fit(polys)?;
                 match within {
@@ -73,7 +73,7 @@ impl Clip<Polys> {
                 }
             })
             .collect();
-        let outer = match self.outer {
+        let outer = match &self.outer {
             Some(outer) => Some(Box::new(outer.fitted(fit)?)),
             None => None,
         };
@@ -82,22 +82,23 @@ impl Clip<Polys> {
 }
 
 /// `items` with every outline fitted by `fit`; what's off the frame is
-/// left out.
-pub(crate) fn fitted(items: Vec<Item<Polys>>, fit: &impl Fn(Polys) -> Option<Shape>) -> Vec<Item<Shape>> {
+/// left out. The items stay as they are, to be fitted to another frame
+/// (a [`crate::Plan`]'s next part).
+pub(crate) fn fitted(items: &[Item<Polys>], fit: &impl Fn(&Polys) -> Option<Shape>) -> Vec<Item<Shape>> {
     items
-        .into_iter()
+        .iter()
         .filter_map(|item| match item {
-            Item::Fill { shape, paint, alpha } => Some(Item::Fill { shape: fit(shape)?, paint, alpha }),
+            Item::Fill { shape, paint, alpha } => Some(Item::Fill { shape: fit(shape)?, paint: paint.clone(), alpha: *alpha }),
             Item::Layer(layer) => {
-                let cut = match layer.cut {
+                let cut = match &layer.cut {
                     Some(cut) => Some(fit(cut)?),
                     None => None,
                 };
-                let clip = match layer.clip {
+                let clip = match &layer.clip {
                     Some(clip) => Some(clip.fitted(fit)?),
                     None => None,
                 };
-                Some(Item::Layer(Layer { items: fitted(layer.items, fit), opacity: layer.opacity, filter: layer.filter, cut, clip }))
+                Some(Item::Layer(Layer { items: fitted(&layer.items, fit), opacity: layer.opacity, filter: layer.filter.clone(), cut, clip }))
             }
         })
         .collect()

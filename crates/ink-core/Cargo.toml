@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 ink-doc.workspace = true
 ink-render.workspace = true
+lntrn-data.workspace = true
 lntrn-image.workspace = true
 
 [dev-dependencies]

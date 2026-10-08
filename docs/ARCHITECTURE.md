@@ -110,7 +110,7 @@ ink-mcp → bin lantern-ink-mcp      ink-app → bin lantern-ink
 | Text shaping, glyph outlines | `lntrn-text` (`place_outlines`, U057) | Used through `line_glyphs` (LUI2 U085, added for M3d: each glyph with its character and its place, which `place_outlines` didn't say) |
 | PNG, JPEG, WebP encoders | `lntrn-image` | Use as is |
 | JSON; JSON-RPC lines, both MCP eras, schemas, arguments, replies, the stdio loop | `lntrn-data`; LS3 `studio-tools` (about 1.5k generic lines among 7.2k) | D11: lifted into a new LUI2 crate, `lntrn-mcp` (LUI2 U082). LS3's staged calls and socket pipe stay with it until the live bridge (M5) needs them shared |
-| The Studio look: theme, layout, chrome, controls | LS3 `studio-app` (about 1.8k lines) | D12: copy at M4, or a shared crate |
+| The Studio look: theme, layout, chrome, controls | LS3 `studio-app` (about 1.8k lines) | D12: copied into `ink-app` as each slice of M4 needs it (the theme, layout and chrome with M4a; the controls with the paint panel) |
 
 That makes three vector stacks in the ecosystem once Ink has its own
 (`lntrn-svg`, LS3's, Ink's). Ink's is the superset, written to be the one
@@ -516,6 +516,16 @@ current scale, paint, opacity, clip, filter, bounds; cached by
   point and (in time) text made into paths need it too; the renderer
   draws the outlines it's handed.
 - **Colour:** 8-bit sRGB, composited in sRGB as SVG does.
+- **A picture too big to draw whole is drawn in parts** (`Plan`,
+  `ink-render/src/plan.rs`, for the window's tiles, §8): the drawing is
+  laid out once for a zoom (the scene, before it's fitted to a frame)
+  and any rectangle of its picture drawn from that, on whatever thread
+  asks, with as much of the picture around it as its shadows look (the
+  bands' margin, up to `MAX_REACH`, 1024 px). Parts laid edge to edge
+  are the picture drawn whole, to within a rounding of the last bit: a
+  part is the same shapes moved, where a band is the same shapes cut.
+  `Plan::bounds` is the box around everything it paints, so a part
+  outside it is known clear without being drawn.
 
 ### 5.2 What v1 draws, by what the corpus uses
 
@@ -808,6 +818,40 @@ As LS3 §7, to the letter where it can be:
   waits for a tile. Only tiles an edit touches are redrawn. If handing
   tiles through LUI2 proves too slow at 4K, a present pass of Ink's own
   goes in one module of `ink-app`, measured first.
+  **As built in M4a** (`ink-app/src/tiles.rs`):
+  - A tab's tiles are a *level*: the drawing in one state (its
+    history's stamp), at one zoom. When either changes, a new level is
+    drawn behind the one that shows, and they change places once every
+    tile in view has landed. So the canvas never goes blank, and never
+    shows half of one state beside half of another.
+  - The pool lays the drawing out once for a level (a `Plan`, §5.1),
+    from a copy of the document taken on the window's thread (a map of
+    shared nodes: cheap), then draws tiles from it, the nearest the
+    middle of the view first. Only as many are on the pool at once as
+    it has threads (less one, kept for the next layout) and as a budget
+    of pixels allows; what's still waiting when the view moves on is
+    never begun.
+  - Tiles are 256 px where shadows reach no further than 64 px, 512 up
+    to 256, 1024 beyond: a tile is drawn with its shadows' reach
+    around it, and small tiles would be mostly margin.
+  - A tile nothing is painted in (`Plan::bounds`) is never sent, and
+    one that comes back clear is never uploaded.
+  - The page's corner shows on a whole window pixel (`camera.rs`), so
+    tiles made for the zoom land pixel for pixel; stretched ones have
+    their edges rounded to whole pixels, shared by neighbours.
+  - The four tabs shown most lately keep their tiles.
+  - Measured (`cargo test --release -p ink-render --test speed tiles --
+    --ignored --nocapture`, every corpus file fitted to a 4K canvas):
+    a screen of an icon with no shadows is 25 to 125 ms of one core,
+    so sharp within a frame or two on the pool. One with drop shadows
+    (most of Lantern's app and folder icons) is 1.5 to 3.5 s of one
+    core, a tenth to four tenths of a second on the pool: each tile is
+    drawn with its shadows' reach around it, and a filter is worked
+    out in linear light over all of that. **For M4b:** a drag can't
+    redraw shadowed tiles every frame at that cost, so a gesture's
+    preview needs its own way (what's dragged drawn once and moved;
+    §4.3's overrides). **For the renderer, when it's measured again:**
+    a filter needn't touch the pixels of its frame that are clear.
 - **Overlays** (selection boxes, handles, anchors, guides, the pixel
   grid) are drawn in screen px over the canvas with LUI2's own lines, so
   they stay the same size at every zoom.
@@ -899,7 +943,7 @@ As LS3 §7, to the letter where it can be:
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
 | **M3** ✅ | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (built 2026-10-07), **e** tidy (built 2026-10-07) (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP. They do: the done-test (a stress sheet, all 39 tools, a fresh session) ran 2026-10-07, and what it found was fixed the same day |
-| **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
+| **M4** | `lantern-ink`, the window, in the LS3 look, in six slices (Alva's order, 2026-10-07): **a** the shell and the viewer (built 2026-10-07), **b** the object tree, the Pointer and undo, **c** paint and the shape tools, **d** the Node tool and the Pen, **e** text, gradients and the eyedropper, **f** the icon aids and not losing work | The scope checklist written with Alva at M4's start (D20) is `docs/M4.md`: every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 
 LUI2 changes Ink is known to want so far: possibly one new crate (D11).
@@ -925,15 +969,15 @@ the foundation; the rest wait for their milestone.
 | D9 | Names | ✅ **Decided 2026-10-05, as recommended:** `lantern-ink`, `lantern-ink-mcp`, MCP server `ink`, crates `ink-*`, the paths in §9, branch `main` | Before M1 |
 | D10 | Addresses | ✅ **Decided 2026-10-05, as recommended:** docs `d1` / `w1`, nodes `N7`, alive while the document is open and not written to the file; an element's own `id` is just an attribute | Before M1 |
 | D11 | MCP plumbing | ✅ **Decided 2026-10-06, as recommended: a new LUI2 crate, `lntrn-mcp`** (JSON-RPC lines, both protocol eras, schema pieces, cancellation, the socket pipe): additive, nothing existing changes, and LS3 can move onto it whenever you like. The alternative is copying about 1.5k lines out of `studio-tools`, to be fixed twice whenever MCP changes | M2 |
-| D12 | The Studio look | **Copy** LS3's theme, layout, chrome and controls into `ink-app` (about 1.8k lines); consider a shared crate once we see what the two apps really share. U004 and U042 keep app looks out of LUI2 | M4 |
+| D12 | The Studio look | ✅ **Decided 2026-10-07, as recommended: copy** LS3's theme, layout, chrome and controls into `ink-app` (about 1.8k lines); a shared crate once we see what the two apps really share. U004 and U042 keep app looks out of LUI2 | M4 |
 | D13 | Moving and scaling | ✅ **Decided 2026-10-06, as recommended: bake into the geometry whenever that's exact**; keep a `transform` only where it isn't (a rotated rect stays a `<rect>` with a `rotate`, so its radius stays adjustable). The alternatives were always a `transform` (the numbers stop saying where things are) and always baking (a rotated rect becomes a path). **For groups, decided the same day: passed down** to what's in them when all of it can take it exactly, kept as the group's own `transform` otherwise (§3.4). **And for what a node is drawn with** (2026-10-06 and 07): a gradient in its coordinates, and its clip path, go with it when they are its alone, and are never touched when anything else uses them | M3 |
 | D14 | Where a style is written | ✅ **Decided 2026-10-06, as recommended:** where that node already has it (`style=""` or the attribute); a new property goes in as a presentation attribute | M3 |
 | D15 | Numbers Ink writes | ✅ **Decided 2026-10-06, as recommended:** three decimals, trailing zeros dropped, settable per document | M3 |
 | D16 | Coordinates Claude and the GUI speak | ✅ **Decided 2026-10-06, revising my first recommendation:** attributes are as the file writes them (the node's own coordinates, as in any SVG), which is also what `node_add_svg`'s raw markup means; what's reported back is where things show in the document's coordinates (§3.3) | M2 |
-| D17 | Pen tool | Click points, bend the segments after (your May preference); no click-drag handles while placing. Still what you want? | M4 |
+| D17 | Pen tool | Click points, bend the segments after (Alva's May preference); no click-drag handles while placing. Written into `docs/M4.md` as the plan; hers to change when slice d comes | M4 |
 | D18 | Path anchors' addresses | ✅ **Decided 2026-10-07, as recommended:** stable ids kept beside the path in memory (`A3`), so a selection survives a point being added; not written to the file. The alternative was a place in the path (run 1, anchor 3), which every add and delete renumbers | M3 |
 | D19 | Ink's own attributes | ✅ **Decided 2026-10-07 (Alva): `ink:label` and `ink:locked` now** (built in M3e, §3.3), under `xmlns:ink="urn:lantern:ink"`; **guides wait for the window (M4)**, the first thing that can show or snap to them. Nothing else until something needs it | M3 |
-| D20 | What "done" means for the window | Ink replaces Boxy SVG for Lantern's icons. I'm inferring Boxy from the `bx:` marks in 107 files; the checklist gets written with you at M4's start | M4 |
+| D20 | What "done" means for the window | ✅ **Decided 2026-10-07, as recommended: Ink replaces Boxy SVG for Lantern's icons.** All twelve tools of §8, the object tree, fill and stroke, the icon aids, and a menu row for every operation the MCP server has. The checklist is `docs/M4.md`. The first deploy takes the `lantern-ink` name from the May prototype | M4 |
 | D21 | SVG features | §5.2's list for v1; `<use>`, masks, patterns, images and markers when something needs them. M1 draws what `lntrn-svg` does; text, `<style>` rules and blur follow in M3 | M1, then as needed |
 | D22 | Golden tolerance | ✅ **Decided 2026-10-06, as revised by measurement:** exact for Ink's own renderer (three goldens, `ink-render/tests/goldens`). Against `lntrn-svg`, "within one level" can only hold on average, not per pixel (§5.4): a file's mean must be within 1.25 levels at 64 px and 0.5 at 256 px, and at most 4 % and 1.5 % of its pixels may be over 16 levels out. `rsvg-convert` is a report to read (`third_opinion`), not a test | M1 |
 | D23 | MCP registration | ✅ **Decided and done 2026-10-06:** user scope, `alwaysLoad`, as LS3 (`claude mcp get ink` connects), and `mcp__ink` allowed in `~/.claude/settings.json` beside `mcp__studio` | M2 |

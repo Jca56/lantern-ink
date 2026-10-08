@@ -102,8 +102,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     for pixel (ARCHITECTURE §5.4).
   - **Deploy:** `cargo build --release --workspace`, then `install` the
     binary to `~/.lantern/bin/lantern-ink-mcp.new` and `mv` it over.
-  - `~/.lantern/bin/lantern-ink` is the May 2026 iced prototype's
-    binary, not ours: left alone until M4's window takes the name.
+  - `~/.lantern/bin/lantern-ink` was the May 2026 iced prototype's
+    binary until M4a's window took the name (Alva, 2026-10-07).
 - **M3 (operations) is done** (all five slices built 2026-10-07; its
   done-test ran the same day and what it found was fixed: see the end
   of this section), in five slices, in the order Alva
@@ -461,7 +461,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   **M3e and all of M3**: D19's `ink:label` and `ink:locked`
   (`ink-doc/src/marks.rs`), `Command::SetLabel` and `SetLocked`, and
   the tool `node_mark`. M3's done-test came next (it ran the same
-  day: see below). **Next: M4, the window.**
+  day: see below). M4, the window, came after (see the end of this
+  section).
   - A locked node, and everything in it, refuses every Command but
     locking and unlocking: `Document::guard` runs before each one (in
     a batch, as each step's turn comes). What would move, rewrite or
@@ -566,8 +567,77 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   outside its radius is drawn as SVG 1.1 says (focus pulled onto the
   circle; with `repeat` that aliases), where `rsvg-convert` draws
   SVG 2's cone.
-- **The app icon is made:** `~/Pictures/Icons/Apps/lantern-ink.svg`
-  (Alva's; M4's window uses it).
+- **The app icon is made:** `~/.lantern/icons/lantern-ink.svg`
+  (Alva's; the window's copy is `crates/ink-app/assets/lantern-ink.svg`).
+
+- **M4 (the window) is under way**, in six slices, the shell first.
+  Alva's calls, 2026-10-07: **the bar is Boxy's replacement** (D20: all
+  twelve tools, the object tree, fill and stroke, the icon aids, a menu
+  row for every operation the MCP has); **the order** is **a** the
+  shell and the viewer, **b** the object tree, the Pointer and undo,
+  **c** paint and the shape tools, **d** the Node tool and the Pen,
+  **e** text, gradients and the eyedropper, **f** the icon aids and not
+  losing work; **the look is copied** into `ink-app` (D12); and **the
+  first deploy takes the `lantern-ink` name**. The checklist she ticks
+  or strikes is **`docs/M4.md`**: read it before any M4 work.
+- **M4a (the shell and the viewer) is built** (2026-10-07, 394 tests,
+  deployed; **not yet looked at by Alva**: its boxes in `docs/M4.md`
+  are hers to tick). A fifth crate of code, `ink-app` →
+  `~/.lantern/bin/lantern-ink`.
+  - The window is LS3's shell, copied and cut to what Ink has so far:
+    `theme.rs`, `layout.rs`, `chrome/` (logo, toolbar, tabs, status
+    bar, panel frame), `camera.rs`, `canvas.rs`, `docs.rs`, `files.rs`,
+    `picker.rs`, `lifecycle.rs`, `menus.rs`, `actions.rs`,
+    `settings.rs`, `log.rs`. `ink.rs` is the state, `host.rs` the two
+    seams with LUI2, `workspace.rs` a frame.
+  - **The canvas is tiles** (`tiles.rs`, ARCHITECTURE §8 "as built"):
+    levels that change places when the view's tiles have all landed,
+    drawn on the pool from a `Plan` (`ink-render/src/plan.rs`, §5.1).
+    `page.rs` draws the ground, the checks, the page's edge and the
+    tiles.
+  - **The core has no GPU, so it's there from the start** (`Ink::new`
+    makes it; LS3's waits for `init_gpu`). The window names wgpu
+    nowhere: tiles and icons are `lntrn_image::Image`s handed to
+    LUI2's `Images` in `after_rebuild`.
+  - **A save is written off the window's thread:** `Core::begin_save`
+    → `SaveJob::write` on the pool → `Core::saved` (`Core::save` is
+    the three in a row, for the MCP server). A file is read on the
+    pool (`ink_core::read_text`) and opened with `Core::open_read`.
+  - **The window is tested whole without a GPU** (`ink_tests.rs`):
+    real shell frames from LUI2's `Harness`, the tiles' pictures kept
+    by a stand-in for the GPU's images (`tiles::Store`) that counts
+    them. New window behaviour gets a test there.
+  - The camera keeps a slow drag's fractions (`origin`) and shows the
+    page's corner on a whole pixel (`corner()`): everything drawn over
+    the canvas goes through `page_at` / `window_at`, never `origin`.
+  - A drawing made here that nothing was done to is *untouched*
+    (`Ink::untouched`): no `•`, closes without asking, and gives its
+    tab to the first file opened.
+  - The four tool icons LS3 has none of (Node, Polygon, Hand, Zoom)
+    were drawn with Ink's own MCP tools; all of them are drawn in the
+    window by `ink-render`, not `lntrn-svg`.
+  - Menu rows that wait for a later slice are `menus::later("…")`:
+    greyed, in their final place. Lighting one is giving it an id and
+    an arm in `actions.rs`.
+  - `ink_core::desktop::use_font` is the one reader of `lantern.toml`'s
+    font, for the MCP binary and the window both.
+  - **Not in M4a, on purpose:** nothing edits yet (no Pointer, no
+    tree, no panels' insides); File > New asks no size (slice f);
+    the CLAUDE pill says the bridge is M5.
+  - **For M4b, from the tile speed report** (`cargo test --release -p
+    ink-render --test speed tiles -- --ignored --nocapture`; five
+    minutes, one core): a 4K screen of an icon with no shadows is 25
+    to 125 ms of one core; one with drop shadows is 1.5 to 3.5 s (a
+    tenth to four tenths of a second on the pool). So a drag can't
+    redraw shadowed tiles every frame: gestures (ARCHITECTURE §4.3)
+    need what's dragged drawn once and moved, and `Applied` has no
+    dirty box yet for "only the tiles an edit touches". The filters
+    are where the time goes (every pixel of a tile's margin, clear or
+    not, through linear light): the renderer's to speed up, measured
+    first.
+  - **Deploy:** `cargo build --release --workspace`, then `install`
+    each binary to `~/.lantern/bin/<name>.new` and `mv` it over
+    (`lantern-ink`, `lantern-ink-mcp`).
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a
@@ -596,6 +666,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
 - **A plain `.svg` is the working file.** Opening and saving one
   untouched must give the same bytes.
 - **Don't launch the GUI without asking**, and never capture the screen.
+  The window's behaviour is proven in `ink_tests.rs`; how it looks is
+  Alva's to see.
 - **No GPU code below `ink-app`**, and `ink-doc`, `ink-render` and
   `ink-core` never depend on `lntrn-ui` or `lntrn-app` (ARCHITECTURE §2).
 - **The 500 / 600 line rule is for code.** Docs aren't counted (this

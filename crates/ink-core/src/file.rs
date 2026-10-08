@@ -30,7 +30,7 @@ pub(crate) fn canonical(path: &Path) -> PathBuf {
 }
 
 /// The text of the file at `path`.
-pub(crate) fn read(path: &Path) -> Result<String, CoreError> {
+pub fn read(path: &Path) -> Result<String, CoreError> {
     let size = fs::metadata(path).map_err(|e| failed(path, e))?.len();
     if size > MAX_FILE_BYTES {
         return Err(failed(path, format!("it's {} MB, and a drawing is at most {} MB", size >> 20, MAX_FILE_BYTES >> 20)));

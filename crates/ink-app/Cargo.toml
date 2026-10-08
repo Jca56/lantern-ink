@@ -1,0 +1,28 @@
+[package]
+name = "ink-app"
+description = "Lantern Ink's window: an ink-core on Lantern UI 2."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "lantern-ink"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+ink-core.workspace = true
+ink-doc.workspace = true
+ink-geom.workspace = true
+ink-render.workspace = true
+lntrn-app.workspace = true
+lntrn-core.workspace = true
+lntrn-image.workspace = true
+lntrn-math.workspace = true
+lntrn-props.workspace = true
+lntrn-sys.workspace = true
+lntrn-text.workspace = true
+lntrn-ui.workspace = true
