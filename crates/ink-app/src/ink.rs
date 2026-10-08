@@ -20,6 +20,7 @@ use crate::menus::{self, MenuState};
 use crate::settings::{Recent, Settings};
 use crate::tiles::Tiles;
 use crate::tools::Tools;
+use crate::tree::Tree;
 
 /// How long a result stays in the status bar, seconds.
 pub(crate) const TOAST_SECONDS: f64 = 4.0;
@@ -48,6 +49,8 @@ pub struct Ink {
     /// made for.
     pub(crate) scale: f64,
     pub(crate) grip: Grip,
+    /// The object tree, in the right panel.
+    pub(crate) tree: Tree,
     /// The panel's width while its grip is dragged, logical px.
     pub(crate) panel_drag: Option<f64>,
     /// Last frame's regions.
@@ -83,6 +86,7 @@ impl Ink {
             icons: Icons::default(),
             scale: 0.0,
             grip: Grip::default(),
+            tree: Tree::default(),
             panel_drag: None,
             layout: Layout::default(),
             toast: None,

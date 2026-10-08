@@ -841,6 +841,13 @@ As LS3 §7, to the letter where it can be:
 - **The right panel:** the object tree (what `doc_info` lists: eye, lock,
   drag to reorder, nested groups), fill and stroke, colour, and the
   Lantern preview strip.
+  **As built in M4b** (`ink-app/src/tree/`, `select.rs`): every
+  element is a row, front to back, groups open and everything else
+  that holds elements shut (`<defs>`, a text over its spans, a gradient
+  over its stops). The tree draws the drawing as it looks and asks the
+  window for what it wants done (`tree::Intent`); the window applies
+  each as one Command (`edits.rs`). What's selected, what's open and
+  what's being renamed are the tab's, not the document's.
 - **The canvas:** the CPU renderer draws 256 px tiles on the job pool at
   the current zoom, and the window shows them as LUI2 images. While
   zooming, the old tiles stretch until sharp ones land; a frame never

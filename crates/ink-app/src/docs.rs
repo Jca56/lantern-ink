@@ -1,10 +1,15 @@
 //! The open drawings as tabs (LS3's `docs.rs`): their order, which one
 //! shows, and what the window keeps for each beside the core's
-//! document: its camera, and the name it goes by until it has a file.
+//! document: its camera, what's selected in it, and the name it goes
+//! by until it has a file.
 
-use ink_core::DocId;
+use std::collections::HashMap;
+
+use ink_core::{DocId, Document, Look, NodeId};
+use lntrn_math::Rect;
 
 use crate::camera::Camera;
+use crate::select::Selection;
 
 pub struct Tab {
     pub doc: DocId,
@@ -12,6 +17,27 @@ pub struct Tab {
     pub camera: Option<Camera>,
     /// What it's called while it has no file: `untitled`, `untitled 2`.
     pub name: String,
+    /// What's selected, and how its object tree looks.
+    pub selection: Selection,
+    /// Where each node shows in the drawing's coordinates, as it looked
+    /// at one moment: worked out again when the drawing looks another
+    /// way.
+    boxes: Option<(Look, HashMap<NodeId, Rect>)>,
+}
+
+impl Tab {
+    fn new(doc: DocId, name: String) -> Tab {
+        Tab { doc, camera: None, name, selection: Selection::default(), boxes: None }
+    }
+
+    /// Where each node of `drawing` (this tab's, as it `look`s now)
+    /// shows, in the drawing's coordinates.
+    pub fn boxes(&mut self, drawing: &Document, look: Look) -> &HashMap<NodeId, Rect> {
+        if self.boxes.as_ref().is_none_or(|(at, _)| *at != look) {
+            self.boxes = Some((look, ink_doc::geometry::page_bounds(drawing)));
+        }
+        &self.boxes.as_ref().expect("just made").1
+    }
 }
 
 #[derive(Default)]
@@ -27,13 +53,13 @@ impl Tabs {
     pub fn add(&mut self, doc: DocId) {
         self.untitled += 1;
         let name = if self.untitled == 1 { "untitled".to_owned() } else { format!("untitled {}", self.untitled) };
-        self.tabs.push(Tab { doc, camera: None, name });
+        self.tabs.push(Tab::new(doc, name));
         self.active = self.tabs.len() - 1;
     }
 
     /// A drawing opened from a file takes no `untitled` number.
     pub fn add_named(&mut self, doc: DocId) {
-        self.tabs.push(Tab { doc, camera: None, name: String::new() });
+        self.tabs.push(Tab::new(doc, String::new()));
         self.active = self.tabs.len() - 1;
     }
 

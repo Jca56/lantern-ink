@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use ink_core::DocId;
 use lntrn_app::lntrn_render::ImageId;
 use lntrn_image::Image;
-use lntrn_math::Vec2;
+use lntrn_math::{Rect, Vec2};
 use lntrn_ui::testing::Harness;
 use lntrn_ui::{Event, ImageHandle, Key, Modifiers, Shell};
 
@@ -21,6 +21,7 @@ use crate::tiles::Store;
 use crate::tools::Tool;
 
 mod canvas;
+mod tree;
 
 /// Where the tiles' pictures are kept in a test.
 #[derive(Default)]

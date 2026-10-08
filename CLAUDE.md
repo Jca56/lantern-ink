@@ -692,6 +692,39 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - The window's tests are `ink_tests.rs` (the harness and the shell)
     and `ink_tests/` beside it (`canvas.rs`: edits and gestures on the
     tiles). New window behaviour gets a test there.
+- **M4b's b2 is built** (2026-10-08, 416 tests, deployed; **not yet
+  looked at by Alva**: its boxes in `docs/M4.md` are hers to tick).
+  - **What a tab keeps beside its document** is `select.rs`
+    (`Selection`, on `Tab`): the nodes selected and the one in hand,
+    which rows are open (groups start open; `<defs>`, texts, gradients
+    and the rest start shut), the row being renamed. `tops()` is what
+    an action on "the selection" acts on, back to front.
+  - **The tree** is `tree/` (`mod.rs` the panel, `rows.rs` a row,
+    `drag.rs` where dragged rows land). It draws the drawing as it
+    looks (`Core::shown`) and never edits: what it wants comes back as
+    `tree::Intent`s, which `edits.rs` carries out
+    (`Ink::tree_asked`). A row is named by its `ink:label`, else its
+    `id`, else its kind's word (`select::name_of`).
+  - **Every edit from the window goes through `Ink::edit`**
+    (`edits.rs`): one Command, one step of Alva's, with the label the
+    Edit menu shows ("Hide", "Show", "Lock", "Unlock", "Rename",
+    "Restack"). A refusal is said in the status bar with nodes called
+    what their rows are (`in_row_names`: the document says `N7`).
+  - **The eye is `display="none"`** (through `SetStyle`, so written
+    where the node has it): hidden in every app, and in the file. The
+    padlock is `ink:locked`. A definition has no eye.
+  - Rows drag as LS3's layers do, several at once when several are
+    selected (`Command::Move`, tried on a copy for every gap the
+    pointer passes: where the drawing would refuse, there's no line).
+  - **The selection shows on the canvas** as a gold box round each
+    selected node (`overlay.rs`; boxes from `geometry::page_bounds`,
+    kept per `Look` on the tab). b3 gives it its handles.
+  - The tree's pictures are `icons::Glyph`: LS3's two eyes and its
+    folder (copied into `assets/icons/`), and the tools' own icons for
+    the kinds. The padlock is drawn with lines.
+  - **Not in b2:** a row's right-click menu (b4), picking on the
+    canvas (b3), a thumbnail or a swatch on a row, scrolling the tree
+    to what's picked.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

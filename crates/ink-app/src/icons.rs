@@ -1,5 +1,6 @@
 //! The pictures the window's chrome is made of: the tools' icons, the
-//! app's own, and the transparency checks under a page. Each is drawn
+//! object tree's glyphs, the app's own, and the transparency checks
+//! under a page. Each is drawn
 //! by Ink's own renderer at exactly the pixels the screen's scale shows
 //! it at, so none is ever stretched soft; made again when the scale
 //! changes (LS3's `icons.rs`, which draws with `lntrn-svg`).
@@ -22,12 +23,58 @@ const CHECKS: (u32, u32) = (32, 16);
 
 const APP_ICON: &[u8] = include_bytes!("../assets/lantern-ink.svg");
 
+/// The small pictures in the object tree's rows: the eye, and what
+/// kind of thing a row is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Glyph {
+    Visible,
+    Invisible,
+    Group,
+    Rect,
+    Ellipse,
+    Line,
+    Polygon,
+    Path,
+    Text,
+    Gradient,
+}
+
+impl Glyph {
+    pub const ALL: [Glyph; 10] = [Glyph::Visible, Glyph::Invisible, Glyph::Group, Glyph::Rect, Glyph::Ellipse, Glyph::Line, Glyph::Polygon, Glyph::Path, Glyph::Text, Glyph::Gradient];
+
+    /// LS3's eyes and its folder; the kinds are their tools' icons.
+    fn svg(self) -> &'static [u8] {
+        match self {
+            Glyph::Visible => include_bytes!("../assets/icons/visible.svg"),
+            Glyph::Invisible => include_bytes!("../assets/icons/invisible.svg"),
+            Glyph::Group => include_bytes!("../assets/icons/folder.svg"),
+            Glyph::Rect => Tool::Rect.icon(),
+            Glyph::Ellipse => Tool::Ellipse.icon(),
+            Glyph::Line => Tool::Line.icon(),
+            Glyph::Polygon => Tool::Polygon.icon(),
+            Glyph::Path => Tool::Pen.icon(),
+            Glyph::Text => Tool::Text.icon(),
+            Glyph::Gradient => Tool::Gradient.icon(),
+        }
+    }
+
+    /// Its side, logical px.
+    pub fn side(self) -> f64 {
+        match self {
+            Glyph::Visible | Glyph::Invisible => 28.0,
+            _ => 24.0,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Icons {
     /// The scale they were made for; 0 before the first.
     scale: f64,
     /// By `Tool as usize`.
     tools: Vec<Option<ImageHandle>>,
+    /// By `Glyph as usize`.
+    glyphs: Vec<Option<ImageHandle>>,
     app: Option<ImageHandle>,
     checker: Option<ImageHandle>,
 }
@@ -58,6 +105,10 @@ impl Icons {
         self.tools.get(tool as usize).copied().flatten()
     }
 
+    pub fn glyph(&self, glyph: Glyph) -> Option<ImageHandle> {
+        self.glyphs.get(glyph as usize).copied().flatten()
+    }
+
     /// The app's icon, for the title bar.
     pub fn app(&self) -> Option<ImageHandle> {
         self.app
@@ -81,6 +132,10 @@ impl Icons {
         let px = |side: f64| (side * scale).round().max(1.0) as u32;
         for tool in Tool::ALL {
             put(gpu, images, &mut self.tools[tool as usize], drawn(tool.icon(), px(TOOL_ICON)), tool.label());
+        }
+        self.glyphs.resize(Glyph::ALL.len(), None);
+        for glyph in Glyph::ALL {
+            put(gpu, images, &mut self.glyphs[glyph as usize], drawn(glyph.svg(), px(glyph.side())), &format!("{glyph:?}"));
         }
         put(gpu, images, &mut self.app, drawn(APP_ICON, px(LOGO_ICON)), "the app icon");
         put(gpu, images, &mut self.checker, Some(checkerboard(px(CHECK))), "the checks");
@@ -106,7 +161,8 @@ mod tests {
 
     #[test]
     fn every_icon_draws_at_its_size() {
-        for (svg, name) in Tool::ALL.iter().map(|t| (t.icon(), t.label())).chain([(APP_ICON, "app")]) {
+        assert_eq!(Glyph::ALL.iter().map(|g| *g as usize).collect::<Vec<_>>(), (0..Glyph::ALL.len()).collect::<Vec<_>>());
+        for (svg, name) in Tool::ALL.iter().map(|t| (t.icon(), t.label())).chain([(APP_ICON, "app"), (Glyph::Visible.svg(), "the eye"), (Glyph::Invisible.svg(), "the shut eye"), (Glyph::Group.svg(), "the folder")]) {
             for px in [34, 48] {
                 let image = drawn(svg, px).unwrap_or_else(|| panic!("{name}"));
                 assert_eq!((image.width, image.height), (px, px), "{name}");

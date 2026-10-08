@@ -14,7 +14,7 @@ use crate::chrome::tabs::{TabClick, TabLabel};
 use crate::ink::{Ink, TOAST_SECONDS};
 use crate::layout::Layout;
 use crate::tools::Tool;
-use crate::{chrome, page};
+use crate::{chrome, overlay, page, tree};
 
 impl Ink {
     pub(crate) fn draw_workspace(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>) {
@@ -56,6 +56,20 @@ impl Ink {
                 }
             }
             None => {}
+        }
+        // The object tree, of the drawing as it looks: what it asks for
+        // is done once it's drawn.
+        let shown = self.tabs.active_mut().and_then(|tab| {
+            let (drawing, _) = self.core.shown(tab.doc).ok()?;
+            tab.selection.prune(drawing);
+            Some((tab.doc, drawing, &mut tab.selection))
+        });
+        let doc = shown.as_ref().map(|(doc, ..)| *doc);
+        let asked = tree::draw(ui, l.panel, &mut self.tree, shown.map(|(_, drawing, selection)| (drawing, selection)), &self.icons);
+        if let Some(doc) = doc {
+            for intent in asked {
+                self.tree_asked(doc, intent);
+            }
         }
 
         let labels: Vec<TabLabel> = self.tabs.iter().map(|t| TabLabel { name: self.label(t.doc), modified: self.is_modified(t.doc) && !self.untouched(t.doc) }).collect();
@@ -122,5 +136,9 @@ impl Ink {
         let Ok((drawing, look)) = self.core.shown(doc) else { return };
         self.tiles.want(doc, drawing, look, cam.zoom, Rect::from_min_size(Vec2::ZERO - cam.corner(), area.size()));
         page::draw(ui, area, &cam, page, self.icons.checker(), &self.tiles, doc);
+        if let Some(tab) = self.tabs.active_mut().filter(|tab| !tab.selection.nodes.is_empty()) {
+            let selected = tab.selection.nodes.clone();
+            overlay::selection(ui, area, &cam, viewport, tab.boxes(drawing, look), &selected);
+        }
     }
 }

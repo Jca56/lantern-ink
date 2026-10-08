@@ -28,6 +28,11 @@ pub const ACTIVE: Color = Color::hex(0x4A4038);
 pub const TAB_ACTIVE: Color = Color::hex(0x4A3810);
 pub const TAB_INACTIVE: Color = Color::hex(0x3A2F1F);
 pub const TAB_INACTIVE_HOVER: Color = Color::hex(0x4D3F2B);
+/// A row of the object tree (LS3's layer rows): at rest, under the
+/// pointer, and its outline.
+pub const LAYER_ROW: Color = Color::hex(0x140A00);
+pub const LAYER_ROW_HOVER: Color = Color::hex(0x241304);
+pub const LAYER_ROW_BORDER: Color = Color::hex(0x735A32);
 /// The title bar's close button, hovered.
 pub const CLOSE: Color = Color::hex(0xE8122A);
 /// Near-black ink on gold.
