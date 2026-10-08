@@ -17,7 +17,7 @@ fn the_tool_list_is_fixed_and_fits_claude_codes_limits() {
     let list = json::parse(&out[0]).unwrap();
     let tools = list.path("result.tools").and_then(Doc::as_list).unwrap();
     let names: Vec<&str> = tools.iter().filter_map(|t| t.get("name").and_then(Doc::as_str)).collect();
-    assert_eq!(names, ["doc_new", "doc_open", "doc_list", "doc_info", "doc_source", "doc_preview", "doc_save", "doc_export", "doc_close", "node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "node_style", "gradient_add", "gradient_set", "clip_set", "filter_set", "path_set", "path_edit", "path_op", "text_add", "text_set", "text_to_path", "font_list", "node_info", "doc_query", "doc_set", "history_undo", "history_redo", "batch"]);
+    assert_eq!(names, ["doc_new", "doc_open", "doc_list", "doc_info", "doc_source", "doc_preview", "doc_save", "doc_export", "doc_close", "node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "node_style", "gradient_add", "gradient_set", "clip_set", "filter_set", "path_set", "path_edit", "path_op", "text_add", "text_set", "text_to_path", "font_list", "node_info", "doc_query", "doc_set", "doc_tidy", "history_undo", "history_redo", "batch"]);
     for t in tools {
         let name = t.get("name").and_then(Doc::as_str).unwrap();
         assert!(t.get("description").and_then(Doc::as_str).is_some_and(|d| d.len() <= 2048), "{name}'s description is too long");
@@ -123,7 +123,7 @@ fn a_drawing_is_made_looked_at_and_saved() {
     ok(&mut s, "doc_export", r#"{"doc_id":"d1","path":"smile-picture","format":"webp"}"#);
     assert_eq!(lntrn_image::decode(&std::fs::read(dir.join("smile-picture")).unwrap()).unwrap().width, 24);
     assert!(refused(&mut s, "doc_export", r#"{"doc_id":"d1","path":"smile.png"}"#).contains("already there"));
-    assert!(refused(&mut s, "doc_export", r#"{"doc_id":"d1","path":"smile.tiff"}"#).contains("name it .png, .jpg or .webp"));
+    assert!(refused(&mut s, "doc_export", r#"{"doc_id":"d1","path":"smile.tiff"}"#).contains("name it .png, .jpg, .webp or .svg"));
     assert!(refused(&mut s, "doc_export", r#"{"doc_id":"d1","path":"a.png","size":8,"scale":2}"#).contains("size or scale, not both"));
 
     // Closing: not with unsaved changes, unless told to lose them.

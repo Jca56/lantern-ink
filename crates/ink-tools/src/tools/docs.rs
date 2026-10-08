@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use ink_core::ink_doc::Viewport;
-use ink_core::{View, write_atomic};
+use ink_core::{DocId, View, write_atomic};
 use lntrn_data::{Doc, Map};
 use lntrn_image::Compression;
 use lntrn_mcp::{Kind, Reply, Tool, ToolError, fail, schema};
@@ -49,8 +49,8 @@ pub(super) fn tools() -> Vec<Entry> {
         direct("doc_save", "Save drawing", "Save a drawing as an .svg file: to `path`, or to its own file again. Replacing a file that isn't its own needs overwrite: true, and another open drawing's file can't be taken. The save is atomic: a crash never leaves half a file.", save_schema, Kind::Set, save),
         direct(
             "doc_export",
-            "Export picture",
-            "Write a picture of a drawing: png (keeps transparency), jpeg (flattened onto white unless background says black) or webp, the format taken from the file name unless `format` says. Its size is the page's own unless `size` (the longer side, px) or `scale` says. Replacing an existing file needs overwrite: true.",
+            "Export",
+            "Write a drawing out for use elsewhere, the format taken from the file name unless `format` says. A picture of it: png (keeps transparency), jpeg (flattened onto white unless background says black) or webp, its size the page's own unless `size` (the longer side, px) or `scale` says. Or svg: a clean copy to ship, tidied as doc_tidy tidies (unused definitions, empty groups, idle namespace declarations) with its comments and Ink's own ink: marks out too, drawing exactly what the drawing draws. The drawing and its own file aren't touched (doc_save saves the drawing itself). Replacing an existing file needs overwrite: true.",
             export_schema,
             Kind::Set,
             export,
@@ -210,8 +210,8 @@ fn export_schema() -> Doc {
         &["doc_id", "path"],
         vec![
             ("doc_id", common::doc_id()),
-            ("path", common::path("Where, e.g. ending in .png")),
-            ("format", schema::one_of(&["png", "jpeg", "webp"], "Overrides the file name's")),
+            ("path", common::path("Where, e.g. ending in .png or .svg")),
+            ("format", schema::one_of(&["png", "jpeg", "webp", "svg"], "Overrides the file name's")),
             ("size", schema::integer(1, 16384, "The picture's longer side in px (default: the page's own size)")),
             ("scale", schema::number(0.001, 1000.0, "Instead of size: px per px of the page")),
             ("background", schema::one_of(&["none", "white", "black"], "Under transparent areas (default none; jpeg can't be none and takes white)")),
@@ -229,9 +229,12 @@ fn export(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
         Some("png") => "png",
         Some("jpeg" | "jpg") => "jpeg",
         Some("webp") => "webp",
-        Some("svg") => return fail("doc_export writes a picture; doc_save writes the SVG itself"),
-        _ => return fail(format!("{} doesn't say what to write: name it .png, .jpg or .webp, or give format", path.display())),
+        Some("svg") => "svg",
+        _ => return fail(format!("{} doesn't say what to write: name it .png, .jpg, .webp or .svg, or give format", path.display())),
     };
+    if format == "svg" {
+        return export_svg(ctx, input, id, &path);
+    }
     if path.exists() && a.opt_bool("overwrite")? != Some(true) {
         return fail(format!("{} is already there: pass overwrite: true to replace it", path.display()));
     }
@@ -265,6 +268,39 @@ fn export(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
     m.insert("width", Doc::Int(image.width as i64));
     m.insert("height", Doc::Int(image.height as i64));
     Ok(Reply::text(format!("Exported {id} to {}: {}×{} {format}, {} KB.", path.display(), image.width, image.height, bytes.len().div_ceil(1024))).data(Doc::Map(m)))
+}
+
+/// A clean copy of the drawing as an .svg, to ship.
+fn export_svg(ctx: &mut Ctx, input: &In, id: DocId, path: &Path) -> Result<Reply, ToolError> {
+    let a = &input.args;
+    if let Some(given) = ["size", "scale", "background", "quality"].into_iter().find(|key| a.has(key)) {
+        return fail(format!("\"{given}\" is for a picture: an svg is the drawing itself, at any size"));
+    }
+    // An open drawing's file isn't a place for a copy: what's open
+    // would no longer be what's on disk.
+    match ctx.core.doc_at(path) {
+        Some(own) if own == id => return fail(format!("{} is {id}'s own file: doc_save saves the drawing itself; give its clean copy another name", path.display())),
+        Some(other) => return fail(format!("{} is {other}'s file, and {other} is open: give the copy another name", path.display())),
+        None => {}
+    }
+    if path.exists() && a.opt_bool("overwrite")? != Some(true) {
+        return fail(format!("{} is already there: pass overwrite: true to replace it", path.display()));
+    }
+    let own = ctx.core.doc(id).map_err(refused)?.to_svg().len();
+    let clean = ctx.core.export_svg(id, path).map_err(refused)?;
+    let count = |n: usize, one: &str, many: &str| if n == 1 { format!("1 {one}") } else { format!("{n} {many}") };
+    let d = &clean.dropped;
+    let mut without = Vec::new();
+    for (n, one, many) in [(d.unused.len(), "definition nothing referred to", "definitions nothing referred to"), (d.empty.len(), "empty group or <defs>", "empty groups and <defs>"), (d.declarations.len(), "namespace declaration nothing used", "namespace declarations nothing used"), (d.comments, "comment", "comments"), (clean.marks, "mark of Ink's own", "marks of Ink's own")] {
+        if n > 0 {
+            without.push(count(n, one, many));
+        }
+    }
+    let left_out = if without.is_empty() { "there was nothing to leave out".to_owned() } else { format!("without {}", without.join(", ")) };
+    let mut m = Map::new();
+    m.insert("path", path.display().to_string().into());
+    m.insert("bytes", Doc::Int(clean.svg.len() as i64));
+    Ok(Reply::text(format!("Exported {id} to {}: a clean svg, {} bytes (the drawing's own markup is {own}), {left_out}. It draws what the drawing draws; the drawing itself is as it was.", path.display(), clean.svg.len())).data(Doc::Map(m)))
 }
 
 fn close_schema() -> Doc {

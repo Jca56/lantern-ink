@@ -426,6 +426,36 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     words in Lantern's apps (`lntrn-svg` draws none). `text_to_path`
     is the fix, but those icons live in other projects: Alva's to say.
 
+- **M3e (tidy) is under way**, in three pieces: **e1** `Tidy` and
+  `doc_tidy`, **e2** the clean `.svg` from `doc_export`, **e3** D19's
+  `ink:label` and `ink:locked`. Alva's calls, 2026-10-07: **tidy drops
+  only what nothing uses**, with comments, unreferred ids and
+  titles going only when asked by name; **an exported `.svg` is a
+  clean copy to ship** (tidied, comments and Ink's marks out,
+  formatting kept, the drawing untouched); **D19: label and lock now,
+  guides with the window (M4)**; and **each finished piece is
+  committed and pushed once it's tested and deployed**, telling her
+  after.
+- **M3e's e1 and e2 are built** (2026-10-07, 343 tests, 38 tools):
+  `Command::Tidy { also }` (`ink-doc/src/tidy.rs`), the tool
+  `doc_tidy`, and `doc_export` to an `.svg` (`tidy::shipped`,
+  `Core::export_svg`).
+  - Tidy goes round until nothing more is unused: a gradient only an
+    unused gradient built on, a group left empty by what went. What a
+    `<style>` sheet names (anything after a `#`) counts as used.
+    `xmlns:ink` is never dropped by Tidy; the clean copy drops it.
+  - `doc_tidy` is a direct tool, not a batch edit: it says what went
+    from the drawing as it was (afterwards those nodes aren't there
+    to name).
+  - A comment alone on its line takes the line with it, but among
+    words (`<text>`, `<style>`, `<title>`, unknown elements) only the
+    comment goes: the space may be part of what's said.
+  - The clean copy finds every `ink:` attribute before it takes any
+    declaration out (a test caught it leaving nested ones in when the
+    root's declaration went first).
+  - **Proof:** `cargo test -p ink-render --test tidy -- --nocapture`
+    (every corpus file, tidied and shipped, draws the same bytes).
+
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a
   machine whose LUI2 is behind won't even load the workspace (it was

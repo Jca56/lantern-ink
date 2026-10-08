@@ -53,6 +53,7 @@ mod stroking;
 pub mod style;
 pub mod styling;
 pub mod text;
+pub mod tidy;
 pub mod transform;
 pub mod value;
 mod viewport;

@@ -258,6 +258,35 @@ drawing's `<defs>`, made as the root's first child if there isn't one;
 `SetGradient` is `gradient_set`, over `SetAttr`, `Delete` and `Insert`
 on the gradient and its stops.
 
+**As built in M3e:** `Tidy { also }` (`tidy.rs`) drops what nothing
+uses, and nothing that shows changes (Alva's scope, 2026-10-07).
+- **Always:** definitions nothing refers to (gradients, clip paths,
+  filters, masks, patterns, markers, symbols, and whatever else is
+  kept in a `<defs>` for others to use), round after round until
+  nothing more goes (a gradient only an unused gradient built on goes
+  too); groups and `<defs>` with nothing in them; namespace
+  declarations nothing under them uses. What a `<style>` sheet names
+  counts as used. Ink's own namespace stays: a drawing Ink made
+  carries it.
+- **Only when asked by name**, since someone wrote these on purpose:
+  `comments` (one alone on its line takes the line with it, except
+  among words, where white space is part of what's said); `ids`
+  nothing in the drawing refers to; `words` (titles, descriptions,
+  metadata).
+- **A clean copy to ship** (`tidy::shipped`, `Core::export_svg`,
+  `doc_export` to an `.svg`): the drawing tidied, with its comments
+  and Ink's own marks out too (every attribute in Ink's namespace, and
+  the declarations), formatting kept. A copy: the open drawing and its
+  file aren't touched, and an open drawing's file is refused as the
+  place for one.
+- **Proven by drawing** (`ink-render/tests/tidy.rs`): every corpus file
+  tidied (with nothing asked for, and with everything) and every clean
+  copy draws the same bytes as before, reads back the same, and has
+  nothing left to tidy. In the corpus that is 125 definitions, 17
+  empty groups and `<defs>` and 2 idle declarations in 38 files; asked,
+  461 comments and 26 ids. Clean copies of all 144 come to 600 KB
+  where the drawings are 641 KB.
+
 **As built in M3d:** `SetText` (`lettering.rs`) and `TextToPath`
 (`outlined.rs`), both in §5.5; `Transform` puts a text's move into its
 `x` and `y`.
@@ -682,7 +711,7 @@ carries over; only the differences and the tool list are new here.
 
 | Group | Tools |
 |---|---|
-| Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a tidied SVG in M3), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox) |
+| Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a clean, tidied `.svg` to ship since M3e), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox), `doc_tidy` (drop what nothing uses; built in M3e) |
 | Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
 | Paths | `path_set`§, `path_edit`§ (anchors and handles), `path_op`§ (to path, reverse, the boolean ops union, subtract, intersect and exclude, outline stroke, simplify) (§ = built in M3c) |
 | Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`‡, `gradient_set`‡, `clip_set`‡, `filter_set`‡ (‡ = built in M3b) |

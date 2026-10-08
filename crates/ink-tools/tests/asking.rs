@@ -131,3 +131,50 @@ fn a_text_says_its_words_and_shows_where_its_glyphs_are() {
     ok(&mut s, "node_align", r#"{"doc_id":"d1","node_ids":["N3"],"x":"left","to":"page"}"#);
     assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N3"}"#)).lines().next(), Some("<text id='label' x='-1' y='12' fill='#223'>"));
 }
+
+#[test]
+fn a_drawing_is_tidied_of_what_nothing_uses() {
+    let (mut s, dir) = server("tidy");
+    ok(&mut s, "doc_new", "{}");
+    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<defs><linearGradient id='glow'/><linearGradient id='spare'/><filter id='soft'><feGaussianBlur stdDeviation='1'/></filter></defs><g id='lamp'><!-- the lamp --><rect id='pane' width='8' height='8' fill='url(#glow)'/></g><g><g/></g><title>Lamp</title>"}"##);
+    assert_eq!(
+        text(&ok(&mut s, "doc_tidy", r#"{"doc_id":"d1"}"#)),
+        "Tidied d1: dropped 2 definitions nothing referred to (<linearGradient id=\"spare\">, <filter id=\"soft\">); 2 elements with nothing in them (<g>, <g>). It draws as it did; its markup went from 426 to 293 bytes."
+    );
+    assert_eq!(text(&ok(&mut s, "doc_tidy", r#"{"doc_id":"d1"}"#)), "Nothing to tidy: everything here is in use (comments, ids nothing refers to, and titles stay unless `also` names them).");
+    let more = ok(&mut s, "doc_tidy", r#"{"doc_id":"d1","also":["comments","ids","words","ids"]}"#);
+    assert_eq!(text(&more), "Tidied d1: dropped 1 comment; 2 ids nothing referred to (lamp, pane); 1 title, description or metadata (<title>). It draws as it did; its markup went from 293 to 234 bytes.");
+    assert_eq!(more.path("structuredContent.ids").and_then(Doc::as_i64), Some(2));
+    assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#)).lines().skip(1).collect::<Vec<_>>(), ["  <defs>", "    <linearGradient id='glow'/>", "  </defs>", "  <g>", "    <rect width='8' height='8' fill='url(#glow)'/>", "  </g>", "</svg>"]);
+    assert_eq!(text(&ok(&mut s, "doc_tidy", r#"{"doc_id":"d1","also":["comments","ids","words"]}"#)), "Nothing to tidy: everything here is in use.");
+    // Each tidying is one step back.
+    assert_eq!(text(&ok(&mut s, "history_undo", r#"{"doc_id":"d1","steps":2}"#)), "Undid 2 steps: \"doc_tidy\" (Claude), \"doc_tidy\" (Claude). Now 1 can be undone and 2 redone.");
+    assert!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#)).contains("<linearGradient id='spare'/>"));
+    assert_eq!(refused(&mut s, "doc_tidy", r#"{"doc_id":"d1","also":["everything"]}"#), "\"also\" takes \"comments\", \"ids\" and \"words\"");
+
+    // A clean copy to ship: tidied, no comments, nothing of Ink's own;
+    // the drawing (untidied again by the undo) is as it was.
+    let was = text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#)).to_owned();
+    let shipped = ok(&mut s, "doc_export", r#"{"doc_id":"d1","path":"lamp-clean.svg"}"#);
+    let said = text(&shipped).to_owned();
+    assert!(said.starts_with("Exported d1 to ") && said.ends_with("without 2 definitions nothing referred to, 2 empty groups and <defs>, 1 comment, 1 mark of Ink's own. It draws what the drawing draws; the drawing itself is as it was."), "{said}");
+    let clean = std::fs::read_to_string(dir.join("lamp-clean.svg")).unwrap();
+    assert!(!clean.contains("<!--") && !clean.contains("ink") && !clean.contains("spare") && !clean.contains("<filter"), "{clean}");
+    assert!(clean.contains("<linearGradient id='glow'/>") && clean.contains("<g id='lamp'>") && clean.contains("<title>Lamp</title>"), "ids and titles are the drawing's: {clean}");
+    assert_eq!(shipped.path("structuredContent.bytes").and_then(Doc::as_i64), Some(clean.len() as i64));
+    assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#)), was);
+    // It opens as a drawing that draws the same.
+    let opened = text(&ok(&mut s, "doc_open", r#"{"path":"lamp-clean.svg"}"#)).to_owned();
+    assert!(opened.contains(" as d2: "), "{opened}");
+    for (args, says) in [
+        (r#""path":"lamp-clean.svg""#, "is d2's file, and d2 is open: give the copy another name"),
+        (r#""path":"other.svg","size":64"#, "\"size\" is for a picture: an svg is the drawing itself, at any size"),
+    ] {
+        assert!(refused(&mut s, "doc_export", &format!(r#"{{"doc_id":"d1",{args}}}"#)).ends_with(says), "{args}");
+    }
+    ok(&mut s, "doc_close", r#"{"doc_id":"d2"}"#);
+    assert!(refused(&mut s, "doc_export", r#"{"doc_id":"d1","path":"lamp-clean.svg"}"#).ends_with("is already there: pass overwrite: true to replace it"));
+    ok(&mut s, "doc_export", r#"{"doc_id":"d1","path":"lamp-clean.svg","overwrite":true}"#);
+    ok(&mut s, "doc_save", r#"{"doc_id":"d1","path":"lamp.svg"}"#);
+    assert!(refused(&mut s, "doc_export", r#"{"doc_id":"d1","path":"lamp.svg","overwrite":true}"#).ends_with("is d1's own file: doc_save saves the drawing itself; give its clean copy another name"));
+}

@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use ink_doc::tidy::Shipped;
 use ink_doc::{Adopted, Applied, Command, DocId, Document, Viewport};
 use ink_render::View;
 use lntrn_image::{Compression, Image};
@@ -174,6 +175,20 @@ impl Core {
         file::write(&path, open.doc.to_svg().as_bytes())?;
         (open.path, open.saved) = (Some(path.clone()), Some(open.history.stamp()));
         Ok(path)
+    }
+
+    /// Write a clean copy of `id` to `path`, to ship
+    /// ([`ink_doc::tidy::shipped`]): tidied, without its comments or
+    /// Ink's own marks. The drawing isn't touched, and `path` doesn't
+    /// become its file. An open document's file is refused, its own
+    /// included: what's open would no longer be what's on disk.
+    pub fn export_svg(&self, id: DocId, path: &Path) -> Result<Shipped, CoreError> {
+        let clean = ink_doc::tidy::shipped(self.doc(id)?);
+        if let Some(doc) = self.doc_at(path) {
+            return Err(CoreError::AlreadyOpen { path: path.to_owned(), doc });
+        }
+        file::write(path, clean.svg.as_bytes())?;
+        Ok(clean)
     }
 
     /// How `id` sits on its page.

@@ -15,6 +15,7 @@ use crate::outline::AnchorId;
 use crate::pathedit::PathEdit;
 use crate::paths::NewRun;
 use crate::settle;
+use crate::tidy::Extra;
 use crate::xml::parse::parse_fragment;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -99,6 +100,10 @@ pub enum Command {
     /// spans paint for themselves. A text set in another font than it
     /// asks for is refused unless `as_drawn`.
     TextToPath { nodes: Vec<NodeId>, as_drawn: bool },
+    /// Drop what nothing uses ([`crate::tidy`]): definitions nothing
+    /// refers to, empty groups and `<defs>`, namespace declarations
+    /// nothing uses; and of `also`, what's asked for by name.
+    Tidy { also: Vec<Extra> },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -329,6 +334,13 @@ impl Document {
                     applied.created.extend(made);
                     applied.removed.extend(gone);
                 }
+            }
+            Command::Tidy { also } => {
+                let dropped = self.tidy(also);
+                applied.removed.extend(dropped.words.iter().chain(&dropped.unused).chain(&dropped.empty).copied());
+                // One written differently and then dropped is just gone.
+                let still: Vec<NodeId> = dropped.changed.into_iter().filter(|id| self.get(*id).is_some()).collect();
+                applied.note(still);
             }
             Command::Batch(commands) => {
                 if depth >= MAX_BATCH_DEPTH {
