@@ -638,6 +638,13 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Deploy:** `cargo build --release --workspace`, then `install`
     each binary to `~/.lantern/bin/<name>.new` and `mv` it over
     (`lantern-ink`, `lantern-ink-mcp`).
+  - **The launcher entry** is `deploy/lantern-ink.desktop` (Alva,
+    2026-10-08). On a machine without one it goes to
+    `~/.local/share/applications/`, and the app icon to
+    `~/.lantern/icons/lantern-ink.svg`: the launcher finds `Icon=` there
+    by name, and Alt+Tab finds the entry by the window's app id, so the
+    file's name stays `lantern-ink.desktop`. Both are installs, Alva's
+    to say yes to on each machine (genforge has them, 2026-10-08).
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a
