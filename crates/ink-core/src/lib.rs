@@ -6,6 +6,10 @@
 //!   [`Core::redo`]; [`Core::save`] (atomic; [`Core::begin_save`] for a
 //!   front end that can't wait for the disk); [`Core::render`] and
 //!   [`Core::export_png`].
+//! - Gestures: [`Core::begin`], [`Core::update`], [`Core::commit`] and
+//!   [`Core::cancel`] show a drag as it will land without touching the
+//!   document; [`Core::shown`] is what a window draws, and its
+//!   [`Look`] says when that's a different picture.
 //! - [`History`]: the steps taken, each with its [`Actor`].
 //! - [`Autosave`]: unsaved work copied aside, for when a front end is
 //!   killed without warning.
@@ -15,6 +19,7 @@ mod core;
 pub mod desktop;
 mod error;
 mod file;
+mod gesture;
 mod history;
 
 pub use ink_doc;
@@ -24,6 +29,7 @@ pub use crate::core::{Core, Opened, SaveJob};
 pub use autosave::Autosave;
 pub use error::CoreError;
 pub use file::{MAX_FILE_BYTES, read as read_text, write as write_atomic};
+pub use gesture::Look;
 pub use history::{Actor, History, Step};
 // What a front end needs to drive a core, in one place.
 pub use ink_doc::{Applied, Command, DocId, Document, NodeId, Place};

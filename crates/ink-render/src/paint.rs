@@ -13,7 +13,7 @@ pub(crate) fn rgba(c: Color) -> Rgba {
     [c.r as f32, c.g as f32, c.b as f32, c.a as f32]
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Shape {
     /// Across the line from `from`, `axis` long.
     Linear { from: Vec2, axis: Vec2 },
@@ -22,7 +22,7 @@ enum Shape {
 }
 
 /// A gradient fitted to a shape.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Gradient {
     shape: Shape,
     stops: Vec<(f64, Rgba)>,
@@ -31,7 +31,7 @@ pub(crate) struct Gradient {
     to_gradient: Affine,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Paint {
     Solid(Rgba),
     Gradient(Gradient),

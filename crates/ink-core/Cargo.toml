@@ -16,4 +16,5 @@ lntrn-data.workspace = true
 lntrn-image.workspace = true
 
 [dev-dependencies]
+ink-geom.workspace = true
 lntrn-image.workspace = true

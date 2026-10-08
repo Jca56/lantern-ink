@@ -24,6 +24,8 @@ pub enum CoreError {
     Size(BadSize),
     NothingToUndo,
     NothingToRedo,
+    /// A gesture was moved on or ended, and none had begun.
+    NoGesture(DocId),
 }
 
 impl fmt::Display for CoreError {
@@ -37,6 +39,7 @@ impl fmt::Display for CoreError {
             CoreError::Size(e) => write!(f, "{e}"),
             CoreError::NothingToUndo => f.write_str("there's nothing to undo"),
             CoreError::NothingToRedo => f.write_str("there's nothing to redo"),
+            CoreError::NoGesture(id) => write!(f, "no gesture is under way on {id}"),
         }
     }
 }

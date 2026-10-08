@@ -118,8 +118,9 @@ impl Ink {
         self.pointer = input.pointer.and_then(|p| Some(viewport.to_page.inverse()?.apply(p)));
 
         let cam = *cam;
-        let Ok((drawing, stamp)) = self.core.doc(doc).and_then(|d| Ok((d, self.core.history(doc)?.stamp()))) else { return };
-        self.tiles.want(doc, drawing, stamp, cam.zoom, Rect::from_min_size(Vec2::ZERO - cam.corner(), area.size()));
+        // As a gesture under way would leave it, else as it is.
+        let Ok((drawing, look)) = self.core.shown(doc) else { return };
+        self.tiles.want(doc, drawing, look, cam.zoom, Rect::from_min_size(Vec2::ZERO - cam.corner(), area.size()));
         page::draw(ui, area, &cam, page, self.icons.checker(), &self.tiles, doc);
     }
 }

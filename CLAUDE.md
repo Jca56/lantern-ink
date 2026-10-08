@@ -645,6 +645,53 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     by name, and Alt+Tab finds the entry by the window's app id, so the
     file's name stays `lantern-ink.desktop`. Both are installs, Alva's
     to say yes to on each machine (genforge has them, 2026-10-08).
+  - The canvas's ground is LS3's light tan (`theme::GROUND`, `#AAA295`:
+    its present shader's `SURROUND`; Alva, 2026-10-08). LS3 also
+    throws a soft shadow round its canvas; Ink marks the page's edge
+    with a line instead, since what's drawn past the edge shows.
+
+- **M4b (the object tree, the Pointer, undo) is under way**, in four
+  pieces: **b1** the groundwork in the core (gestures, and tiles kept
+  across an edit), **b2** the object tree, **b3** the Pointer, **b4**
+  the menus and the Box. Alva's calls, 2026-10-08: **a drag shows the
+  real drawing, live and exact** (not a lifted copy, not an outline
+  alone); **scaling by the handles keeps a stroke's width**, with a
+  "Scale strokes" tick in the Box to turn scaling on; and **each piece
+  is committed and pushed once it's tested and deployed, without
+  asking first** ("M4b gestures and dirty tiles", "M4b object tree",
+  "M4b pointer", "M4b menus and box"), **stopping with a checklist
+  after each one that has something to see** (b1 has nothing: the
+  first stop is after b2).
+- **M4b's b1 is built** (2026-10-08, 403 tests, deployed). ARCHITECTURE
+  §4.3 and §8 have the design "as built".
+  - **Gestures** are `ink-core/src/gesture.rs`: `Core::begin`,
+    `update`, `commit`, `cancel`. A gesture comes to one Command, said
+    again whenever the drag moves on (the whole drag so far, never a
+    step of it); `update` applies it to a copy of the document, and
+    `Core::shown` is what a window draws, with a `Look` that says when
+    that's another picture. The document, its history and what's saved
+    are untouched until `commit`.
+  - **What to draw again is the renderer's to say, not a Command's**
+    (`Applied` has no dirty box, and needs none): `Plan::changed_from`
+    holds the drawing laid out now against the one that shows. A new
+    level takes every tile those boxes don't touch (`tiles.rs`; a
+    tile's picture is a `Pic`, shared and freed by its last holder).
+  - **A new filter stage has two things to say** in
+    `ink-render/src/filter.rs`: how far it looks (`Stage::reach`) and
+    whether it can paint where nothing is drawn (`floods`). The tiles
+    kept across an edit stand on both.
+  - **The proof** is `ink-render/tests/changed.rs` (every eighth corpus
+    file with `cargo test`; all of them with `--release -- --ignored`,
+    two and a half minutes). **The speed** is
+    `cargo test --release -p ink-render --test speed drags -- --ignored
+    --nocapture` (four minutes): a step of a drag on a 4K canvas is
+    79 ms at the median and 643 ms at worst, all of it tiles under wide
+    shadows. **Alva hasn't been shown these numbers' consequence yet:**
+    the artwork will trail the pointer on shadowed icons until one of
+    §8's three ways is built (her choice, when she has felt it in b3).
+  - The window's tests are `ink_tests.rs` (the harness and the shell)
+    and `ink_tests/` beside it (`canvas.rs`: edits and gestures on the
+    tiles). New window behaviour gets a test there.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

@@ -14,6 +14,7 @@ use lntrn_image::Image;
 
 use crate::BadSize;
 use crate::draw::{Scene, lay};
+use crate::filter;
 use crate::scene::{Item, Polys};
 
 /// The furthest past a part's own edges a shadow is followed, px. A
@@ -52,6 +53,128 @@ fn extent(items: &[Item<Polys>], bounds: &mut Option<Rect>) {
     }
 }
 
+/// The box round `polys`.
+fn boxed(polys: &Polys) -> Option<Rect> {
+    let mut bounds = None;
+    hold(polys, &mut bounds);
+    bounds
+}
+
+/// What `a` and `b` share, if they share anything.
+fn overlap(a: Rect, b: Rect) -> Option<Rect> {
+    let both = a.intersection(&b);
+    (!both.is_empty()).then_some(both)
+}
+
+/// What of `a` isn't in `b`: up to four boxes.
+fn minus(a: Rect, b: Rect) -> Vec<Rect> {
+    let Some(both) = overlap(a, b) else { return vec![a] };
+    let strips = [
+        Rect::new(a.min, Vec2::new(a.max.x, both.min.y)),
+        Rect::new(Vec2::new(a.min.x, both.max.y), a.max),
+        Rect::new(Vec2::new(a.min.x, both.min.y), Vec2::new(both.min.x, both.max.y)),
+        Rect::new(Vec2::new(both.max.x, both.min.y), Vec2::new(a.max.x, both.max.y)),
+    ];
+    strips.into_iter().filter(|r| !r.is_empty()).collect()
+}
+
+/// `polys` as the upright box it is, if it is one.
+fn upright((polys, _): &Polys) -> Option<Rect> {
+    let [poly] = polys.as_slice() else { return None };
+    let [a, b, c, d] = poly.as_slice() else { return None };
+    let r = Rect::new(a.min(*b).min(*c).min(*d), a.max(*b).max(*c).max(*d));
+    let corner = |p: &Vec2| (p.x == r.min.x || p.x == r.max.x) && (p.y == r.min.y || p.y == r.max.y);
+    // Round its edge: each side level or upright, never a diagonal.
+    let side = |p: &Vec2, q: &Vec2| (p.x == q.x) != (p.y == q.y);
+    (poly.iter().all(corner) && side(a, b) && side(b, c) && side(c, d) && side(d, a)).then_some(r)
+}
+
+/// The box round everything `item` can paint: no further than a
+/// filter carries what's in it (anywhere in its region, for one that
+/// floods), and nothing outside what it's cut to.
+fn reach_of(item: &Item<Polys>) -> Option<Rect> {
+    match item {
+        Item::Fill { shape, .. } => boxed(shape),
+        Item::Layer(layer) => {
+            let mut inside = None;
+            extent(&layer.items, &mut inside);
+            let carried = |inside: Option<Rect>| inside.map(|b| b.expand(filter::reach(&layer.filter)));
+            match &layer.cut {
+                Some(cut) if filter::floods(&layer.filter) => boxed(cut),
+                Some(cut) => overlap(carried(inside)?, boxed(cut)?),
+                None => carried(inside),
+            }
+        }
+    }
+}
+
+/// Where what `new` draws can differ from what `old` drew, onto `out`.
+/// A pixel is made of the things that paint it, in their order: where
+/// none of those changed, was put in or was taken out, it's the same.
+fn differ(old: &[Item<Polys>], new: &[Item<Polys>], out: &mut Vec<Rect>) {
+    let head = old.iter().zip(new).take_while(|(a, b)| a == b).count();
+    let (old, new) = (&old[head..], &new[head..]);
+    let tail = old.iter().rev().zip(new.iter().rev()).take_while(|(a, b)| a == b).count();
+    let (old, new) = (&old[..old.len() - tail], &new[..new.len() - tail]);
+    if old.len() == new.len() {
+        // As many things, in the same order: each against what it was.
+        for (a, b) in old.iter().zip(new).filter(|(a, b)| a != b) {
+            apart(a, b, out);
+        }
+    } else {
+        // Some put in or taken out: wherever any of the stretch paints.
+        out.extend(old.iter().chain(new).filter_map(reach_of));
+    }
+}
+
+/// Where `new` can differ from `old`, which it took the place of.
+fn apart(old: &Item<Polys>, new: &Item<Polys>, out: &mut Vec<Rect>) {
+    if let (Item::Layer(a), Item::Layer(b)) = (old, new)
+        && a.opacity == b.opacity
+        && a.filter == b.filter
+        && a.clip == b.clip
+    {
+        // What each is cut to, where that can be reckoned with: nothing,
+        // the same thing, or two upright boxes (a filter's region goes
+        // with the box of what it's on, so moving one thing in a
+        // shadowed group moves the group's).
+        let cuts = match (&a.cut, &b.cut) {
+            (None, None) => Some(None),
+            (Some(was), Some(is)) if was == is => boxed(was).map(|r| Some((r, r))),
+            (Some(was), Some(is)) => upright(was).zip(upright(is)).map(Some),
+            _ => None,
+        };
+        if let Some(cuts) = cuts {
+            // Only what's in the layer changed: that, as far as its
+            // filter carries it, and no further than the layer shows.
+            let mut inside = Vec::new();
+            differ(&a.items, &b.items, &mut inside);
+            let far = filter::reach(&a.filter);
+            let Some((was, is)) = cuts else {
+                out.extend(inside.into_iter().map(|r| r.expand(far)));
+                return;
+            };
+            // Where one shows and the other doesn't.
+            let odd: Vec<Rect> = minus(was, is).into_iter().chain(minus(is, was)).collect();
+            let mut drawn = None;
+            if !odd.is_empty() {
+                extent(&a.items, &mut drawn);
+                extent(&b.items, &mut drawn);
+            }
+            // What's drawn there goes into the filter for one and not
+            // for the other.
+            inside.extend(odd.iter().filter_map(|o| overlap(drawn?, *o)));
+            let all = was.union(&is);
+            out.extend(inside.into_iter().filter_map(|r| overlap(r.expand(far), all)));
+            // And what the filter makes there shows for one only.
+            let made = if filter::floods(&a.filter) { Some(all) } else { drawn.map(|d| d.expand(far)) };
+            out.extend(odd.iter().filter_map(|o| overlap(made?, *o)));
+            return;
+        }
+    }
+    out.extend([old, new].into_iter().filter_map(reach_of));
+}
+
 impl Plan {
     /// `doc` through `page_to_px` (the page's px to the picture's).
     /// With `clip_to_page`, nothing shows past the page's edges.
@@ -84,6 +207,18 @@ impl Plan {
     /// Whether the drawing draws nothing at all.
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+
+    /// Where this picture can differ from `old`'s (the drawing as it
+    /// was, laid out at the same zoom): boxes in the picture's px,
+    /// shadows and all. None when the two draw the same. A part that
+    /// touches none of them is the same in both, to the byte: an edit
+    /// costs the parts it touches, and no others (ARCHITECTURE §8).
+    pub fn changed_from(&self, old: &Plan) -> Vec<Rect> {
+        let mut out = Vec::new();
+        differ(&old.items, &self.items, &mut out);
+        // A px for the rounding, as the bounds have.
+        out.iter().map(|r| r.expand(1.0)).collect()
     }
 
     /// The `width` × `height` px of the picture whose top-left pixel

@@ -69,7 +69,7 @@ pub(super) fn composite(top: Pixel, under: Pixel, op: Operator, linear: bool) ->
 }
 
 /// One channel's value through its curve.
-fn curved(v: f32, curve: &Curve) -> f32 {
+pub(super) fn curved(v: f32, curve: &Curve) -> f32 {
     let v = v as f64;
     let out = match curve {
         Curve::Identity => v,

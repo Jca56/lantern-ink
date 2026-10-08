@@ -2,12 +2,20 @@
 //! drawn by Ink's own renderer on the job pool and shown as an LUI2
 //! image, pixel for pixel. A frame never waits for a tile.
 //!
-//! A tab's tiles are a [`Level`]: the drawing in one state, at one
-//! zoom. When either changes, a new level is drawn behind the one that
-//! shows, which stays up (stretched, if the zoom moved) until every
-//! tile in view has landed; then they change places. So the canvas
-//! never goes blank for a zoom or an edit, and never shows half of one
-//! state beside half of another.
+//! A tab's tiles are a [`Level`]: the drawing as it looks at one
+//! moment, at one zoom. When either changes, a new level is drawn
+//! behind the one that shows, which stays up (stretched, if the zoom
+//! moved) until every tile in view has landed; then they change
+//! places. So the canvas never goes blank for a zoom or an edit, and
+//! never shows half of one state beside half of another.
+//!
+//! An edit costs the tiles it touches: a new level at the same zoom
+//! takes every tile of the one that shows that the edit didn't reach
+//! ([`Plan::changed_from`]), picture and all, and draws only the rest.
+//! And while a drag has the look changing at every frame, the level on
+//! its way is let land before the next is begun, so the canvas keeps
+//! up with the drag as fast as its tiles can be drawn, however fast
+//! that is.
 //!
 //! The pool lays the drawing out once for a level ([`Plan`]) and draws
 //! its tiles from that. Tiles nearest the middle of the view go first,
@@ -16,11 +24,11 @@
 //! begun.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::{Arc, Mutex};
 
-use ink_core::{DocId, Document};
+use ink_core::{DocId, Document, Look};
 use ink_geom::Affine;
 use ink_render::Plan;
 use lntrn_app::Waker;
@@ -73,12 +81,29 @@ impl Store for OnGpu<'_> {
 /// A tile's place: across and down, in tiles, from the page's corner.
 type At = (i32, i32);
 
+/// A tile's picture, shared by every level that shows it (an edit
+/// that didn't reach the tile leaves it to the next level). Let go by
+/// the last of them, it's freed when the GPU is next in reach.
+struct Pic {
+    handle: ImageHandle,
+    dead: Arc<Mutex<Vec<ImageId>>>,
+}
+
+impl Drop for Pic {
+    fn drop(&mut self) {
+        if let Ok(mut dead) = self.dead.lock() {
+            dead.push(self.handle.id);
+        }
+    }
+}
+
+#[derive(Clone)]
 enum Tile {
     /// On the pool.
     Asked,
     /// Drawn, and nothing's there.
     Clear,
-    Drawn(ImageHandle),
+    Drawn(Arc<Pic>),
 }
 
 /// A level's drawing laid out: what its tiles are drawn from.
@@ -94,8 +119,8 @@ struct Level {
     id: u64,
     /// Window px per px of the page.
     zoom: f64,
-    /// The state of the drawing it shows (`History::stamp`).
-    stamp: u64,
+    /// Which picture of the drawing it shows.
+    look: Look,
     /// None until the pool has laid the drawing out.
     laid: Option<Laid>,
     tiles: HashMap<At, Tile>,
@@ -105,9 +130,10 @@ struct Level {
 }
 
 impl Level {
-    /// Every picture it holds, to be freed.
-    fn images(&self) -> impl Iterator<Item = ImageId> + '_ {
-        self.tiles.values().filter_map(|t| if let Tile::Drawn(h) = t { Some(h.id) } else { None })
+    /// How many pictures it holds.
+    #[cfg(test)]
+    fn pictures(&self) -> usize {
+        self.tiles.values().filter(|t| matches!(t, Tile::Drawn(_))).count()
     }
 }
 
@@ -124,14 +150,16 @@ struct Sheet {
     /// What's being drawn to take its place: another zoom, or the
     /// drawing after an edit.
     back: Option<Level>,
-    /// The drawing as it was at a stamp, shared with the pool.
-    snapshot: Option<(u64, Arc<Document>)>,
+    /// The drawing as it looked at one moment, shared with the pool.
+    snapshot: Option<(Look, Arc<Document>)>,
     /// When it was last the one in view.
     shown: u64,
 }
 
 enum Done {
-    Laid { doc: DocId, level: u64, plan: Arc<Plan> },
+    /// A level's drawing is laid out. `changed`: where its picture
+    /// differs from that of the level (by id) it was begun over.
+    Laid { doc: DocId, level: u64, plan: Arc<Plan>, changed: Option<(u64, Vec<Rect>)> },
     /// A tile came back: its picture, or none (clear, or let go).
     Tile { doc: DocId, level: u64, at: At, cost: u64, image: Option<Image> },
 }
@@ -145,15 +173,30 @@ pub struct Tiles {
     flying: usize,
     flying_px: u64,
     /// Pictures let go, to free when the GPU is next in reach.
-    dead: Vec<ImageId>,
+    dead: Arc<Mutex<Vec<ImageId>>>,
     next_level: u64,
     clock: u64,
+    /// How many tiles have been sent to be drawn, ever.
+    #[cfg(test)]
+    pub(crate) asked: usize,
 }
 
 impl Default for Tiles {
     fn default() -> Tiles {
         let (tx, rx) = channel();
-        Tiles { sheets: HashMap::new(), tx, rx, waker: None, flying: 0, flying_px: 0, dead: Vec::new(), next_level: 1, clock: 0 }
+        Tiles {
+            sheets: HashMap::new(),
+            tx,
+            rx,
+            waker: None,
+            flying: 0,
+            flying_px: 0,
+            dead: Arc::default(),
+            next_level: 1,
+            clock: 0,
+            #[cfg(test)]
+            asked: 0,
+        }
     }
 }
 
@@ -189,45 +232,54 @@ impl Tiles {
 
     /// A tab closed: its tiles go.
     pub fn forget(&mut self, doc: DocId) {
-        if let Some(sheet) = self.sheets.remove(&doc) {
-            self.dead.extend(sheet.front.iter().chain(&sheet.back).flat_map(Level::images));
-        }
+        self.sheets.remove(&doc);
     }
 
-    /// A new level of `doc`, its layout begun on the pool.
-    fn begin(&mut self, doc: DocId, zoom: f64, stamp: u64, drawing: Arc<Document>) -> Level {
+    /// A new level of `doc`, its layout begun on the pool. Over `base`
+    /// (the level that shows, by id, and its layout, when that's at
+    /// this zoom), the pool works out where the two differ as well.
+    fn begin(&mut self, doc: DocId, zoom: f64, look: Look, drawing: Arc<Document>, base: Option<(u64, Arc<Plan>)>) -> Level {
         let id = self.next_level;
         self.next_level += 1;
         let alive = Arc::new(AtomicBool::new(true));
         let (send, live) = (self.sender(), alive.clone());
         Pool::global().spawn(move || {
             if live.load(Ordering::Relaxed) {
-                send(Done::Laid { doc, level: id, plan: Arc::new(Plan::new(&drawing, &Affine::scale(zoom, zoom), false)) });
+                let plan = Arc::new(Plan::new(&drawing, &Affine::scale(zoom, zoom), false));
+                let changed = base.map(|(level, was)| (level, plan.changed_from(&was)));
+                send(Done::Laid { doc, level: id, plan, changed });
             }
         });
-        Level { id, zoom, stamp, laid: None, tiles: HashMap::new(), alive }
+        Level { id, zoom, look, laid: None, tiles: HashMap::new(), alive }
     }
 
-    /// Have `doc` (the tab in view; `drawing` in the state `stamp`)
-    /// shown at `zoom`, where `view` is the part of its picture (px
-    /// from the page's corner) that the canvas shows: begin what isn't
-    /// drawn yet, bring forward what's ready, let go of what's left
-    /// behind. Once a frame.
-    pub fn want(&mut self, doc: DocId, drawing: &Document, stamp: u64, zoom: f64, view: Rect) {
+    /// Have `doc` (the tab in view; `drawing` as it `look`s now) shown
+    /// at `zoom`, where `view` is the part of its picture (px from the
+    /// page's corner) that the canvas shows: begin what isn't drawn
+    /// yet, bring forward what's ready, let go of what's left behind.
+    /// Once a frame.
+    pub fn want(&mut self, doc: DocId, drawing: &Document, look: Look, zoom: f64, view: Rect) {
         self.clock += 1;
         let mut sheet = self.sheets.remove(&doc).unwrap_or_default();
         sheet.shown = self.clock;
-        let is = |level: &Option<Level>| level.as_ref().is_some_and(|l| l.zoom == zoom && l.stamp == stamp);
+        let is = |level: &Option<Level>| level.as_ref().is_some_and(|l| l.zoom == zoom && l.look == look);
         if is(&sheet.front) {
-            // Back where it was (a zoom undone before it landed).
-            self.dead.extend(sheet.back.take().iter().flat_map(Level::images));
-        } else if !is(&sheet.back) {
-            if sheet.snapshot.as_ref().is_none_or(|(at, _)| *at != stamp) {
-                sheet.snapshot = Some((stamp, Arc::new(drawing.clone())));
+            // Back where it was (a zoom undone before it landed, a drag
+            // come home).
+            sheet.back = None;
+        } else if !is(&sheet.back) && !sheet.back.as_ref().is_some_and(|b| b.zoom == zoom) {
+            if sheet.snapshot.as_ref().is_none_or(|(at, _)| *at != look) {
+                sheet.snapshot = Some((look, Arc::new(drawing.clone())));
             }
-            let level = sheet.snapshot.as_ref().map(|(_, drawing)| self.begin(doc, zoom, stamp, drawing.clone()));
-            self.dead.extend(std::mem::replace(&mut sheet.back, level).iter().flat_map(Level::images));
+            // Over what shows, where that's at this zoom: an edit's
+            // level takes the tiles the edit didn't touch.
+            let base = sheet.front.as_ref().filter(|f| f.zoom == zoom).and_then(|f| Some((f.id, f.laid.as_ref()?.plan.clone())));
+            sheet.back = sheet.snapshot.as_ref().map(|(_, drawing)| drawing.clone()).map(|drawing| self.begin(doc, zoom, look, drawing, base));
         }
+        // (A level on its way at this zoom for another look, a drag
+        // that has moved on since, is let land: begun again at every
+        // frame, none ever would. What's wanted now is asked for again
+        // once that one shows.)
         let behind = sheet.back.is_some();
         if let Some(level) = if behind { sheet.back.as_mut() } else { sheet.front.as_mut() }
             && let Some(laid) = &level.laid
@@ -236,19 +288,11 @@ impl Tiles {
             self.ask(doc, level.id, &level.alive, laid, &mut level.tiles, seen);
             // Far behind a pan, a tile is let go (one on the pool stays
             // until it's back).
-            let Tiles { dead, .. } = self;
-            level.tiles.retain(|&at, tile| {
-                let keep = within(at, seen, KEPT) || matches!(tile, Tile::Asked);
-                if let (false, Tile::Drawn(h)) = (keep, &*tile) {
-                    dead.push(h.id);
-                }
-                keep
-            });
+            level.tiles.retain(|&at, tile| within(at, seen, KEPT) || matches!(tile, Tile::Asked));
             // All of the view is drawn: it's what shows now.
             let ready = (seen.0.0..=seen.1.0).all(|i| (seen.0.1..=seen.1.1).all(|j| matches!(level.tiles.get(&(i, j)), Some(Tile::Clear | Tile::Drawn(_)))));
             if behind && ready {
-                let old = std::mem::replace(&mut sheet.front, sheet.back.take());
-                self.dead.extend(old.iter().flat_map(Level::images));
+                sheet.front = sheet.back.take();
             }
         }
         self.sheets.insert(doc, sheet);
@@ -282,6 +326,10 @@ impl Tiles {
             }
             self.flying += 1;
             self.flying_px += cost;
+            #[cfg(test)]
+            {
+                self.asked += 1;
+            }
             tiles.insert(at, Tile::Asked);
             let (send, live, plan, side) = (self.sender(), alive.clone(), laid.plan.clone(), laid.side);
             Pool::global().spawn(move || {
@@ -308,21 +356,34 @@ impl Tiles {
                 // Room on the pool for the next: the frame asks.
                 landed = true;
             }
-            let level = self.sheets.get_mut(&doc).and_then(|s| s.front.iter_mut().chain(&mut s.back).find(|l| l.id == id));
-            let Some(level) = level else { continue };
+            let Some(Sheet { front, back, .. }) = self.sheets.get_mut(&doc) else { continue };
             match done {
-                Done::Laid { plan, .. } => {
+                Done::Laid { plan, changed, .. } => {
+                    // A level is laid out behind the one that shows.
+                    let Some(level) = back.as_mut().filter(|l| l.id == id) else { continue };
                     let side = side_for(plan.reach());
+                    // What the level that shows has drawn where this
+                    // one's picture is the same is this one's too.
+                    if let (Some((base, changed)), Some(shows)) = (changed, front.as_ref())
+                        && shows.id == base
+                        && shows.laid.as_ref().is_some_and(|l| l.side == side)
+                    {
+                        let s = side as f64;
+                        let touched = |at: &At| changed.iter().any(|c| c.intersects(&Rect::from_xywh(at.0 as f64 * s, at.1 as f64 * s, s, s)));
+                        level.tiles = shows.tiles.iter().filter(|(at, tile)| !matches!(tile, Tile::Asked) && !touched(at)).map(|(at, tile)| (*at, tile.clone())).collect();
+                    }
                     level.laid = Some(Laid { painted: plan.bounds().map(|b| span(b, side)), plan, side });
                 }
                 Done::Tile { at, image, .. } => {
+                    let Some(level) = front.iter_mut().chain(back).find(|l| l.id == id) else { continue };
                     let inked = image.filter(|i| i.rgba.chunks_exact(4).any(|px| px[3] != 0));
-                    level.tiles.insert(at, inked.map_or(Tile::Clear, |i| Tile::Drawn(store.add(&i))));
+                    level.tiles.insert(at, inked.map_or(Tile::Clear, |i| Tile::Drawn(Arc::new(Pic { handle: store.add(&i), dead: self.dead.clone() }))));
                 }
             }
             landed = true;
         }
-        for id in self.dead.drain(..) {
+        let dead = self.dead.lock().map(|mut dead| std::mem::take(&mut *dead)).unwrap_or_default();
+        for id in dead {
             store.remove(id);
         }
         landed
@@ -333,7 +394,13 @@ impl Tiles {
     #[cfg(test)]
     pub(crate) fn showing(&self, doc: DocId) -> Option<(f64, usize)> {
         let level = self.sheets.get(&doc)?.front.as_ref()?;
-        Some((level.zoom, level.images().count()))
+        Some((level.zoom, level.pictures()))
+    }
+
+    /// Which picture of `doc` shows.
+    #[cfg(test)]
+    pub(crate) fn look(&self, doc: DocId) -> Option<Look> {
+        Some(self.sheets.get(&doc)?.front.as_ref()?.look)
     }
 
     /// Draw what shows of `doc` in `area`: its tiles from `corner` (the
@@ -349,10 +416,10 @@ impl Tiles {
         let edge = |from: f64, n: i32| (from + n as f64 * side).round();
         ui.draw.push_clip(area);
         for (&(i, j), tile) in &level.tiles {
-            let Tile::Drawn(image) = tile else { continue };
+            let Tile::Drawn(pic) = tile else { continue };
             let r = Rect::new(Vec2::new(edge(corner.x, i), edge(corner.y, j)), Vec2::new(edge(corner.x, i + 1), edge(corner.y, j + 1)));
             if r.intersects(&area) {
-                ui.draw.image(r, *image, 0.0, Color::WHITE);
+                ui.draw.image(r, pic.handle, 0.0, Color::WHITE);
             }
         }
         ui.draw.pop_clip();

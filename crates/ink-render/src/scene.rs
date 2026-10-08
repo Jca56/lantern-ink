@@ -36,12 +36,14 @@ pub(crate) type Polys = (Vec<Vec<Vec2>>, FillRule);
 
 /// One thing to draw. `S` is its outline: [`Polys`] as built, a
 /// [`Shape`] once fitted to the frame it's drawn in.
+#[derive(PartialEq)]
 pub(crate) enum Item<S> {
     Fill { shape: S, paint: Paint, alpha: f32 },
     Layer(Layer<S>),
 }
 
 /// Things drawn apart and laid on as one.
+#[derive(PartialEq)]
 pub(crate) struct Layer<S> {
     pub items: Vec<Item<S>>,
     pub opacity: f32,
@@ -54,6 +56,7 @@ pub(crate) struct Layer<S> {
 
 /// What a clip path lets through: its shapes together (each cut to its
 /// own clip, if it has one), within what its own clip path lets through.
+#[derive(PartialEq)]
 pub(crate) struct Clip<S> {
     pub shapes: Vec<(S, Option<Clip<S>>)>,
     pub outer: Option<Box<Clip<S>>>,

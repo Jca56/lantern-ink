@@ -12,17 +12,27 @@ use lntrn_image::{Compression, Image};
 
 use crate::error::CoreError;
 use crate::file;
+use crate::gesture::Gesture;
 use crate::history::{Actor, History, Step};
 
 /// An open document and what the core keeps about it.
-struct Open {
-    doc: Document,
-    history: History,
+pub(crate) struct Open {
+    pub(crate) doc: Document,
+    pub(crate) history: History,
     /// Its file, once it has one.
     path: Option<PathBuf>,
     /// The state that is on disk (see [`History::stamp`]); `None` when
     /// it has never been saved.
     saved: Option<u64>,
+    /// A drag under way on it ([`Core::begin`]).
+    pub(crate) gesture: Option<Gesture>,
+}
+
+impl Open {
+    /// `doc`, just opened: with no file, and nothing done to it.
+    fn new(doc: Document) -> Open {
+        Open { history: History::new(&doc), doc, path: None, saved: None, gesture: None }
+    }
 }
 
 /// What opening a file found.
@@ -53,22 +63,25 @@ impl SaveJob {
 }
 
 pub struct Core {
-    docs: BTreeMap<DocId, Open>,
+    pub(crate) docs: BTreeMap<DocId, Open>,
     /// Whether this is the window's core (its documents are `w…`) or a
     /// headless server's (`d…`).
     window: bool,
     next: u64,
+    /// The number the next preview takes ([`crate::Look`]): none is
+    /// given twice.
+    pub(crate) previews: u64,
 }
 
 impl Core {
     /// A headless server's core: its documents are `d1`, `d2`, …
     pub fn headless() -> Core {
-        Core { docs: BTreeMap::new(), window: false, next: 1 }
+        Core { docs: BTreeMap::new(), window: false, next: 1, previews: 1 }
     }
 
     /// The window's core: its documents are `w{first}` and on.
     pub fn window(first: u64) -> Core {
-        Core { docs: BTreeMap::new(), window: true, next: first.max(1) }
+        Core { docs: BTreeMap::new(), window: true, next: first.max(1), previews: 1 }
     }
 
     fn next_id(&mut self) -> DocId {
@@ -77,19 +90,18 @@ impl Core {
         if self.window { DocId::window(n) } else { DocId(n) }
     }
 
-    fn open(&self, id: DocId) -> Result<&Open, CoreError> {
+    pub(crate) fn open(&self, id: DocId) -> Result<&Open, CoreError> {
         self.docs.get(&id).ok_or(CoreError::NoSuchDoc(id))
     }
 
-    fn open_mut(&mut self, id: DocId) -> Result<&mut Open, CoreError> {
+    pub(crate) fn open_mut(&mut self, id: DocId) -> Result<&mut Open, CoreError> {
         self.docs.get_mut(&id).ok_or(CoreError::NoSuchDoc(id))
     }
 
     /// A new, empty drawing `width` × `height` user units.
     pub fn new_doc(&mut self, width: f64, height: f64) -> DocId {
         let id = self.next_id();
-        let doc = Document::new(id, width, height);
-        self.docs.insert(id, Open { history: History::new(&doc), doc, path: None, saved: None });
+        self.docs.insert(id, Open::new(Document::new(id, width, height)));
         id
     }
 
@@ -100,7 +112,7 @@ impl Core {
         // Taken over before history begins: undo never brings another
         // editor's marks back.
         let adopted = doc.adopt();
-        self.docs.insert(id, Open { history: History::new(&doc), doc, path: None, saved: None });
+        self.docs.insert(id, Open::new(doc));
         Ok(Opened { doc: id, adopted })
     }
 
@@ -170,24 +182,29 @@ impl Core {
     /// and `actor`'s: all of it, or (when any part is refused) none. A
     /// command that changes nothing leaves no step.
     pub fn apply(&mut self, id: DocId, command: &Command, actor: Actor, label: &str) -> Result<Applied, CoreError> {
-        let open = self.open_mut(id)?;
+        let open = self.docs.get_mut(&id).ok_or(CoreError::NoSuchDoc(id))?;
         let applied = open.doc.apply(command)?;
         if !applied.is_nothing() {
             open.history.record(&open.doc, Step { label: label.to_owned(), actor });
+            open.rebase(&mut self.previews);
         }
         Ok(applied)
     }
 
     /// Undo the latest step, whoever made it. Returns the step undone.
     pub fn undo(&mut self, id: DocId) -> Result<Step, CoreError> {
-        let open = self.open_mut(id)?;
-        open.history.undo(&mut open.doc).ok_or(CoreError::NothingToUndo)
+        let open = self.docs.get_mut(&id).ok_or(CoreError::NoSuchDoc(id))?;
+        let undone = open.history.undo(&mut open.doc).ok_or(CoreError::NothingToUndo)?;
+        open.rebase(&mut self.previews);
+        Ok(undone)
     }
 
     /// Redo the step last undone. Returns it.
     pub fn redo(&mut self, id: DocId) -> Result<Step, CoreError> {
-        let open = self.open_mut(id)?;
-        open.history.redo(&mut open.doc).ok_or(CoreError::NothingToRedo)
+        let open = self.docs.get_mut(&id).ok_or(CoreError::NoSuchDoc(id))?;
+        let redone = open.history.redo(&mut open.doc).ok_or(CoreError::NothingToRedo)?;
+        open.rebase(&mut self.previews);
+        Ok(redone)
     }
 
     /// Save `id` to `path`, or to its own file again. The file is the

@@ -20,6 +20,8 @@ use crate::ink::{Editor, Ink};
 use crate::tiles::Store;
 use crate::tools::Tool;
 
+mod canvas;
+
 /// Where the tiles' pictures are kept in a test.
 #[derive(Default)]
 struct Kept {

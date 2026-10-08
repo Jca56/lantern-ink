@@ -9,7 +9,7 @@ use ink_doc::gradient::Units;
 use ink_doc::length::Length;
 use ink_geom::{Affine, Rect, Vec2};
 
-use self::blend::{composite, encoded, light, over, transfer};
+use self::blend::{composite, curved, encoded, light, over, transfer};
 use self::blur::{blur, shifted};
 use crate::paint::{Rgba, rgba};
 use crate::raster::Pixel;
@@ -72,8 +72,40 @@ impl Fitted {
     /// How far from a pixel the whole chain looks, px: what a band
     /// needs of the rows beyond it to get the filter right.
     pub fn reach(&self) -> f64 {
-        self.stages.iter().map(Stage::reach).sum()
+        reach(&self.stages)
     }
+}
+
+/// How far from a pixel a chain of `stages` looks, px: a pixel it
+/// makes is made of none further off than that.
+pub(crate) fn reach(stages: &[Stage]) -> f64 {
+    stages.iter().map(Stage::reach).sum()
+}
+
+/// Whether a chain of `stages` can paint where nothing is drawn within
+/// its reach: a flood left showing, a curve that makes clear pixels
+/// solid. Without one, what it makes is clear wherever the element is,
+/// as far as it looks.
+pub(crate) fn floods(stages: &[Stage]) -> bool {
+    // Of each stage so far: whether it can.
+    let mut made: Vec<bool> = Vec::with_capacity(stages.len());
+    for stage in stages {
+        let can = |input: &Input| matches!(input, Input::Step(k) if made.get(*k).copied().unwrap_or(false));
+        made.push(match stage {
+            Stage::Blur { of, .. } | Stage::Offset { of, .. } | Stage::Shadow { of, .. } => can(of),
+            Stage::Flood { color } => color[3] > 0.0,
+            Stage::Merge { of, .. } => of.iter().any(can),
+            Stage::Composite { top, under, op, .. } => match op {
+                Operator::Over | Operator::Xor => can(top) || can(under),
+                Operator::In => can(top) && can(under),
+                Operator::Out => can(top),
+                Operator::Atop => can(under),
+                Operator::Arithmetic([both, t, u, always]) => *always != 0.0 || (*t != 0.0 && can(top)) || (*u != 0.0 && can(under)) || (*both != 0.0 && can(top) && can(under)),
+            },
+            Stage::Transfer { of, curves, .. } => can(of) || curved(0.0, &curves[3]) > 0.0,
+        });
+    }
+    made.last().copied().unwrap_or(false)
 }
 
 /// `filter` on an element whose box is `bbox` (in its own coordinates),

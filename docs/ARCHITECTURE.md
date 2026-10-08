@@ -451,9 +451,14 @@ taken away leaves its picture as it was.
 ### 4.1 Core API
 The same shape as LS3's (LS3 §4.1): `apply(doc, Command, Actor)`,
 `begin / update / commit / cancel` for gestures, `render`, plus queries
-(`hit`, `bounds`, `snap_points`). `Applied { changed: Vec<NodeId>,
-structure_changed, dirty: Rect, warnings }` tells the GUI what to redraw
-and the MCP server what to say.
+(`hit`, `bounds`, `snap_points`). `Applied` (the nodes changed, made,
+removed and moved) tells the GUI what to select and the MCP server what
+to say. **What to draw again is not a Command's to say** (as built in
+M4b; this section first gave `Applied` a `dirty` box): the renderer
+holds the drawing laid out now against the drawing laid out before
+(`Plan::changed_from`, §8), which is right for every Command there is or
+will be, for undo, and for an edit of Claude's, with nothing for a new
+Command to forget.
 
 ### 4.2 History
 - **A snapshot is the `nodes` map** (pointer copies) plus `root`. Editing
@@ -471,6 +476,30 @@ and the MCP server what to say.
   scene builder substitutes. It commits as exactly one Command.
 - An MCP read in the middle of Alva's gesture sees only committed state.
 - Heavy work runs at most once a frame, never per input event.
+
+**As built in M4b** (`ink-core/src/gesture.rs`; Alva's call, 2026-10-08:
+a drag shows the real drawing, live and exact):
+- **A gesture comes to one Command, said again whenever the drag moves
+  on**: "these nodes, moved this far from where they were", the whole of
+  the drag so far and never a step of it. `Core::update` applies it to a
+  copy of the document (which shares every node it didn't touch), and
+  that copy is what the window shows: `Core::shown` gives it, with a
+  `Look` that is equal to another moment's only if the drawing looked
+  the same then. So the override is any Command at all, and the scene
+  builder needs to know nothing of gestures.
+- Nothing drifts: a hundred small moves aren't a hundred roundings to
+  three decimals, and a drag that comes back to where it began is no
+  change and no step.
+- `Core::doc`, the history, what's saved and the autosave are the
+  document as committed all the while. An edit that lands in the middle
+  of a drag (Claude's over the bridge, an undo) has the gesture worked
+  out again on the document as it is now.
+- `Core::commit` applies the Command for real, as one labelled step
+  (what it makes has the ids its preview showed: the copy counts from
+  where the document does). A Command the document refuses shows
+  nothing, and `update` and `commit` both say why.
+- A node's `rev` can come round again in a preview with other content:
+  nothing may key a cache by it across previews.
 
 ---
 
@@ -847,11 +876,53 @@ As LS3 §7, to the letter where it can be:
     (most of Lantern's app and folder icons) is 1.5 to 3.5 s of one
     core, a tenth to four tenths of a second on the pool: each tile is
     drawn with its shadows' reach around it, and a filter is worked
-    out in linear light over all of that. **For M4b:** a drag can't
-    redraw shadowed tiles every frame at that cost, so a gesture's
-    preview needs its own way (what's dragged drawn once and moved;
-    §4.3's overrides). **For the renderer, when it's measured again:**
-    a filter needn't touch the pixels of its frame that are clear.
+    out in linear light over all of that. **For the renderer, when
+    it's measured again:** a filter needn't touch the pixels of its
+    frame that are clear.
+  **As built in M4b** (only the tiles an edit touches are drawn again):
+  - `Plan::changed_from` holds a drawing laid out against itself laid
+    out a moment before, thing by thing in paint order, and gives the
+    boxes where the two pictures can differ. A pixel is made of the
+    things that paint it, in their order: where none of those changed,
+    came or went, it's the same. Inside a layer, what changed counts as
+    far as the layer's filter carries it (its stages' reach) and no
+    further than the layer shows; a filter's region that moved with its
+    element's box counts only where something is painted in the part
+    that came or went (all of it, for a filter that floods).
+  - A new level at the same zoom takes every tile of the level that
+    shows that those boxes don't touch, picture and all (a tile's
+    picture is shared by the levels that show it, and freed when the
+    last lets go), and only the rest go to the pool. An edit that
+    changes nothing that shows draws nothing.
+  - **How it's proven:** `ink-render/tests/changed.rs` edits corpus
+    files a dozen ways each (moved, scaled, repainted, faded, hidden,
+    restacked, taken out, put in, a stop or a blur changed) and holds
+    every tile the boxes leave alone against what it was, to the byte:
+    every eighth file with `cargo test`; all 144 (5,609 edits, 399,268
+    tiles the same, three quarters of all there were) with
+    `cargo test --release -p ink-render --test changed -- --ignored`.
+  - **A drag's levels:** while the look changes at every frame, the
+    level on its way is let land before the next is begun (begun again
+    each frame, none ever would), so the canvas follows a drag as fast
+    as its tiles can be drawn. The selection's outline is the window's
+    own, drawn every frame: that never waits.
+  - **Measured** (`cargo test --release -p ink-render --test speed
+    drags -- --ignored --nocapture`: a step of a drag on a 4K canvas,
+    for the bottom, the top and a deep node of every corpus file, on
+    27 threads): applying the Command is 0.1 ms, laying the drawing out
+    0.1 to 1.5 ms (84 ms where there's text: shaping, every time),
+    finding what changed 0.01 ms. The tiles are everything: **a step is
+    79 ms at the median, 178 ms at nine in ten, 643 ms at worst; 38 %
+    within a frame.** Half the tiles are kept on average, but one
+    1024 px tile under a wide shadow is 150 to 640 ms on its own.
+  - **So, for drags that keep up on shadowed icons** (most of Lantern's;
+    not built, each to be measured first): (a) the things of a drawing
+    that a drag doesn't touch drawn once and kept, per tile, under and
+    over the ones it does, so that what's dragged over a shadowed body
+    doesn't have the body's shadow worked out again; (b) wide blurs
+    worked out small and stretched while a drag is going, exact again
+    once it rests; (c) the filters themselves (every stage a frame of
+    its own, in linear light, clear pixels and all).
 - **Overlays** (selection boxes, handles, anchors, guides, the pixel
   grid) are drawn in screen px over the canvas with LUI2's own lines, so
   they stay the same size at every zoom.

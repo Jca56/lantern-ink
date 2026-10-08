@@ -245,6 +245,7 @@ name = "ink-core"
 version = "0.1.0"
 dependencies = [
  "ink-doc",
+ "ink-geom",
  "ink-render",
  "lntrn-data",
  "lntrn-image",
