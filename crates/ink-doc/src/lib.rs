@@ -38,6 +38,7 @@ mod kind;
 mod layout;
 pub mod length;
 pub mod lettering;
+pub mod marks;
 mod node;
 pub mod outline;
 mod outlined;

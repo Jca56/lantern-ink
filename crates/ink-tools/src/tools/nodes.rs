@@ -44,7 +44,64 @@ pub(super) fn tools() -> Vec<Entry> {
         ),
         edit("node_move", "Move in the stack", "Move nodes, each with everything in it, to another place in the drawing's order or into another group: just above or below a node, into one, or to the top or bottom of the whole drawing. Later in the file is further up the picture. This moves them in the stack, not on the page: each stays where it shows, so one that lands in a group with a transform has its own numbers (or its transform) changed to make up for it. It takes on its new group's inherited paint.", move_schema, Kind::Set, relocate, moved),
         edit("node_delete", "Delete nodes", "Delete nodes, each with everything in it. Undoable with history_undo.", delete_schema, Kind::Destroy, delete, deleted),
+        edit(
+            "node_mark",
+            "Label, lock",
+            "Give nodes a label, or lock them. `label` is a name for a person to know a node by (doc_info shows it in brackets, and a layers panel will): \"\" takes it off. `locked`: true makes each node, and everything in it, refuse every edit until it's unlocked with false: it can't be changed, moved or deleted, and neither can anything in it, though things can still go beside it and a group it's in can be painted. Alva locks what she doesn't want changed, so ask her before unlocking one. Both are Ink's own marks (ink:label, ink:locked): they change nothing of how the drawing draws, other programs ignore them, and an .svg from doc_export leaves them out.",
+            mark_schema,
+            Kind::Set,
+            mark,
+            marked,
+        ),
     ]
+}
+
+fn mark_schema() -> Doc {
+    common::edit(
+        &["node_ids"],
+        vec![
+            ("node_ids", schema::list(common::node_id("A node"), "The nodes to label or lock")),
+            ("label", schema::string("The name they go by; \"\" takes it off")),
+            ("locked", schema::boolean("Lock them (true) or unlock them (false)", false)),
+        ],
+    )
+}
+
+fn mark(doc: &Document, input: &In) -> Result<Command, ToolError> {
+    let nodes = input.nodes("node_ids")?;
+    for &id in &nodes {
+        doc.node(id).map_err(refused_edit)?;
+    }
+    // No name at all takes the label off.
+    let label = input.args.opt_str("label")?.map(|said| Some(said.trim()).filter(|said| !said.is_empty()).map(str::to_owned));
+    let locked = input.args.opt_bool("locked")?;
+    if label.is_none() && locked.is_none() {
+        return fail("say what to mark: label (a name, or \"\" to take it off) or locked (true or false)");
+    }
+    // A label goes on while the node is open: unlocked first, locked
+    // last.
+    let mut steps = Vec::new();
+    if locked == Some(false) {
+        steps.push(Command::SetLocked { nodes: nodes.clone(), locked: false });
+    }
+    if let Some(label) = label {
+        steps.extend(nodes.iter().map(|&node| Command::SetLabel { node, label: label.clone() }));
+    }
+    if locked == Some(true) {
+        steps.push(Command::SetLocked { nodes, locked: true });
+    }
+    Ok(Command::Batch(steps))
+}
+
+fn marked(doc: &Document, applied: &Applied) -> Reply {
+    // The root changes only by gaining the declaration Ink's marks need.
+    let now: Vec<String> = applied.changed.iter().filter(|&&id| id != doc.root()).filter_map(|id| doc.get(*id)).map(|node| format!("{} {}{}", node.id, tag(node), match crate::describe::marks(doc, node).as_str() { "" => " (no label, unlocked)".to_owned(), marks => marks.to_owned() })).collect();
+    if now.is_empty() {
+        return Reply::text("Nothing changed: they were marked that way already.");
+    }
+    let mut m = Map::new();
+    m.insert("node_ids", ids(&applied.changed.iter().copied().filter(|&id| id != doc.root()).collect::<Vec<_>>()));
+    Reply::text(format!("Marked. Now: {}.", now.join("; "))).data(Doc::Map(m))
 }
 
 /// A name an element can have: SVG's are letters, with a prefix maybe.

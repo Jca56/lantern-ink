@@ -55,6 +55,18 @@ pub(crate) fn undrawn(doc: &Document, node: &Node) -> Option<String> {
     }
 }
 
+/// The marks Ink keeps on a node, as a listing shows them: its label
+/// in brackets, and whether it's locked.
+pub(crate) fn marks(doc: &Document, node: &Node) -> String {
+    let label = doc.label(node.id).map_or(String::new(), |label| format!(" [{}]", label.trim()));
+    let lock = match doc.lock_over(node.id) {
+        Some(lock) if lock == node.id => " (locked)".to_owned(),
+        Some(lock) => format!(" (in {lock}, locked)"),
+        None => String::new(),
+    };
+    format!("{label}{lock}")
+}
+
 /// The most of a text's words one line quotes.
 const MAX_WORDS: usize = 40;
 
@@ -142,6 +154,9 @@ fn node_line(doc: &Document, node: &Node, bounds: Option<&Rect>) -> String {
     if node.kind == Kind::Text {
         line += &format!(" {}", words(doc, node));
     }
+    if let Some(label) = doc.label(node.id) {
+        line += &format!(" [{}]", label.trim());
+    }
     if is_definition(node.kind) {
         let attrs = attributes(node);
         if !attrs.is_empty() {
@@ -159,16 +174,25 @@ fn node_line(doc: &Document, node: &Node, bounds: Option<&Rect>) -> String {
     if let Some(why) = undrawn(doc, node) {
         line += &format!("  ({why})");
     }
+    if doc.is_locked(node.id) {
+        line += "  locked";
+    }
     line
 }
 
-fn node_data(node: &Node, depth: usize, bounds: Option<&Rect>) -> Doc {
+fn node_data(doc: &Document, node: &Node, depth: usize, bounds: Option<&Rect>) -> Doc {
     let mut m = Map::new();
     m.insert("id", node.id.to_string().into());
     m.insert("element", node.name.as_str().into());
     m.insert("depth", Doc::Int(depth as i64));
     if let Some(id) = node.attr("id") {
         m.insert("svg_id", id.into());
+    }
+    if let Some(label) = doc.label(node.id) {
+        m.insert("label", label.trim().into());
+    }
+    if doc.is_locked(node.id) {
+        m.insert("locked", Doc::Bool(true));
     }
     if let Some(b) = bounds {
         m.insert("box", Doc::List([b.min.x, b.min.y, b.width(), b.height()].into_iter().map(Doc::from).collect()));
@@ -201,7 +225,7 @@ impl Listing<'_> {
         }
         self.left -= 1;
         self.lines.push(format!("{}{}", "  ".repeat(depth), node_line(self.doc, node, self.bounds.get(&id))));
-        self.data.push(node_data(node, depth, self.bounds.get(&id)));
+        self.data.push(node_data(self.doc, node, depth, self.bounds.get(&id)));
         let mut children: Vec<NodeId> = node.elements().collect();
         if !in_file_order(node.kind) {
             children.reverse();

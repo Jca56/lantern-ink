@@ -104,6 +104,13 @@ pub enum Command {
     /// refers to, empty groups and `<defs>`, namespace declarations
     /// nothing uses; and of `also`, what's asked for by name.
     Tidy { also: Vec<Extra> },
+    /// Give `node` a name for a person to know it by (`ink:label`), or
+    /// with `None` take its name off ([`crate::marks`]).
+    SetLabel { node: NodeId, label: Option<String> },
+    /// Lock `nodes`, or unlock them (`ink:locked`). A locked node, and
+    /// everything in it, refuses every other Command until it's
+    /// unlocked.
+    SetLocked { nodes: Vec<NodeId>, locked: bool },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }
@@ -179,6 +186,8 @@ impl Document {
     }
 
     fn run(&mut self, command: &Command, applied: &mut Applied, depth: usize) -> Result<(), DocError> {
+        // What's locked changes only by being unlocked.
+        self.guard(command)?;
         match command {
             Command::SetAttr { node, name, value } => {
                 if self.set_attr(*node, name, value.as_deref())? && !applied.changed.contains(node) {
@@ -341,6 +350,33 @@ impl Document {
                 // One written differently and then dropped is just gone.
                 let still: Vec<NodeId> = dropped.changed.into_iter().filter(|id| self.get(*id).is_some()).collect();
                 applied.note(still);
+            }
+            Command::SetLabel { node, label } => {
+                let root = self.root;
+                let declared = self.node(root)?.attrs.len();
+                if self.set_label(*node, label.as_deref())? {
+                    applied.note(vec![*node]);
+                }
+                // The first of Ink's marks brings its namespace's
+                // declaration with it.
+                if self.node(root)?.attrs.len() != declared {
+                    applied.note(vec![root]);
+                }
+            }
+            Command::SetLocked { nodes, locked } => {
+                if nodes.is_empty() {
+                    return invalid("there's nothing to lock: name at least one node");
+                }
+                let root = self.root;
+                let declared = self.node(root)?.attrs.len();
+                for &id in nodes {
+                    if self.set_locked(id, *locked)? {
+                        applied.note(vec![id]);
+                    }
+                }
+                if self.node(root)?.attrs.len() != declared {
+                    applied.note(vec![root]);
+                }
             }
             Command::Batch(commands) => {
                 if depth >= MAX_BATCH_DEPTH {

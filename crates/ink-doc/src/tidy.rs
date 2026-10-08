@@ -13,7 +13,9 @@
 //! outside it might); titles, descriptions and metadata.
 //!
 //! What a `<style>` sheet names counts as used, and Ink's own namespace
-//! is never dropped: a drawing Ink made carries it.
+//! is never dropped: a drawing Ink made carries it. What's locked
+//! ([`crate::marks`]) is stepped round: it stays, with what's in it
+//! and what holds it.
 
 use std::collections::HashSet;
 
@@ -157,6 +159,12 @@ impl Document {
         node.children.iter().all(|child| matches!(child, Child::Text(text) if text.trim().is_empty()))
     }
 
+    /// Whether no lock is in the way of taking `id` out: on it, over
+    /// it, or in it.
+    fn may_go(&self, id: NodeId) -> bool {
+        self.lock_over(id).is_none() && self.lock_inside(id).is_none()
+    }
+
     /// Whether a name in `node` or under it has the prefix `p`.
     fn uses_prefix(&self, node: NodeId, p: &str) -> bool {
         self.descendants(node).into_iter().filter_map(|id| self.get(id)).any(|n| prefix(&n.name) == Some(p) || n.attrs.iter().any(|a| prefix(&a.name) == Some(p)))
@@ -169,14 +177,14 @@ impl Document {
         let all = |doc: &Document| -> Vec<NodeId> { doc.descendants(doc.root).into_iter().skip(1).collect() };
         if also.contains(&Extra::Words) {
             for id in all(self) {
-                if self.get(id).is_some_and(|n| matches!(n.kind, Kind::Title | Kind::Desc | Kind::Metadata)) && self.remove(id).is_ok() {
+                if self.get(id).is_some_and(|n| matches!(n.kind, Kind::Title | Kind::Desc | Kind::Metadata)) && self.may_go(id) && self.remove(id).is_ok() {
                     dropped.words.push(id);
                 }
             }
         }
         if also.contains(&Extra::Comments) {
             for id in self.descendants(self.root) {
-                let Some(node) = self.get(id) else { continue };
+                let Some(node) = self.get(id).filter(|_| self.lock_over(id).is_none()) else { continue };
                 let lines = !is_words(node.kind);
                 let cleaned: Vec<(usize, String, usize)> = node.children.iter().enumerate().filter_map(|(i, child)| if let Child::Text(raw) = child { Some((i, uncommented(raw, lines))) } else { None }).filter(|(_, (_, count))| *count > 0).map(|(i, (text, count))| (i, text, count)).collect();
                 if cleaned.is_empty() {
@@ -208,13 +216,13 @@ impl Document {
             for id in all(self) {
                 let Some(node) = self.get(id) else { continue };
                 let in_defs = node.parent.and_then(|p| self.get(p)).is_some_and(|p| p.kind == Kind::Defs);
-                if (is_definition(node.kind) || (in_defs && is_kept_for_use(node.kind))) && !self.is_used(node, &used) && self.remove(id).is_ok() {
+                if (is_definition(node.kind) || (in_defs && is_kept_for_use(node.kind))) && !self.is_used(node, &used) && self.may_go(id) && self.remove(id).is_ok() {
                     dropped.unused.push(id);
                 }
             }
             for id in all(self).into_iter().rev() {
                 let Some(node) = self.get(id) else { continue };
-                if matches!(node.kind, Kind::G | Kind::Defs) && Document::is_hollow(node) && !self.is_used(node, &used) && self.remove(id).is_ok() {
+                if matches!(node.kind, Kind::G | Kind::Defs) && Document::is_hollow(node) && !self.is_used(node, &used) && self.may_go(id) && self.remove(id).is_ok() {
                     dropped.empty.push(id);
                 }
             }
@@ -223,7 +231,7 @@ impl Document {
             }
         }
         for id in self.descendants(self.root) {
-            let Some(node) = self.get(id) else { continue };
+            let Some(node) = self.get(id).filter(|_| self.lock_over(id).is_none()) else { continue };
             let idle: Vec<String> = node
                 .attrs
                 .iter()
@@ -241,7 +249,7 @@ impl Document {
         if also.contains(&Extra::Ids) {
             let used = self.referred_to();
             for id in self.descendants(self.root) {
-                let Some(name) = self.get(id).and_then(|n| n.attr("id")).filter(|name| !used.contains(*name)).map(str::to_owned) else { continue };
+                let Some(name) = self.get(id).filter(|_| self.lock_over(id).is_none()).and_then(|n| n.attr("id")).filter(|name| !used.contains(*name)).map(str::to_owned) else { continue };
                 if self.set_attr(id, "id", None).is_ok() {
                     dropped.ids.push((id, name));
                     dropped.changed.push(id);

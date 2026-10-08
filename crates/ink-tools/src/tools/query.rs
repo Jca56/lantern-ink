@@ -69,6 +69,14 @@ fn info(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
         [] => "No attributes.".to_owned(),
         attrs => format!("Attributes: {}", attrs.iter().map(|a| format!("{}=\"{}\"", a.name, shown(&a.value))).collect::<Vec<_>>().join(" ")),
     });
+    if let Some(label) = doc.label(id) {
+        lines.push(format!("Labelled \"{}\".", label.trim()));
+    }
+    match doc.lock_over(id) {
+        Some(lock) if lock == id => lines.push("Locked: nothing about it, or in it, changes until it's unlocked (node_mark; ask Alva first).".to_owned()),
+        Some(lock) => lines.push(format!("In {lock}, which is locked: nothing in it changes until {lock} is unlocked (node_mark; ask Alva first).")),
+        None => {}
+    }
     // What the drawing's <style> rules say of it: each property once,
     // as the rule that counts for most has it.
     let mut ruled: Vec<(&str, &str)> = Vec::new();

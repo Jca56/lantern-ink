@@ -217,6 +217,24 @@ enum  Child { Node(NodeId), Text(String) /* text, comments, CDATA, as written */
   The root declares `xmlns:ink` in a document Ink made, in one it took
   over from another editor (D25), and from the first time an `ink:`
   attribute is needed; a file from elsewhere is otherwise left unstamped.
+- **A label and a lock** (as built in M3e, `ink-doc/src/marks.rs`).
+  `ink:label` is a name for a person to know a node by: `doc_info`
+  shows it, and the layers panel will; it changes nothing of how the
+  drawing draws. `ink:locked="true"` makes a node, and everything in
+  it, refuse every edit until it's unlocked (LS3's lock): it can't be
+  changed, moved or deleted, and neither can anything in it. Every
+  Command is checked as its turn comes (`Document::guard`), so in a
+  batch what an earlier step unlocked a later one may change. Three
+  ways a Command reaches a node: it changes the node itself (refused
+  when the node or anything above it is locked); it would move,
+  rewrite or remove what's in the node too, as a delete, a transform,
+  an ungroup or a boolean does (refused as well when anything in it is
+  locked); or it only locks or unlocks (refused only by a lock further
+  up). So things still go beside a locked node, a group it's in can be
+  painted, and a copy of it is a node of its own. Tidying steps round
+  what's locked. A clean copy to ship carries neither mark. The marks
+  are read under whichever prefix stands for Ink's namespace, and
+  written as `ink:`, declared on the root the first time one is needed.
 - **Dirty state is derived:** `modified = version != saved_version`.
 
 ### 3.4 Commands
@@ -257,6 +275,9 @@ elements (gradients, and in time clip paths and filters) into the
 drawing's `<defs>`, made as the root's first child if there isn't one;
 `SetGradient` is `gradient_set`, over `SetAttr`, `Delete` and `Insert`
 on the gradient and its stops.
+
+**As built in M3e (marks):** `SetLabel` and `SetLocked` (`marks.rs`,
+§3.3), and the guard every other Command passes first.
 
 **As built in M3e:** `Tidy { also }` (`tidy.rs`) drops what nothing
 uses, and nothing that shows changes (Alva's scope, 2026-10-07).
@@ -712,7 +733,7 @@ carries over; only the differences and the tool list are new here.
 | Group | Tools |
 |---|---|
 | Documents | `doc_new`\*, `doc_open`\*, `doc_list`\*, `doc_info`\* (the tree, front to back, as a layers panel shows it), `doc_preview`\*, `doc_source`\*, `doc_save`\*, `doc_export`\* (PNG / JPEG / WebP at any size; a clean, tidied `.svg` to ship since M3e), `doc_close`\*, `doc_set`† (viewBox, size, decimals; fitting the content to a new viewBox), `doc_tidy` (drop what nothing uses; built in M3e) |
-| Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a) |
+| Nodes | `node_add`\* (any element, with its attributes as the file writes them), `node_add_svg`\*, `node_set`\* (any attribute; null takes one off), `node_info`†, `node_move`\*, `node_duplicate`†, `node_delete`\*, `node_group`†, `node_ungroup`†, `node_transform`†, `node_align`† († = built in M3a), `node_mark` (a label, a lock; built in M3e) |
 | Paths | `path_set`§, `path_edit`§ (anchors and handles), `path_op`§ (to path, reverse, the boolean ops union, subtract, intersect and exclude, outline stroke, simplify) (§ = built in M3c) |
 | Paint | `node_style`‡ (properties set where they'll show: not in the first list, added because `node_set` writes attributes as given and can't follow D14), `gradient_add`‡, `gradient_set`‡, `clip_set`‡, `filter_set`‡ (‡ = built in M3b) |
 | Text | `text_add`¶, `text_set`¶, `text_to_path`¶, `font_list`¶ (¶ = built in M3d) |
@@ -850,7 +871,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (built 2026-10-07), **e** tidy (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (built 2026-10-07), **e** tidy (built 2026-10-07) (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 
@@ -884,7 +905,7 @@ the foundation; the rest wait for their milestone.
 | D16 | Coordinates Claude and the GUI speak | ✅ **Decided 2026-10-06, revising my first recommendation:** attributes are as the file writes them (the node's own coordinates, as in any SVG), which is also what `node_add_svg`'s raw markup means; what's reported back is where things show in the document's coordinates (§3.3) | M2 |
 | D17 | Pen tool | Click points, bend the segments after (your May preference); no click-drag handles while placing. Still what you want? | M4 |
 | D18 | Path anchors' addresses | ✅ **Decided 2026-10-07, as recommended:** stable ids kept beside the path in memory (`A3`), so a selection survives a point being added; not written to the file. The alternative was a place in the path (run 1, anchor 3), which every add and delete renumbers | M3 |
-| D19 | Ink's own attributes | `xmlns:ink="urn:lantern:ink"`; `ink:locked`, `ink:label`, guides on the root. Nothing else until something needs it | M3 |
+| D19 | Ink's own attributes | ✅ **Decided 2026-10-07 (Alva): `ink:label` and `ink:locked` now** (built in M3e, §3.3), under `xmlns:ink="urn:lantern:ink"`; **guides wait for the window (M4)**, the first thing that can show or snap to them. Nothing else until something needs it | M3 |
 | D20 | What "done" means for the window | Ink replaces Boxy SVG for Lantern's icons. I'm inferring Boxy from the `bx:` marks in 107 files; the checklist gets written with you at M4's start | M4 |
 | D21 | SVG features | §5.2's list for v1; `<use>`, masks, patterns, images and markers when something needs them. M1 draws what `lntrn-svg` does; text, `<style>` rules and blur follow in M3 | M1, then as needed |
 | D22 | Golden tolerance | ✅ **Decided 2026-10-06, as revised by measurement:** exact for Ink's own renderer (three goldens, `ink-render/tests/goldens`). Against `lntrn-svg`, "within one level" can only hold on average, not per pixel (§5.4): a file's mean must be within 1.25 levels at 64 px and 0.5 at 256 px, and at most 4 % and 1.5 % of its pixels may be over 16 levels out. `rsvg-convert` is a report to read (`third_opinion`), not a test | M1 |

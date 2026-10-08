@@ -104,8 +104,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     binary to `~/.lantern/bin/lantern-ink-mcp.new` and `mv` it over.
   - `~/.lantern/bin/lantern-ink` is the May 2026 iced prototype's
     binary, not ours: left alone until M4's window takes the name.
-- **M3 (operations) is under way** (a, b, c and d built; e tidy to
-  go), in five slices, in the order Alva
+- **M3 (operations) is built** (all five slices, 2026-10-07; its
+  done-test in a fresh session is what's left), in five slices, in the order Alva
   chose 2026-10-06: **a** structure and transforms, **b** paint (styles,
   gradients, clips, filters; the renderer learns `feGaussianBlur` and
   `<style>` rules), **c** paths (anchors, editing, boolean ops), **d**
@@ -455,6 +455,33 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     root's declaration went first).
   - **Proof:** `cargo test -p ink-render --test tidy -- --nocapture`
     (every corpus file, tidied and shipped, draws the same bytes).
+
+- **M3e's e3 is built** (2026-10-07, 349 tests, 39 tools), and with it
+  **M3e and all of M3**: D19's `ink:label` and `ink:locked`
+  (`ink-doc/src/marks.rs`), `Command::SetLabel` and `SetLocked`, and
+  the tool `node_mark`. **Next: M3's done-test in a fresh session**
+  (nothing since M3a has had one), **then M4, the window.**
+  - A locked node, and everything in it, refuses every Command but
+    locking and unlocking: `Document::guard` runs before each one (in
+    a batch, as each step's turn comes). What would move, rewrite or
+    remove a locked node from above (deleting, transforming or
+    ungrouping the group it's in) is refused too; putting things beside
+    it, painting its group and copying it are not.
+  - **A new Command needs an arm in `guard`** (the match is
+    exhaustive, so the compiler says so): say whether it changes its
+    nodes themselves (`Own`) or what's in them too (`Deep`).
+  - Tidying steps round what's locked; a clean copy to ship carries
+    neither mark.
+  - Over the wire a lock's refusal ends "ask her first": Alva locks
+    what she doesn't want changed. A label comes off with `""`
+    (`lntrn-mcp` reads a null argument as not given).
+  - Guides wait for M4 (Alva, D19): nothing can show or snap to them
+    yet.
+  - **`ink-doc/src/command.rs` is 467 lines:** the next Command wants
+    `run`'s arms moved to a file of their own first (500 is the flag).
+  - The server's instructions (2048 characters, Claude Code's limit)
+    are full: the text, tidy and mark tools are found by their own
+    descriptions, not named there.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

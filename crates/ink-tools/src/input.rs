@@ -20,6 +20,8 @@ pub(crate) fn refused(e: CoreError) -> ToolError {
     match e {
         CoreError::NoSuchDoc(id) => ToolError(format!("no open document {id} (doc_list shows the open ones)")),
         CoreError::Doc(DocError::NoSuchNode(id)) => ToolError(format!("no node {id} in this document (doc_info lists its nodes)")),
+        // A lock is Alva's way of saying leave this alone.
+        CoreError::Doc(DocError::Invalid(why)) if why.contains(" is locked: ") => ToolError(format!("{why} (node_mark unlocks, but Alva locks what she doesn't want changed: ask her first)")),
         e => ToolError(e.to_string()),
     }
 }

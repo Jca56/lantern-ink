@@ -9,7 +9,7 @@ use crate::input::{In, Names, common, refused, refused_edit};
 use crate::tools::{Ctx, Entry, Handler, previewed};
 
 /// The tools a batch can hold: every edit.
-pub(crate) const EDITS: [&str; 22] = ["node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "node_style", "gradient_add", "gradient_set", "clip_set", "filter_set", "path_set", "path_edit", "path_op", "text_add", "text_set", "text_to_path", "doc_set"];
+pub(crate) const EDITS: [&str; 23] = ["node_add", "node_add_svg", "node_set", "node_move", "node_delete", "node_mark", "node_transform", "node_align", "node_duplicate", "node_group", "node_ungroup", "node_style", "gradient_add", "gradient_set", "clip_set", "filter_set", "path_set", "path_edit", "path_op", "text_add", "text_set", "text_to_path", "doc_set"];
 /// The most steps one batch holds.
 const MAX_BATCH: usize = 200;
 

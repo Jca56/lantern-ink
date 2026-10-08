@@ -134,3 +134,48 @@ fn nodes_are_copied_grouped_and_ungrouped() {
     assert!(text(&ran).contains("Named: @twin = N6, @bars = N7."), "{}", text(&ran));
     assert!(source(&mut s).contains("<g id=\"bars\">\n      <rect id='bar' x='2' y='8' width='8' height='2'/>\n      <rect id='bar-2' x='2' y='12' width='8' height='2'/>\n    </g>"), "{}", source(&mut s));
 }
+
+/// Ink's own marks: a label to know a node by, and a lock that makes it
+/// (and what's in it) refuse every edit.
+#[test]
+fn nodes_are_labelled_and_locked() {
+    let (mut s, dir) = server("marks");
+    ok(&mut s, "doc_new", "{}");
+    ok(&mut s, "node_add_svg", r#"{"doc_id":"d1","svg":"<g id='lamp'><rect id='pane' width='8' height='8'/></g><circle id='dot' r='2'/>"}"#);
+    let marked = ok(&mut s, "node_mark", r#"{"doc_id":"d1","node_ids":["N2"],"label":" Lamp glass ","locked":true}"#);
+    assert_eq!(text(&marked), "Marked. Now: N2 <g id=\"lamp\"> [Lamp glass] (locked).");
+    let listed = text(&ok(&mut s, "doc_info", r#"{"doc_id":"d1"}"#)).to_owned();
+    assert!(listed.lines().any(|l| l == "  N2 g #lamp [Lamp glass]  at 0,0 8×8  locked"), "{listed}");
+    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N2"}"#)).contains("\nLabelled \"Lamp glass\".\nLocked: nothing about it, or in it, changes until it's unlocked (node_mark; ask Alva first)."));
+    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#)).contains("\nIn N2, which is locked: nothing in it changes until N2 is unlocked (node_mark; ask Alva first)."));
+    assert_eq!(text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N2"}"#)).lines().next(), Some("<g id='lamp' ink:label=\"Lamp glass\" ink:locked=\"true\">"));
+
+    // Every edit of it, in it, or that would move it, is refused, and
+    // says whose lock it is.
+    let ask = " (node_mark unlocks, but Alva locks what she doesn't want changed: ask her first)";
+    for (tool, args, says) in [
+        ("node_set", r#""node_id":"N3","attrs":{"x":1}"#, "N3 is in N2, which is locked: nothing in it changes until N2 is unlocked"),
+        ("node_delete", r#""node_ids":["N2"]"#, "N2 is locked: nothing about it changes until it's unlocked"),
+        ("node_style", r#""node_ids":["N4","N2"],"style":{"fill":"red"}"#, "N2 is locked: nothing about it changes until it's unlocked"),
+        ("node_transform", r#""node_ids":["N1"],"move":[1,0]"#, "N1 holds N2, which is locked: that would move or change it. Unlock N2 first, or leave N1 as it is"),
+        ("node_mark", r#""node_ids":["N2"],"label":"Other""#, "N2 is locked: nothing about it changes until it's unlocked"),
+        ("node_mark", r#""node_ids":["N3"],"locked":false"#, "N3 is in N2, which is locked: nothing in it changes until N2 is unlocked"),
+    ] {
+        assert_eq!(refused(&mut s, tool, &format!(r#"{{"doc_id":"d1",{args}}}"#)), format!("{says}{ask}"), "{tool} {args}");
+    }
+    assert_eq!(refused(&mut s, "batch", r#"{"doc_id":"d1","steps":[{"tool":"node_set","args":{"node_id":"N4","attrs":{"r":3}}},{"tool":"node_delete","args":{"node_ids":["N3"]}}]}"#), format!("step 2 (node_delete): N3 is in N2, which is locked: nothing in it changes until N2 is unlocked{ask}"));
+    // Beside it, things go on changing; and tidying steps round it.
+    ok(&mut s, "node_set", r#"{"doc_id":"d1","node_id":"N4","attrs":{"r":3}}"#);
+    // A clean copy to ship carries none of it.
+    ok(&mut s, "doc_export", r#"{"doc_id":"d1","path":"lamp.svg"}"#);
+    let shipped = std::fs::read_to_string(dir.join("lamp.svg")).unwrap();
+    assert!(!shipped.contains("ink") && shipped.contains("<g id='lamp'>"), "{shipped}");
+
+    // Unlocked, it's a node like any other; no name takes its label off.
+    assert_eq!(text(&ok(&mut s, "node_mark", r#"{"doc_id":"d1","node_ids":["N2"],"locked":false,"label":""}"#)), "Marked. Now: N2 <g id=\"lamp\"> (no label, unlocked).");
+    ok(&mut s, "node_set", r#"{"doc_id":"d1","node_id":"N3","attrs":{"x":1}}"#);
+    assert_eq!(text(&ok(&mut s, "node_mark", r#"{"doc_id":"d1","node_ids":["N2"],"locked":false}"#)), "Nothing changed: they were marked that way already.");
+    assert_eq!(refused(&mut s, "node_mark", r#"{"doc_id":"d1","node_ids":["N2"]}"#), "say what to mark: label (a name, or \"\" to take it off) or locked (true or false)");
+    assert_eq!(refused(&mut s, "node_mark", r#"{"doc_id":"d1","node_ids":["N1"],"locked":true}"#), "the root <svg> can't be locked: lock what's in it");
+    assert!(refused(&mut s, "node_mark", r#"{"doc_id":"d1","node_ids":["N2"],"label":7}"#).contains("label"));
+}
