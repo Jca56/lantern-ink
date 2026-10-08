@@ -9,6 +9,9 @@ use lntrn_text::TextStyle;
 use lntrn_ui::{Theme, Ui};
 
 pub const BG: Color = Color::hex(0x12100E);
+/// The ground round the page: LS3's light tan (its present shader's
+/// `SURROUND`).
+pub const GROUND: Color = Color::hex(0xAAA295);
 pub const PANEL: Color = Color::hex(0x241A0F);
 pub const TEXT: Color = Color::hex(0xE8DCC8);
 pub const TEXT_DIM: Color = Color::hex(0x8A7D6A);

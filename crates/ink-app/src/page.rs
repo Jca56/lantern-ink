@@ -1,4 +1,4 @@
-//! What the canvas shows under everything else: the dark ground, the
+//! What the canvas shows under everything else: the tan ground, the
 //! page on transparency checks with its edge marked, and the drawing's
 //! tiles over them. What's drawn past the page's edge shows too: it's
 //! there to be grabbed.
@@ -8,7 +8,7 @@ use lntrn_math::{Color, Rect, Vec2};
 use lntrn_ui::{ImageHandle, Ui};
 
 use crate::camera::Camera;
-use crate::theme::{ACTIVE, BG};
+use crate::theme::{ACTIVE, GROUND};
 use crate::tiles::Tiles;
 
 /// The line round the page, logical px.
@@ -23,7 +23,7 @@ pub fn rect(area: Rect, cam: &Camera, size: Vec2) -> Rect {
 }
 
 pub fn draw(ui: &mut Ui, area: Rect, cam: &Camera, size: Vec2, checks: Option<ImageHandle>, tiles: &Tiles, doc: DocId) {
-    ui.draw.rect(area, BG);
+    ui.draw.rect(area, GROUND);
     let page = rect(area, cam, size);
     ui.draw.push_clip(area);
     // The edge, just outside the page: the drawing lies over it where

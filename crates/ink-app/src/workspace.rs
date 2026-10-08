@@ -88,7 +88,7 @@ impl Ink {
         match (self.tabs.active_doc(), viewport) {
             (Some(doc), Some(viewport)) => self.canvas(ui, l.canvas, doc, &viewport, click, popup),
             // No drawing yet: the files it started with are on their way.
-            _ => ui.draw.rect(l.canvas, crate::theme::BG),
+            _ => ui.draw.rect(l.canvas, crate::theme::GROUND),
         }
     }
 
