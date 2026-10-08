@@ -114,9 +114,9 @@ fn nodes_are_copied_grouped_and_ungrouped() {
     assert_eq!(text(&moved), "Moved N3 (now in N5). To stay where it showed, N3 changed to make up for the transforms there.");
     assert!(source(&mut s).contains("<rect id='bar' x='2' y='8' width='8' height='2'/>"), "{}", source(&mut s));
     // Ungrouped: what only the group could hold stops it, until told.
-    assert_eq!(refused(&mut s, "node_ungroup", r#"{"doc_id":"d1","node_ids":["N5"]}"#), "N5 has a clip path, which only a group can hold for what's in it: ungrouping would lose it. Take it off first, or say to drop it");
+    assert_eq!(refused(&mut s, "node_ungroup", r#"{"doc_id":"d1","node_ids":["N5"]}"#), "N5 has a clip path, which only a group can hold for what's in it: ungrouping would lose it. Take it off first, or say to drop it (drop: true says so)");
     let ungrouped = ok(&mut s, "node_ungroup", r#"{"doc_id":"d1","node_ids":["N5"],"drop":true}"#);
-    assert_eq!(text(&ungrouped), "Ungrouped N5. What was in it: N2 (in N1), N4 (in N1), N3 (in N1).");
+    assert_eq!(text(&ungrouped), "Ungrouped N5. What was in it: N2 (in N1), N4 (in N1), N3 (in N1). Dropped with it: N5 had a clip path.");
     assert_eq!(source(&mut s), "  <circle id='dot' cx='4' cy='6' r='2' fill='#ffc800' stroke=\"#12100e\"/>\n  <circle id='dot-2' cx='10' cy='6' r='2' fill='#ffc800' stroke=\"#12100e\"/>\n  <rect id='bar' x='2' y='10' width='8' height='2' stroke=\"#12100e\"/>\n</svg>");
     assert_eq!(text(&ok(&mut s, "history_undo", r#"{"doc_id":"d1"}"#)), "Undid 1 step: \"node_ungroup\" (Claude). Now 6 can be undone and 1 redone.");
     for (tool, args, says) in [

@@ -104,9 +104,9 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     binary to `~/.lantern/bin/lantern-ink-mcp.new` and `mv` it over.
   - `~/.lantern/bin/lantern-ink` is the May 2026 iced prototype's
     binary, not ours: left alone until M4's window takes the name.
-- **M3 (operations) is built** (all five slices, 2026-10-07; its
-  done-test ran the same day, and its findings are what's left: see
-  the end of this section), in five slices, in the order Alva
+- **M3 (operations) is done** (all five slices built 2026-10-07; its
+  done-test ran the same day and what it found was fixed: see the end
+  of this section), in five slices, in the order Alva
   chose 2026-10-06: **a** structure and transforms, **b** paint (styles,
   gradients, clips, filters; the renderer learns `feGaussianBlur` and
   `<style>` rules), **c** paths (anchors, editing, boolean ops), **d**
@@ -461,7 +461,7 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   **M3e and all of M3**: D19's `ink:label` and `ink:locked`
   (`ink-doc/src/marks.rs`), `Command::SetLabel` and `SetLocked`, and
   the tool `node_mark`. M3's done-test came next (it ran the same
-  day: see below). **Next: its findings, then M4, the window.**
+  day: see below). **Next: M4, the window.**
   - A locked node, and everything in it, refuses every Command but
     locking and unlocking: `Document::guard` runs before each one (in
     a batch, as each step's turn comes). What would move, rewrite or
@@ -478,69 +478,94 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     (`lntrn-mcp` reads a null argument as not given).
   - Guides wait for M4 (Alva, D19): nothing can show or snap to them
     yet.
-  - **`ink-doc/src/command.rs` is 467 lines:** the next Command wants
+  - **`ink-doc/src/command.rs` is 472 lines:** the next Command wants
     `run`'s arms moved to a file of their own first (500 is the flag).
   - The server's instructions (2048 characters, Claude Code's limit)
     are full: the text, tidy and mark tools are found by their own
     descriptions, not named there.
 
-- **M3's done-test ran** 2026-10-07 in a fresh session: a stress sheet
-  (Alva's choice), one cell per tool family, with only the tool
+- **M3's done-test passed** 2026-10-07 in a fresh session: a stress
+  sheet (Alva's choice), one cell per tool family, with only the tool
   descriptions to go by. All 39 tools were called. Everything §11 asks
   of M3 works over MCP: the numbers checked by hand were exact, the
-  sheet draws the same in `rsvg-convert` (but for the two text findings
-  below), every refusal said why, the locks held against 17 tries, and
-  a file opened again, edited, undone and saved gave the same bytes
-  (the sheet, and a copy of the app icon, whose Boxy marks went as D25
-  says). Alva's copies: `~/Pictures/ink-m3-stress.svg`, its clean copy
-  `-clean.svg` and a `.png`. **Its findings wait for Alva** (which to
-  fix, which to keep on purpose); M3 isn't ticked in §11 until then:
-  - **Wrong or lossy results:**
-    1. Simplify fits each stretch on its own: where two meet inside a
-       smooth run their directions differ (a kink at the anchor kept
-       between them), and at the default tolerance a coarse polyline
-       comes out a patchwork of arcs, lines and cubics, one with its
-       handles crossed.
-    2. Outlining a `<line>` that says no `fill` leaves the line behind,
-       strokeless and invisible, and makes the outline a new node
-       (`o2-2`): a line has no inside, so it should become the outline.
-    3. `gradient_add` in box units on a shape with no height or width
-       (a level line) is taken without a word, and the line stops
-       showing.
-    4. A lock doesn't reach what its node uses: `gradient_set` or
-       `node_delete` on the gradient recolours or blanks a locked node.
-    5. Deleting a definition that's in use, and `node_style` with
-       `url(#nothing-there)`, go through without a warning.
-  - **Friction:**
-    6. `doc_info` says every node twice (the tree in `message`, and
-       `nodes`): some 15k tokens for 118 nodes. Nothing lists one
-       group's children: `node_info` says "9 inside", `node_add_svg`
-       names only the outermost nodes (found by `doc_query` instead).
-    7. `node_align`'s `to` takes no "@name" in a batch.
-    8. `path_edit` on a shape that isn't a path yet has no anchor to
-       name; `to_path` doesn't list the anchors it made (three calls).
-    9. Refusals that want a flag don't name it (`drop: true`,
-       `as_drawn: true`); a refused `<text>` in `clip_set` or `path_op`
-       could point at `text_to_path`; `drop: true` doesn't say what
-       went; in a batch a gradient's, clip's or filter's final id
-       isn't reported.
-    10. A copy of a locked node is locked too, exactly over its
-        original, so it can't be moved off; a locked node can't be
-        relabelled.
-    11. `node_add_svg` refuses a comment beside elements; one inside a
-        group stays on its opening tag's line.
-    12. Text: no `font` writes no `font-family` (Inter here, a serif in
-        `rsvg-convert` and browsers); italic in a family with none
-        (Lexend) is reported italic and drawn upright; `text_set` with
-        new words puts `line_height` back to 1.2.
-    13. Small: gradient stops out of order are written as given;
-        `smooth` and `corner` between two arcs do nothing, silently;
-        `font_list` and `doc_info` repeat their lists in `message`;
-        "1 decimals"; anchors in the JSON aren't rounded.
-  - **Seen, no change proposed:** a radial gradient with its focus
-    outside its radius is drawn as SVG 1.1 says (focus pulled onto the
-    circle; with `repeat` that aliases), where `rsvg-convert` draws
-    SVG 2's cone.
+  sheet draws the same in `rsvg-convert` (but for text with no family
+  and italic Lexend, below), every refusal said why, the locks held
+  against 17 tries, and a file opened again, edited, undone and saved
+  gave the same bytes (the sheet, and a copy of the app icon, whose
+  Boxy marks went as D25 says). Alva's copies:
+  `~/Pictures/ink-m3-stress.svg`, its clean copy `-clean.svg` and a
+  `.png`.
+- **What it found was fixed the same day** (Alva: fix them now; 353
+  tests, deployed, and the deployed binary driven over stdio through
+  each finding). The rules they left behind:
+  - **Simplify shares a heading at every join** inside a smooth
+    stretch (`simplify.rs`, `through`): half way between the one it's
+    reached with and the one it's left with. A wave of 26 short lines
+    was 12 anchors of arcs, lines and pinched cubics at the default
+    tolerance, and is 4 smooth cubics now. A curve whose handles pass
+    each other is no fit.
+  - **A shape with no inside has no fill to keep** when its stroke is
+    outlined (`stroking.rs`, `flat`): a `<line>` becomes the outline
+    itself, with its id, instead of staying behind unseen.
+  - **What would paint nothing is refused** by `SetStyle`
+    (`styling.rs`, `fits`): a `url(#…)` naming nothing (unless the
+    paint has a colour to fall back on), and a gradient measured by a
+    box on a shape with no height or width. `gradient_add` and
+    `node_style` both go through it; `node_set` writes what it's
+    given, as ever.
+  - **A lock holds what its node is drawn with** (Alva's call):
+    `Document::held` in `marks.rs` finds every gradient, clip path
+    and filter a locked node names (in an attribute or by a `<style>`
+    rule), and what those name; `reach` refuses a change to one, to
+    what's in one, or to what holds one. What only unlocked nodes use
+    is free.
+  - **A copy of a locked node isn't locked** (Alva's call), nor is
+    anything in a copy: `duplicate` takes the locks off it.
+  - **A refusal's hint is the tools' to add** (`input.rs`, `hint`):
+    the document says why in words the window can use ("say to drop
+    it"), and the tool layer adds the argument or the tool (`drop:
+    true`, `as_drawn: true`, `text_to_path` for a text that isn't a
+    shape, the note on locks).
+  - **`Applied::lost`** says what a Command was told to let go (an
+    ungroup's opacity or clip path): the reply names it.
+  - **`doc_info` says its listing once**, in the text (as data it was
+    every node over again: about half its size), and with `node_id`
+    lists one node and what's in it. `node_info` names what's
+    directly in a node. `node_add_svg` says so when what it added has
+    things inside.
+  - **One path's anchors come with the reply** that made it a path
+    (`to_path`), turned it round or simplified it: they're what's
+    wanted next. `path_edit` on a shape has no anchor to name, and
+    says so now.
+  - **`batch`** takes "@name" for `node_align`'s `to`, and says the
+    `id` each new gradient, clip path or filter ended up with.
+  - **`node_delete` says who's left** naming an id nothing has (it
+    lists every such id, not only the ones this delete made).
+  - **Text:** `text_add` with no font, and none handed down, writes
+    `font-family="sans-serif"`; a family with no italic is reported
+    upright (`fonts::slants`: an "a" asked for both ways comes back
+    the same); `SetText` with no line height keeps the lines as far
+    apart as they were (`Document::leading`: the least any line is
+    below the last, so a text whose every line follows an empty one
+    reads as twice as open).
+- **Left as they are, for Alva to say** (small, none in the way of
+  M4): a locked node can't be relabelled; `node_add_svg` refuses a
+  comment beside elements, and one inside a group stays on its
+  opening tag's line; gradient stops out of order are written as
+  given; `smooth` and `corner` between two arcs do nothing, silently;
+  `font_list` says its families twice (text and data); "1 decimals";
+  anchors in a reply's data aren't rounded; `gradient_set` (over
+  `SetAttr`) can still put a level line's own gradient back to box
+  units; a `<style>` rule that paints a locked node can itself be
+  edited; a group that only holds a `<defs>` a locked node uses can't
+  be moved (it's refused like one that holds the node).
+- **Should Ink slant an italic the family doesn't have?** Browsers
+  and `rsvg-convert` do; Ink sets it upright and says so. Not asked
+  yet.
+- **Seen, no change proposed:** a radial gradient with its focus
+  outside its radius is drawn as SVG 1.1 says (focus pulled onto the
+  circle; with `repeat` that aliases), where `rsvg-convert` draws
+  SVG 2's cone.
 - **The app icon is made:** `~/Pictures/Icons/Apps/lantern-ink.svg`
   (Alva's; M4's window uses it).
 

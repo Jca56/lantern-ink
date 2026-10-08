@@ -19,6 +19,16 @@ use crate::value::Precision;
 /// What only a group can hold for what's in it, and how to say so.
 const EFFECTS: [(&str, &str); 3] = [("filter", "a filter"), ("clip-path", "a clip path"), ("mask", "a mask")];
 
+/// What taking a group away did.
+pub(crate) struct Ungrouped {
+    /// What was in it, in order.
+    pub inside: Vec<NodeId>,
+    /// Which of those were changed to look as they did.
+    pub changed: Vec<NodeId>,
+    /// What only the group could hold, gone with it as it was told.
+    pub lost: Vec<String>,
+}
+
 /// `value` with every `url(#old)` in it naming `new` instead, for each
 /// pair of `names`; `None` when it names none of them.
 fn renamed(value: &str, names: &HashMap<String, String>) -> Option<String> {
@@ -118,7 +128,9 @@ impl Document {
 
     /// Copy `id`, with everything in it, right on top of itself (just
     /// after it in the file). What in the copy has an `id` gets one of
-    /// its own, and the copy goes by those. Returns the copy.
+    /// its own, and the copy goes by those. A lock stays with what was
+    /// locked: nobody locked the copy, and one that couldn't be moved
+    /// off its original would be no use. Returns the copy.
     pub(crate) fn duplicate(&mut self, id: NodeId) -> Result<NodeId, DocError> {
         if self.node(id)?.parent.is_none() {
             return invalid("the root <svg> can't be copied into itself");
@@ -126,7 +138,13 @@ impl Document {
         let mut copy = self.element_of(id)?;
         let mut taken: HashSet<String> = self.nodes.values().filter_map(|n| n.attr("id").map(str::to_owned)).collect();
         rename(&mut copy, &mut taken);
-        self.insert(Place::After(id), copy)
+        let made = self.insert(Place::After(id), copy)?;
+        for part in self.descendants(made) {
+            if self.is_locked(part) {
+                self.set_locked(part, false)?;
+            }
+        }
+        Ok(made)
     }
 
     /// Put `elements` into the drawing's `<defs>`, after what's there:
@@ -192,9 +210,8 @@ impl Document {
     /// of them (into their numbers where it can), and so does what they
     /// had from it by inheritance. A filter, a clip path, a mask and an
     /// opacity over several children are the group's alone: with them
-    /// it is refused, unless `drop` says to lose them. Returns what was
-    /// in it.
-    pub(crate) fn ungroup(&mut self, id: NodeId, drop: bool) -> Result<(Vec<NodeId>, Vec<NodeId>), DocError> {
+    /// it is refused, unless `drop` says to lose them.
+    pub(crate) fn ungroup(&mut self, id: NodeId, drop: bool) -> Result<Ungrouped, DocError> {
         let group = self.node(id)?;
         if group.parent.is_none() {
             return invalid("the root <svg> isn't a group that can be taken away: it's what everything is in");
@@ -213,6 +230,7 @@ impl Document {
         if !alone.is_empty() && !drop {
             return invalid(format!("{id} has {}, which only a group can hold for what's in it: ungrouping would lose {}. Take {} off first, or say to drop {}", alone.join(" and "), if alone.len() == 1 { "it" } else { "them" }, if alone.len() == 1 { "it" } else { "them" }, if alone.len() == 1 { "it" } else { "them" }));
         }
+        let lost: Vec<String> = alone.iter().map(|what| format!("{id} had {what}")).collect();
         let handed: Vec<(&'static str, String)> = INHERITED.iter().chain(["display"].iter()).filter_map(|name| prop(group, name).map(|v| (*name, v.to_owned()))).filter(|(name, v)| *name != "display" || v == "none").collect();
         let fade = opacity.filter(|_| drawn.len() == 1).map(|o| (drawn[0], o));
         // Its transform, to each of them.
@@ -237,7 +255,7 @@ impl Document {
             self.relocate(child, Place::Before(id))?;
         }
         self.remove(id)?;
-        Ok((inside, changed))
+        Ok(Ungrouped { inside, changed, lost })
     }
 }
 

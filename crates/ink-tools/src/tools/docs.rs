@@ -25,8 +25,8 @@ pub(super) fn tools() -> Vec<Entry> {
         direct(
             "doc_info",
             "Describe drawing",
-            "A drawing's page, file and undo/redo, and its nodes front to back (the first listed is on top), children indented under their parent: each node's id, element, the paint it gives itself, and the box where it shows in the drawing's coordinates. Definitions (what a <defs>, a gradient or a filter holds) are in the file's order, each with its attributes.",
-            id_schema,
+            "A drawing's page, file and undo/redo, and its nodes front to back (the first listed is on top), children indented under their parent: each node's id, element, the paint it gives itself, and the box where it shows in the drawing's coordinates. Definitions (what a <defs>, a gradient or a filter holds) are in the file's order, each with its attributes. With `node_id`, only that node and what's in it: the way to learn the ids inside a group, or of markup just added.",
+            info_schema,
             Kind::Read,
             info,
         ),
@@ -126,12 +126,12 @@ fn list(ctx: &mut Ctx, _: &In) -> Result<Reply, ToolError> {
     Ok(Reply::text(text).data(Doc::Map(m)))
 }
 
-fn id_schema() -> Doc {
-    schema::object(&["doc_id"], vec![("doc_id", common::doc_id())])
+fn info_schema() -> Doc {
+    schema::object(&["doc_id"], vec![("doc_id", common::doc_id()), ("node_id", common::node_id("List only this node and what's in it"))])
 }
 
 fn info(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
-    let (text, data) = describe::info(ctx.core, input.doc()?)?;
+    let (text, data) = describe::info(ctx.core, input.doc()?, input.opt_node("node_id")?)?;
     Ok(Reply::text(text).data(data))
 }
 

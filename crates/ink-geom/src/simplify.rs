@@ -103,13 +103,29 @@ fn curve(along: &[Vec2], out: Vec2, into: Vec2) -> Option<Piece> {
             _ => fitted = Some((piece, off)),
         }
     }
-    fitted.map(|(piece, _)| piece)
+    // Handles that pass each other pinch the curve into a bend as
+    // tight as the corner it was meant to smooth: no fit at all.
+    fitted.map(|(piece, _)| piece).filter(|piece| !matches!(piece.seg, Seg::Cubic { c1, c2, to } if (c2 - c1).dot(to - piece.from) < 0.0))
+}
+
+/// The heading a join with no corner at it is passed through with:
+/// half way between the one it's reached with and the one it's left
+/// with. Where the two are one already (a curve cut in pieces), that
+/// one; where they differ a little (short lines round a curve), what
+/// the curve they were drawn round had there.
+fn through(reached: Vec2, left: Vec2) -> Vec2 {
+    let (reached, left) = (reached * (1.0 / reached.length()), left * (1.0 / left.length()));
+    let between = reached + left;
+    if between.is_finite() && between.length() > 1e-9 { between } else if left.is_finite() { left } else { reached }
 }
 
 /// `pieces` (which run on from each other, no corner between) said
 /// with as few as will do, onto `out`; and which of their starts are
 /// still starts, onto `kept` (`first` is the first one's number).
-fn fewer(pieces: &[Piece], first: usize, tol: f64, out: &mut Vec<Seg>, kept: &mut Vec<usize>) {
+/// `ends` are the headings a curve standing in for them leaves and
+/// arrives with: what's fitted either side of a join shares its
+/// heading there, so the join stays as smooth as it was.
+fn fewer(pieces: &[Piece], first: usize, ends: (Vec2, Vec2), tol: f64, out: &mut Vec<Seg>, kept: &mut Vec<usize>) {
     let Some(start) = pieces.first() else { return };
     let along = samples(pieces);
     let to = pieces[pieces.len() - 1].to();
@@ -119,7 +135,7 @@ fn fewer(pieces: &[Piece], first: usize, tol: f64, out: &mut Vec<Seg>, kept: &mu
     let one = if pieces.len() == 1 && plain(start) {
         Some(*start)
     } else {
-        [Some(line), arc(&along), curve(&along, start.heading(0.0), pieces[pieces.len() - 1].heading(1.0))].into_iter().flatten().find(|one| says(one, pieces, &along, tol))
+        [Some(line), arc(&along), curve(&along, ends.0, ends.1)].into_iter().flatten().find(|one| says(one, pieces, &along, tol))
     };
     match one {
         Some(one) => {
@@ -133,8 +149,9 @@ fn fewer(pieces: &[Piece], first: usize, tol: f64, out: &mut Vec<Seg>, kept: &mu
         // In two, at the join nearest the middle: each half again.
         None => {
             let half = pieces.len() / 2;
-            fewer(&pieces[..half], first, tol, out, kept);
-            fewer(&pieces[half..], first + half, tol, out, kept);
+            let join = through(pieces[half - 1].heading(1.0), pieces[half].heading(0.0));
+            fewer(&pieces[..half], first, (ends.0, join), tol, out, kept);
+            fewer(&pieces[half..], first + half, (join, ends.1), tol, out, kept);
         }
     }
 }
@@ -170,6 +187,9 @@ impl Path {
                 a.perp_dot(b).atan2(a.dot(b)).abs()
             };
             let mut corners: Vec<usize> = (0..n).filter(|i| (*i > 0 || sub.closed) && turn(*i) > CORNER).collect();
+            // A closed run with no corner anywhere starts and ends at a
+            // join like any other: it's passed through, not left.
+            let round = sub.closed && corners.is_empty();
             if !sub.closed || corners.is_empty() {
                 corners.insert(0, 0);
             }
@@ -178,8 +198,10 @@ impl Path {
             for (k, &from) in corners.iter().enumerate() {
                 let to = if k + 1 < corners.len() { corners[k + 1] } else if sub.closed { corners[0] + n } else { n };
                 let stretch: Vec<Piece> = (from..to).map(|i| pieces[i % n]).collect();
+                let (leaves, arrives) = (stretch[0].heading(0.0), stretch[stretch.len() - 1].heading(1.0));
+                let ends = if round { (through(arrives, leaves), through(arrives, leaves)) } else { (leaves, arrives) };
                 let mut found = Vec::new();
-                fewer(&stretch, from, tol, &mut segs, &mut found);
+                fewer(&stretch, from, ends, tol, &mut segs, &mut found);
                 kept.extend(found.into_iter().map(|i| i % n));
             }
             // It starts where it started, if that anchor is left, and
@@ -233,6 +255,38 @@ mod tests {
         // Twelve sides are a twelve-sided shape: its corners are corners.
         let dozen: Vec<Vec2> = (0..12).map(|i| Vec2::from_angle(TAU * i as f64 / 12.0) * 10.0).collect();
         assert_eq!(Path::polyline(&dozen, true).simplified(0.05).0.subpaths[0].segs.len(), 11);
+    }
+
+    #[test]
+    fn what_is_fitted_either_side_of_a_join_meets_there_smoothly() {
+        // A wave in short lines, more than one curve can say.
+        let wave: Vec<Vec2> = (0..=25).map(|i| Vec2::new(95.0 + 4.6 * i as f64, 190.0 + 14.0 * (i as f64 / 25.0 * 1.5 * TAU).sin())).collect();
+        let pieces = |path: &Path| {
+            let mut at = path.subpaths[0].start;
+            path.subpaths[0].segs.iter().map(|seg| Piece::new(std::mem::replace(&mut at, seg.to()), *seg)).collect::<Vec<Piece>>()
+        };
+        let (loose, _) = Path::polyline(&wave, false).simplified(1.0);
+        let curves = pieces(&loose);
+        assert!((2..=4).contains(&curves.len()) && curves.iter().all(|c| matches!(c.seg, Seg::Cubic { .. })), "{}", loose.to_data(3));
+        for pair in curves.windows(2) {
+            let (reached, left) = (pair[0].heading(1.0), pair[1].heading(0.0));
+            assert!(reached.perp_dot(left).atan2(reached.dot(left)).abs() < 1e-6, "a kink at {:?}: {}", pair[1].from, loose.to_data(3));
+        }
+        // Held closer than its lines are long, some of it stays lines;
+        // but no curve is pinched into a corner (handles past each other).
+        let (tight, _) = Path::polyline(&wave, false).simplified(0.23);
+        assert!(tight.subpaths[0].segs.len() < 25, "{}", tight.to_data(3));
+        for piece in pieces(&tight) {
+            assert!(!matches!(piece.seg, Seg::Cubic { c1, c2, to } if (c2 - c1).dot(to - piece.from) < 0.0), "pinched: {}", tight.to_data(3));
+        }
+        // A ring of short lines has no corner to start from: it's
+        // smooth all the way round, where it starts too.
+        let ring: Vec<Vec2> = (0..48).map(|i| Vec2::new(30.0 * (TAU * i as f64 / 48.0).cos(), 18.0 * (TAU * i as f64 / 48.0).sin())).collect();
+        let (oval, _) = Path::polyline(&ring, true).simplified(0.3);
+        let round = pieces(&oval);
+        assert!(round.len() <= 8, "{}", oval.to_data(3));
+        let (reached, left) = (round[round.len() - 1].heading(1.0), round[0].heading(0.0));
+        assert!(reached.perp_dot(left).atan2(reached.dot(left)).abs() < 0.05, "{}", oval.to_data(3));
     }
 
     #[test]

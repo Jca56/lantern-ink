@@ -5,8 +5,9 @@
 
 use ink_core::ink_doc::geometry::page_bounds;
 use ink_core::ink_doc::lettering::{self, LEADING, Span};
+use ink_core::ink_doc::style::prop;
 use ink_core::ink_doc::{Document, Kind as NodeKind, Node, Precision, fonts, text};
-use ink_core::{Applied, Command, NodeId};
+use ink_core::{Applied, Command, NodeId, Place};
 use lntrn_data::{Doc, Map};
 use lntrn_mcp::{Kind, Reply, Tool, ToolError, fail, schema};
 
@@ -22,7 +23,7 @@ pub(super) fn tools() -> Vec<Entry> {
         edit(
             "text_add",
             "Add text",
-            "Add a <text>: `text` in one style, or `runs` [{text, fill, bold, italic, font, size}] to mix them; \"\\n\" breaks a line. `x`, `y` is where its first line's baseline starts (letters stand on y; a descender hangs below). `font` is a family, or several to try in order (\"Inter, sans-serif\"): sans-serif, monospace and serif are Lantern's own, and a family that isn't installed here gives way to the next (the reply says which font it ended up in; font_list says what's installed). `size` is in the drawing's units (default 16). `anchor` says which end of each line x is: start (default), middle or end. Lines are `line_height` ems apart (default 1.2). It goes on top of the drawing unless above, below, into or at says. It is drawn as outlines in this machine's fonts, and its box is around its glyphs; Lantern's apps don't draw <text> (doc_preview with renderer \"lantern\" shows what they'll show).",
+            "Add a <text>: `text` in one style, or `runs` [{text, fill, bold, italic, font, size}] to mix them; \"\\n\" breaks a line. `x`, `y` is where its first line's baseline starts (letters stand on y; a descender hangs below). `font` is a family, or several to try in order (\"Inter, sans-serif\"): sans-serif, monospace and serif are Lantern's own, and a family that isn't installed here gives way to the next (the reply says which font it ended up in; font_list says what's installed). With no `font`, and none handed down by a group it's in, it says sans-serif, so that it's a sans wherever it's shown. `size` is in the drawing's units (default 16). `anchor` says which end of each line x is: start (default), middle or end. Lines are `line_height` ems apart (default 1.2). It goes on top of the drawing unless above, below, into or at says. It is drawn as outlines in this machine's fonts, and its box is around its glyphs; Lantern's apps don't draw <text> (doc_preview with renderer \"lantern\" shows what they'll show).",
             add_schema,
             Kind::Add,
             add,
@@ -31,7 +32,7 @@ pub(super) fn tools() -> Vec<Entry> {
         edit(
             "text_set",
             "Set text",
-            "Change a <text>: what it says (`text`, or `runs` [{text, fill, bold, italic, font, size}] to mix styles; \"\\n\" breaks a line; everything that was in it is replaced), and how all of it is lettered and painted (font, size, bold, italic, fill, anchor, letter_spacing). Anything not given stays. `line_height` (ems, default 1.2) goes with text or runs: it's written into the lines. `font` is a family, or several to try in order; one that isn't installed here gives way to the next, and the reply says which font it ended up in. To move a text use node_transform or node_align: a move goes into its x and y, and its lines'.",
+            "Change a <text>: what it says (`text`, or `runs` [{text, fill, bold, italic, font, size}] to mix styles; \"\\n\" breaks a line; everything that was in it is replaced), and how all of it is lettered and painted (font, size, bold, italic, fill, anchor, letter_spacing). Anything not given stays. `line_height` (ems) goes with text or runs: it's written into the lines, which without it stay as far apart as they were. `font` is a family, or several to try in order; one that isn't installed here gives way to the next, and the reply says which font it ended up in. To move a text use node_transform or node_align: a move goes into its x and y, and its lines'.",
             set_schema,
             Kind::Set,
             set,
@@ -82,7 +83,7 @@ fn lettering_props() -> Vec<(&'static str, Doc)> {
         ("fill", schema::string("Its paint: \"#rrggbb\", \"none\", \"url(#id)\" (default black)")),
         ("anchor", schema::one_of(&["start", "middle", "end"], "Which end of each line its position is")),
         ("letter_spacing", schema::number(-100000.0, 100000.0, "Space added after each character, in the drawing's units")),
-        ("line_height", schema::number(0.01, 100.0, "How far apart lines are, in ems (default 1.2)")),
+        ("line_height", schema::number(0.01, 100.0, "How far apart lines are, in ems (a new text: 1.2 unless said; text_set: as far as they were)")),
     ]
 }
 
@@ -223,9 +224,21 @@ fn add(doc: &Document, input: &In) -> Result<Command, ToolError> {
     for (name, value) in &attrs[2..] {
         ink_core::ink_doc::styling::check(name, value).map_err(ToolError)?;
     }
+    // A text that names no family is set in whatever each program
+    // falls back to: Lantern's sans here, a serif in a browser. Where
+    // nothing above it says one either, it says the one it's drawn in.
+    let place = input.place(doc)?;
+    let above = match place {
+        Place::FirstIn(parent) | Place::LastIn(parent) => Some(parent),
+        Place::Before(beside) | Place::After(beside) => doc.get(beside).and_then(|node| node.parent),
+    };
+    let handed = above.and_then(|parent| doc.get(parent)).into_iter().chain(above.into_iter().flat_map(|parent| doc.ancestors(parent))).any(|node| prop(node, "font-family").is_some());
+    if !handed && !attrs.iter().any(|(name, _)| name == "font-family") {
+        attrs.insert(2, ("font-family".to_owned(), "sans-serif".to_owned()));
+    }
     let leading = input.args.opt_f64("line_height")?.unwrap_or(LEADING);
     let element = lettering::element(&attrs, &lines, leading).map_err(refused_edit)?;
-    Ok(Command::Insert { place: input.place(doc)?, elements: vec![element] })
+    Ok(Command::Insert { place, elements: vec![element] })
 }
 
 fn set(doc: &Document, input: &In) -> Result<Command, ToolError> {
@@ -265,7 +278,8 @@ pub(crate) fn set_in(doc: &Document, node: &Node) -> String {
                 (false, false) => "",
             };
             let missing = if font.missing.is_empty() { String::new() } else { format!(" ({} not installed here)", font.missing.join(", ")) };
-            format!("{}{style} {}{missing}", font.family, n(font.size))
+            let upright = if font.no_italic { format!(" ({} has no italic: it's set upright here, though a browser would slant it)", font.family) } else { String::new() };
+            format!("{}{style} {}{missing}{upright}", font.family, n(font.size))
         })
         .collect();
     if fonts.is_empty() { "it says nothing yet".to_owned() } else { format!("set in {}", fonts.join(" and ")) }

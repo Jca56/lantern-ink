@@ -2,13 +2,19 @@
 //! property is one SVG knows, and what it's set to is checked where
 //! Ink draws with it (a colour must be a colour), so a slip is refused
 //! with its reason rather than written into the file to do nothing.
-//! Where it's written is D14's: [`Document::set_prop`].
+//! So is painting with what would paint nothing: a `url(#…)` that names
+//! nothing in the drawing, and a gradient measured by a box on a shape
+//! that has none (a level line). Where it's written is D14's:
+//! [`Document::set_prop`].
 
 use crate::color;
 use crate::document::Document;
 use crate::error::{DocError, invalid};
+use crate::geometry::path_of;
+use crate::gradient::{Gradient, Units};
 use crate::id::NodeId;
 use crate::length::{Length, number, numbers, unit};
+use crate::refs::{Ids, named};
 use crate::style::{Paint, declarations};
 
 /// What a property is set to, as far as Ink checks it.
@@ -171,6 +177,29 @@ pub fn check(name: &str, value: &str) -> Result<(), String> {
 }
 
 impl Document {
+    /// What the drawing has to say of setting `name` to `value` on
+    /// `id`: what a `url(#…)` names is there (or the paint says what
+    /// to use if it isn't), and a gradient measured by the box of what
+    /// it paints has a box to go by. SVG paints nothing otherwise.
+    fn fits(&self, ids: &Ids, id: NodeId, name: &str, value: &str) -> Result<(), DocError> {
+        let paint = matches!(name, "fill" | "stroke").then(|| Paint::parse(value)).flatten();
+        let spare = matches!(paint, Some(Paint::Server { fallback: Some(_), .. }));
+        for used in named(name, value) {
+            let Some(found) = ids.get(used).and_then(|found| self.get(found)) else {
+                if spare {
+                    continue;
+                }
+                return invalid(format!("nothing in the drawing is called \"{used}\", so {name}: {value} would draw nothing. Name what's there (doc_info lists what <defs> holds), or make it first"));
+            };
+            let node = self.node(id)?;
+            let by_box = paint.is_some() && node.kind.is_shape() && Gradient::of(self, ids, found).is_some_and(|g| g.units == Units::BBox);
+            if let Some(lacks) = path_of(node).bounds().filter(|_| by_box).and_then(|b| if b.height() <= 0.0 { Some("height") } else if b.width() <= 0.0 { Some("width") } else { None }) {
+                return invalid(format!("{id} has no {lacks} (strokes aside), and #{used} is measured by the box of what it paints: it would paint nothing. Paint it with a gradient in its own coordinates (gradient_add with units: \"user\", and from and to)"));
+            }
+        }
+        Ok(())
+    }
+
     /// Set each of `set` (a property, and what it's set to or `None` to
     /// take it off) on each of `nodes`, written where the node has it.
     /// Everything is checked before anything is set. Returns the nodes
@@ -182,8 +211,14 @@ impl Document {
         for (name, value) in set {
             check(name, value.as_deref().unwrap_or("inherit")).or_else(invalid)?;
         }
+        let ids = Ids::of(self);
         for &id in nodes {
             self.node(id)?;
+            for (name, value) in set {
+                if let Some(value) = value {
+                    self.fits(&ids, id, name, value)?;
+                }
+            }
         }
         let mut changed = Vec::new();
         for &id in nodes {
@@ -278,5 +313,21 @@ mod tests {
         assert_eq!(d.apply(&Command::SetStyle { nodes: vec![NodeId(3), NodeId(9)], set: set(&[("fill", Some("red"))]) }), Err(DocError::NoSuchNode(NodeId(9))));
         assert!(matches!(d.apply(&Command::SetStyle { nodes: vec![], set: set(&[("fill", Some("red"))]) }), Err(DocError::Invalid(_))));
         assert_eq!(d.to_svg(), before);
+    }
+
+    #[test]
+    fn what_would_paint_nothing_is_refused() {
+        let text = r##"<svg><linearGradient id="by-box"/><linearGradient id="own" gradientUnits="userSpaceOnUse" x2="9"/><linearGradient id="its" href="#own"/><line x2="9"/><path d="M0 0 V9"/><rect width="9" height="4"/><g/></svg>"##;
+        // N2 by-box, N3 own, N4 its, N5 a level line, N6 an upright one, N7 a rect, N8 a group.
+        let paint = |node: u64, name: &str, value: &str| Document::parse(DocId(1), text).unwrap().apply(&Command::SetStyle { nodes: vec![NodeId(node)], set: vec![(name.to_owned(), Some(value.to_owned()))] }).map(|applied| applied.changed.len()).map_err(|e| e.to_string());
+        // A name for nothing: unless the paint says what to use then.
+        assert_eq!(paint(7, "fill", "url(#nope)").unwrap_err(), "nothing in the drawing is called \"nope\", so fill: url(#nope) would draw nothing. Name what's there (doc_info lists what <defs> holds), or make it first");
+        assert!(paint(7, "filter", "url(#nope)").unwrap_err().starts_with("nothing in the drawing is called \"nope\", so filter: url(#nope)"));
+        assert_eq!((paint(7, "fill", "url(#nope) red"), paint(7, "fill", "url(#by-box)")), (Ok(1), Ok(1)));
+        // A box with no height, or no width, is no box to measure by.
+        assert_eq!(paint(5, "stroke", "url(#by-box)").unwrap_err(), "N5 has no height (strokes aside), and #by-box is measured by the box of what it paints: it would paint nothing. Paint it with a gradient in its own coordinates (gradient_add with units: \"user\", and from and to)");
+        assert!(paint(6, "stroke", "url(#by-box)").unwrap_err().starts_with("N6 has no width (strokes aside), and #by-box"));
+        // One in the shape's own coordinates paints it, however it says so.
+        assert_eq!((paint(5, "stroke", "url(#own)"), paint(5, "stroke", "url(#its)"), paint(8, "stroke", "url(#by-box)")), (Ok(1), Ok(1), Ok(1)));
     }
 }

@@ -9,7 +9,7 @@
 //! keeps it: the shape stays, without its stroke, and the outline is a
 //! new path over it (under it, where `paint-order` puts strokes under).
 
-use ink_geom::{number, outline_stroke};
+use ink_geom::{Path, Seg, Vec2, number, outline_stroke};
 
 use crate::document::Document;
 use crate::edit::Place;
@@ -25,6 +25,16 @@ const AS_ONE: [&str; 6] = ["opacity", "filter", "clip-path", "mask", "transform"
 
 /// What says how a stroke is drawn, and means nothing without one.
 const OF_A_STROKE: [&str; 7] = ["stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "stroke-opacity"];
+
+/// Whether `path` has no inside for a fill to cover: each of its runs
+/// is straight lines along one line (a `<line>`, a path there and back).
+fn flat(path: &Path) -> bool {
+    path.subpaths.iter().all(|run| {
+        let ends: Vec<Vec2> = run.segs.iter().map(Seg::to).collect();
+        let Some(along) = ends.iter().map(|end| *end - run.start).find(|way| way.length() > 0.0) else { return true };
+        run.segs.iter().all(|seg| matches!(seg, Seg::Line { .. })) && ends.iter().all(|end| along.perp_dot(*end - run.start).abs() <= 1e-9 * along.length() * along.length())
+    })
+}
 
 impl Document {
     /// How `id` is drawn: what comes down the tree to it, and what it
@@ -71,7 +81,9 @@ impl Document {
         // What the outline would be filled with if it said nothing: what
         // its groups hand down.
         let handed_opacity = self.ancestors(id).collect::<Vec<_>>().into_iter().rev().fold(Style::default(), |style, node| style.cascade(node)).fill_opacity;
-        let keeps_fill = style.fill != Paint::None;
+        // A fill that covers nothing (a <line>'s, which says none only
+        // when someone thought to) is no fill to keep.
+        let keeps_fill = style.fill != Paint::None && !flat(&path);
         let mut made_nodes = Vec::new();
         let outline = if keeps_fill {
             let copy = self.duplicate(id)?;

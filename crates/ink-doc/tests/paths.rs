@@ -334,6 +334,15 @@ mod stroking {
         let grouped = "  <g stroke=\"red\" stroke-opacity=\"0.5\">\n    <line x1=\"4\" y1=\"4\" x2=\"4\" y2=\"10\" style=\"stroke-width: 2; fill: none\"/>\n  </g>";
         let (made, _) = outlined(grouped, &[3]).unwrap();
         assert_eq!(made, "  <g stroke=\"red\" stroke-opacity=\"0.5\">\n    <path d=\"M3 10 V4 H5 V10 Z\" style=\"fill: red\" stroke=\"none\" fill-opacity=\"0.5\"/>\n  </g>");
+        // A line that never said its fill is none has none to keep all
+        // the same: there's no inside to it. It's the outline, itself.
+        for bare in ["<line id=\"bar\" x1=\"4\" y1=\"12\" x2=\"20\" y2=\"12\" stroke=\"#ffc800\" stroke-width=\"2\"/>", "<path id=\"bar\" d=\"M4 12 L12 12 L20 12 L8 12\" stroke=\"#ffc800\" stroke-width=\"2\"/>", "<polyline id=\"bar\" points=\"4,4 12,12 20,20\" stroke=\"#ffc800\" stroke-width=\"2\"/>"] {
+            let (made, new) = outlined(&format!("  {bare}"), &[2]).unwrap();
+            assert!(new.is_empty() && made.starts_with("  <path id=\"bar\" d=\"M") && made.ends_with("stroke=\"none\" fill=\"#ffc800\"/>") && made.lines().count() == 1, "{made}");
+        }
+        // One that bends has an inside, and its fill (black, unsaid) stays.
+        let (made, new) = outlined("  <polyline id=\"bend\" points=\"4,4 12,12 20,4\" stroke=\"#ffc800\" stroke-width=\"2\"/>", &[2]).unwrap();
+        assert!(new.len() == 1 && made.lines().count() == 2 && made.starts_with("  <polyline id=\"bend\" points=\"4,4 12,12 20,4\" stroke=\"none\"/>"), "{made}");
     }
 
     #[test]

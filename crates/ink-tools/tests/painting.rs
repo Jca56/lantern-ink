@@ -6,6 +6,7 @@ mod common;
 
 use common::{data, ok, picture, refused, server, text};
 use ink_tools::Ink;
+use lntrn_data::Doc;
 use lntrn_mcp::Server;
 
 fn node(s: &mut Server<Ink>, id: &str) -> String {
@@ -247,7 +248,7 @@ fn text_is_added_set_and_asked_about() {
 
     // Made paths, a text is its letters' outlines: one path where it's
     // lettered one way, a group where its spans paint for themselves.
-    assert_eq!(refused(&mut s, "text_to_path", r#"{"doc_id":"d1","node_ids":["N2"]}"#), "N2 asks for No Such Font, which isn't installed here, so it's drawn in Ink Test instead: paths made of it would be that font's for good. Say so to make them anyway");
+    assert_eq!(refused(&mut s, "text_to_path", r#"{"doc_id":"d1","node_ids":["N2"]}"#), "N2 asks for No Such Font, which isn't installed here, so it's drawn in Ink Test instead: paths made of it would be that font's for good. Say so to make them anyway (as_drawn: true says so)");
     let pathed = ok(&mut s, "text_to_path", r#"{"doc_id":"d1","node_ids":["N2","N6"],"as_drawn":true}"#);
     assert_eq!(text(&pathed), "Made paths. Now: N2 <path> at 11,13 10×7; N6 <path> at 50.8,28.8 8×11.2.");
     assert_eq!(source(&mut s), "<path d=\"M11 20 V13 H15 V20 Z M17 20 V13 H21 V20 Z\" fill=\"#223\"/>");
@@ -255,9 +256,75 @@ fn text_is_added_set_and_asked_about() {
     assert_eq!(source(&mut s), "<text x=\"10\" y=\"20\" font-family=\"No Such Font, Ink Test\" font-size=\"10\" fill=\"#223\">HH</text>");
     assert_eq!(refused(&mut s, "text_to_path", r#"{"doc_id":"d1","node_ids":["N1"]}"#), "N1 is a <svg>: only a <text> has letters to make paths of (a shape is made a path by its own tool)");
 
+    // A text that names no family says the one it's drawn in, so it's
+    // a sans wherever it's shown; unless a group above hands one down.
+    ok(&mut s, "node_add_svg", r#"{"doc_id":"d1","svg":"<g id='set' font-family='Ink Test'/>"}"#);
+    let plain = ok(&mut s, "text_add", r#"{"doc_id":"d1","text":"H","x":1,"y":50}"#);
+    let handed = ok(&mut s, "text_add", r#"{"doc_id":"d1","text":"H","x":1,"y":50,"into":"N7"}"#);
+    let markup = |s: &mut _, r: &Doc| text(&ok(s, "doc_source", &format!(r#"{{"doc_id":"d1","node_id":"{}"}}"#, data(r, "node_id")))).to_owned();
+    assert_eq!((markup(&mut s, &plain), markup(&mut s, &handed)), ("<text x=\"1\" y=\"50\" font-family=\"sans-serif\">H</text>".to_owned(), "<text x=\"1\" y=\"50\">H</text>".to_owned()));
+    // Italic in a family with none is upright here, and says so.
+    let leaning = ok(&mut s, "text_set", &format!(r#"{{"doc_id":"d1","node_id":"{}","italic":true}}"#, data(&handed, "node_id")));
+    assert!(text(&leaning).ends_with("set in Ink Test 16 (Ink Test has no italic: it's set upright here, though a browser would slant it)."), "{}", text(&leaning));
+
+    // New words with no line height said stay as far apart as the old
+    // (a line after an empty one is twice as far down: the least any
+    // line is below the last is how far apart they're set).
+    let tall = ok(&mut s, "text_add", r#"{"doc_id":"d1","text":"H\nH","x":1,"y":10,"font":"Ink Test","line_height":1.5}"#);
+    let tall = data(&tall, "node_id").to_owned();
+    let words = |s: &mut _, said: &str| {
+        ok(s, "text_set", &format!(r#"{{"doc_id":"d1","node_id":"{tall}","text":"{said}"}}"#));
+        text(&ok(s, "doc_source", &format!(r#"{{"doc_id":"d1","node_id":"{tall}"}}"#))).to_owned()
+    };
+    assert!(words(&mut s, "H\\nH\\n\\nH").ends_with(">H<tspan x=\"1\" dy=\"1.5em\">H</tspan><tspan x=\"1\" dy=\"3em\">H</tspan></text>"));
+    assert!(words(&mut s, "I\\nI").ends_with(">I<tspan x=\"1\" dy=\"1.5em\">I</tspan></text>"));
+
     // The fonts here: the tests' own is among them.
     let fonts = ok(&mut s, "font_list", r#"{"query":"ink te"}"#);
     assert!(text(&fonts).starts_with("Here sans-serif is ") && text(&fonts).ends_with("have \"ink te\" in their name: Ink Test."), "{}", text(&fonts));
     assert!(text(&ok(&mut s, "font_list", r#"{"query":"no such font anywhere"}"#)).contains("has \"no such font anywhere\" in its name."));
     assert!(text(&ok(&mut s, "font_list", "{}")).contains(" families are installed: "));
+}
+
+/// What M3's done-test found, over the wire: painting with what would
+/// paint nothing is refused, a lock holds what its node is drawn with,
+/// a copy of a locked node isn't locked, and what's deleted while in
+/// use is told of.
+#[test]
+fn what_paints_nothing_is_refused_and_a_lock_holds_what_it_uses() {
+    let (mut s, _) = server("found");
+    ok(&mut s, "doc_new", "{}");
+    ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<line id='rule' x1='2' y1='12' x2='22' y2='12' stroke-width='2'/><rect id='tile' x='4' y='4' width='8' height='8'/>"}"##);
+    // A gradient measured by a box can't paint a level line; one in
+    // the line's own coordinates can. All or nothing: no gradient is
+    // left behind by the refused call.
+    assert_eq!(refused(&mut s, "gradient_add", r##"{"doc_id":"d1","colors":["#ffc800","#c33"],"stroke":["N2"]}"##), "N2 has no height (strokes aside), and #gradient-1 is measured by the box of what it paints: it would paint nothing. Paint it with a gradient in its own coordinates (gradient_add with units: \"user\", and from and to)");
+    assert!(!text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1"}"#)).contains("linearGradient"));
+    assert_eq!(refused(&mut s, "node_style", r#"{"doc_id":"d1","node_ids":["N3"],"style":{"fill":"url(#nope)"}}"#), "nothing in the drawing is called \"nope\", so fill: url(#nope) would draw nothing. Name what's there (doc_info lists what <defs> holds), or make it first");
+    // In a batch, a gradient says the name it ended up with, and a
+    // node made earlier can be lined up against by its name.
+    let batch = ok(&mut s, "batch", r##"{"doc_id":"d1","preview":false,"steps":[{"tool":"gradient_add","args":{"id":"warm","colors":["#ffc800","#c33"],"fill":["N3"]}},{"tool":"gradient_add","args":{"id":"warm","units":"user","from":[2,0],"to":[22,0],"colors":["#fff","#000"],"stroke":["N2"]}},{"tool":"node_add","args":{"element":"rect","attrs":{"x":14,"y":16,"width":6,"height":2}},"as":"bar"},{"tool":"node_align","args":{"node_ids":["N3"],"x":"left","to":"@bar"}}]}"##);
+    assert_eq!(text(&batch), "Ran 4 steps on d1 as one undo step (history_undo undoes all of them). New nodes: N5 (#warm), N8 (#warm-2), N11. Named: @bar = N11.");
+    assert_eq!((batch.path("structuredContent.defined.warm-2").and_then(Doc::as_str), text(&ok(&mut s, "doc_source", r#"{"doc_id":"d1","node_id":"N3"}"#))), (Some("N8"), "<rect id='tile' x='14' y='4' width='8' height='8' fill=\"url(#warm)\"/>"));
+    // Locked, the tile holds its gradient too: not recoloured, not
+    // deleted, nor a stop of it changed, from the side.
+    ok(&mut s, "node_mark", r#"{"doc_id":"d1","node_ids":["N3"],"locked":true}"#);
+    let held = "what N3 is drawn with, and N3 is locked: nothing it's drawn with changes until N3 is unlocked (node_mark unlocks, but Alva locks what she doesn't want changed: ask her first)";
+    assert_eq!(refused(&mut s, "gradient_set", r##"{"doc_id":"d1","node_id":"N5","colors":["#0f0","#00f"]}"##), format!("N6 is in N5, which is {held}"), "its stops are what would go first");
+    assert_eq!(refused(&mut s, "gradient_set", r#"{"doc_id":"d1","node_id":"N5","to":[0,1]}"#), format!("N5 is {held}"));
+    assert_eq!(refused(&mut s, "node_delete", r#"{"doc_id":"d1","node_ids":["N5"]}"#), format!("N5 is {held}"));
+    assert_eq!(refused(&mut s, "node_set", r##"{"doc_id":"d1","node_id":"N6","attrs":{"stop-color":"#0f0"}}"##), format!("N6 is in N5, which is {held}"));
+    // A copy of it is a new node nobody locked: it moves off.
+    let copy = ok(&mut s, "node_duplicate", r#"{"doc_id":"d1","node_ids":["N3"]}"#);
+    let moved = ok(&mut s, "node_transform", &format!(r#"{{"doc_id":"d1","node_ids":["{}"],"move":[-10,0]}}"#, data(&copy, "node_id")));
+    assert!(text(&moved).contains("<rect id=\"tile-2\"> at 4,4 8×8"), "{}", text(&moved));
+    // What the line alone uses is free: deleted while in use, the
+    // reply says who's left naming nothing.
+    let gone = ok(&mut s, "node_delete", r#"{"doc_id":"d1","node_ids":["N8"]}"#);
+    assert!(text(&gone).ends_with(" Note: nothing in the drawing is called #warm-2 (N2) now, so what names it draws without it (unpainted, unclipped, unfiltered) until it's back (history_undo) or is given something else."), "{}", text(&gone));
+    assert_eq!(gone.path("structuredContent.left_without[0]").and_then(Doc::as_str), Some("N2"));
+    // A text is no shape to cut or combine with: the refusal says what makes it one.
+    ok(&mut s, "text_add", r#"{"doc_id":"d1","text":"H","x":1,"y":10,"font":"Ink Test"}"#);
+    let words = text(&ok(&mut s, "doc_info", r#"{"doc_id":"d1"}"#)).lines().find(|line| line.contains(" text ")).and_then(|line| line.split_whitespace().next()).unwrap().to_owned();
+    assert!(refused(&mut s, "clip_set", &format!(r#"{{"doc_id":"d1","node_ids":["N2"],"by":["{words}"]}}"#)).ends_with(" (text_to_path makes a text paths, which are shapes)"));
 }

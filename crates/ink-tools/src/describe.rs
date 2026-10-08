@@ -82,7 +82,7 @@ pub(crate) fn words(doc: &Document, node: &Node) -> String {
 
 /// A definition: something others refer to, which is what its
 /// attributes say and shows nowhere itself.
-fn is_definition(kind: Kind) -> bool {
+pub(crate) fn is_definition(kind: Kind) -> bool {
     matches!(kind, Kind::LinearGradient | Kind::RadialGradient | Kind::Stop | Kind::Filter | Kind::FilterPrimitive | Kind::ClipPath | Kind::Mask | Kind::Pattern | Kind::Marker | Kind::Symbol)
 }
 
@@ -180,32 +180,11 @@ fn node_line(doc: &Document, node: &Node, bounds: Option<&Rect>) -> String {
     line
 }
 
-fn node_data(doc: &Document, node: &Node, depth: usize, bounds: Option<&Rect>) -> Doc {
-    let mut m = Map::new();
-    m.insert("id", node.id.to_string().into());
-    m.insert("element", node.name.as_str().into());
-    m.insert("depth", Doc::Int(depth as i64));
-    if let Some(id) = node.attr("id") {
-        m.insert("svg_id", id.into());
-    }
-    if let Some(label) = doc.label(node.id) {
-        m.insert("label", label.trim().into());
-    }
-    if doc.is_locked(node.id) {
-        m.insert("locked", Doc::Bool(true));
-    }
-    if let Some(b) = bounds {
-        m.insert("box", Doc::List([b.min.x, b.min.y, b.width(), b.height()].into_iter().map(Doc::from).collect()));
-    }
-    Doc::Map(m)
-}
-
 /// A listing of nodes being put together.
 struct Listing<'a> {
     doc: &'a Document,
     bounds: HashMap<NodeId, Rect>,
     lines: Vec<String>,
-    data: Vec<Doc>,
     /// How many more nodes it will spell out, and how many it has had
     /// to leave out.
     left: usize,
@@ -225,7 +204,6 @@ impl Listing<'_> {
         }
         self.left -= 1;
         self.lines.push(format!("{}{}", "  ".repeat(depth), node_line(self.doc, node, self.bounds.get(&id))));
-        self.data.push(node_data(self.doc, node, depth, self.bounds.get(&id)));
         let mut children: Vec<NodeId> = node.elements().collect();
         if !in_file_order(node.kind) {
             children.reverse();
@@ -343,13 +321,20 @@ pub(crate) fn summary(core: &Core, id: DocId) -> Result<String, ToolError> {
     Ok(format!("{id} {}: page {}, {} nodes, {}", name(core, id), page(doc), doc.len(), saved(core, id)))
 }
 
-/// Everything `doc_info` says: text for the model, and the same as data.
-pub(crate) fn info(core: &Core, id: DocId) -> Result<(String, Doc), ToolError> {
+/// Everything `doc_info` says: the drawing, and its nodes (or, with
+/// `under`, that node and what's in it). The listing is said once, in
+/// the text: as data it was every node over again, at twice the cost
+/// to read. The data is what the drawing is.
+pub(crate) fn info(core: &Core, id: DocId, under: Option<NodeId>) -> Result<(String, Doc), ToolError> {
     let doc = core.doc(id).map_err(refused)?;
     let history = core.history(id).map_err(refused)?;
-    let mut listing = Listing { doc, bounds: page_bounds(doc), lines: Vec::new(), data: Vec::new(), left: MAX_LISTED, skipped: 0 };
-    listing.tree(doc.root(), 0);
-    let Listing { lines, data: nodes, skipped, .. } = listing;
+    let top = match under {
+        Some(node) => doc.node(node).map_err(crate::input::refused_edit)?.id,
+        None => doc.root(),
+    };
+    let mut listing = Listing { doc, bounds: page_bounds(doc), lines: Vec::new(), left: MAX_LISTED, skipped: 0 };
+    listing.tree(top, 0);
+    let Listing { lines, skipped, .. } = listing;
     let (undo, redo) = (history.undoable().count(), history.redoable().count());
     let mut text = format!("{id} {}", name(core, id));
     if let Ok(Some(path)) = core.path(id) {
@@ -359,9 +344,10 @@ pub(crate) fn info(core: &Core, id: DocId) -> Result<(String, Doc), ToolError> {
     if let Some(latest) = history.undoable().next_back() {
         text += &format!(" (latest: \"{}\" by {})", latest.label, actor(latest.actor));
     }
-    text += &format!(". Redo: {redo}.\nNodes, front to back (the first listed is on top; what a <defs>, a gradient or a filter holds is in the file's order; boxes are where each shows in the drawing's coordinates, strokes aside):\n{}", lines.join("\n"));
+    let which = if under.is_some() { format!("{top} and what's in it") } else { "Nodes".to_owned() };
+    text += &format!(". Redo: {redo}.\n{which}, front to back (the first listed is on top; what a <defs>, a gradient or a filter holds is in the file's order; boxes are where each shows in the drawing's coordinates, strokes aside):\n{}", lines.join("\n"));
     if skipped > 0 {
-        text += &format!("\n… and {skipped} more (doc_source shows the whole file, or one node's markup)");
+        text += &format!("\n… and {skipped} more (node_id lists one node and what's in it; doc_source shows the markup)");
     }
     let mut m = Map::new();
     m.insert("doc_id", id.to_string().into());
@@ -371,6 +357,5 @@ pub(crate) fn info(core: &Core, id: DocId) -> Result<(String, Doc), ToolError> {
     m.insert("node_count", Doc::Int(doc.len() as i64));
     m.insert("undo", Doc::Int(undo as i64));
     m.insert("redo", Doc::Int(redo as i64));
-    m.insert("nodes", Doc::List(nodes));
     Ok((text, Doc::Map(m)))
 }

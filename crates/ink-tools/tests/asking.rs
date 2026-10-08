@@ -24,7 +24,7 @@ fn a_node_says_everything_about_itself() {
             "Its own numbers are under, nearest first: N7 transform=\"translate(2 3)\".",
             "Uses: fill → N3 <linearGradient id=\"glow\">; clip-path → N5 <clipPath id=\"left\">; style → nothing (no element has id=\"nothing\").",
             "Used by: N11 <use>.",
-            "No anchors of its own: path_edit (or path_op to_path) makes it a path that has.",
+            "No anchors of its own: path_op to_path makes it a path that has, and lists them.",
         ]
     );
     assert_eq!((info.path("structuredContent.parent").and_then(Doc::as_str), info.path("structuredContent.attrs.x").and_then(Doc::as_str), info.path("structuredContent.uses[1]").and_then(Doc::as_str)), (Some("N7"), Some("4"), Some("N5")));
@@ -35,6 +35,10 @@ fn a_node_says_everything_about_itself() {
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N9"}"#)).contains("From the groups above: stroke=\"#12100e\" (N7), stroke-width=\"2\" (N7)\nSays \"hi\", set in Ink Test 10.\nShows at 3,-4 7×7 in the drawing's coordinates (strokes aside)."));
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N11"}"#)).contains("\nShows nowhere (not drawn yet)."));
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N1"}"#)).starts_with("N1 <svg>, the drawing's root; 10 inside."));
+    // What's directly in a group: the ids to go on with.
+    let lamp = ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N7"}"#);
+    assert!(text(&lamp).contains("\nDirectly in it, in the file's order (the last is on top): N8 <rect id=\"pane\">, N9 <text id=\"label\">.\n"), "{}", text(&lamp));
+    assert_eq!((lamp.path("structuredContent.children[0]").and_then(Doc::as_str), lamp.path("structuredContent.children[1]").and_then(Doc::as_str)), (Some("N8"), Some("N9")));
     // A long value is cut, and says where to read it whole.
     ok(&mut s, "node_add", &format!(r#"{{"doc_id":"d1","element":"path","attrs":{{"d":"M0 0{}"}}}}"#, " L1 1".repeat(60)));
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N12"}"#)).contains("L1 1 … (304 characters: doc_source shows all)\""));

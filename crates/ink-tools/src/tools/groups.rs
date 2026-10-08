@@ -17,7 +17,7 @@ pub(super) fn tools() -> Vec<Entry> {
         edit(
             "node_duplicate",
             "Copy nodes",
-            "Copy nodes, each with everything in it, right on top of itself (just above it in the stack). Whatever in a copy has an id=\"…\" gets one of its own (sun becomes sun-2), and what's in the copy refers to those, so the copy stands on its own. Returns the copies' node ids, in the order given: node_transform moves one off its original.",
+            "Copy nodes, each with everything in it, right on top of itself (just above it in the stack). Whatever in a copy has an id=\"…\" gets one of its own (sun becomes sun-2), and what's in the copy refers to those, so the copy stands on its own. A copy of a locked node isn't locked: the lock stays with the original. Returns the copies' node ids, in the order given: node_transform moves one off its original.",
             ids_schema,
             Kind::Add,
             duplicate,
@@ -125,5 +125,7 @@ fn ungrouped(doc: &Document, applied: &Applied) -> Reply {
         Some(parent) => format!("{id} (in {parent})"),
         None => id.to_string(),
     }).collect();
-    Reply::text(format!("Ungrouped {}. What was in {}: {}.", gone.join(", "), if gone.len() == 1 { "it" } else { "them" }, now.join(", "))).data(Doc::Map(m))
+    // What a group told to drop took with it.
+    let lost = if applied.lost.is_empty() { String::new() } else { format!(" Dropped with {}: {}.", if gone.len() == 1 { "it" } else { "them" }, applied.lost.join("; ")) };
+    Reply::text(format!("Ungrouped {}. What was in {}: {}.{lost}", gone.join(", "), if gone.len() == 1 { "it" } else { "them" }, now.join(", "))).data(Doc::Map(m))
 }

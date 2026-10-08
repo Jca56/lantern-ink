@@ -53,7 +53,7 @@ fn a_path_lists_its_anchors() {
     let anchor = |i: usize, key: &str| info.path(&format!("structuredContent.anchors[{i}].{key}")).map(lntrn_data::json::write);
     assert_eq!((anchor(3, "id").as_deref(), anchor(3, "run").as_deref(), anchor(3, "at").as_deref(), anchor(3, "out").as_deref(), anchor(3, "in")), (Some("\"A7\""), Some("2"), Some("[10.0,10.0]"), Some("[2.0,0.0]"), None));
     // What has none says how to get some, or why it can't.
-    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#)).ends_with("\nNo anchors of its own: path_edit (or path_op to_path) makes it a path that has."));
+    assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N3"}"#)).ends_with("\nNo anchors of its own: path_op to_path makes it a path that has, and lists them."));
     assert!(text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N6"}"#)).ends_with("\nIts path data can't all be read, so it has no anchors to edit it by."));
     assert!(!text(&ok(&mut s, "node_info", r#"{"doc_id":"d1","node_id":"N5"}"#)).contains("nchors"), "a group isn't an outline");
     // A long path's list is cut, saying how many more there are.
@@ -268,7 +268,9 @@ fn a_stroke_becomes_a_shape() {
     ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<path id='rule' d='M4 12 H20' fill='none' stroke='#ffc800' stroke-width='2' stroke-linecap='round'/><circle id='coin' cx='12' cy='12' r='6' fill='#ffc800' stroke='#12100e' stroke-width='2'/><rect id='plain' width='4' height='4'/>"}"##);
     // A line: the node itself is its stroke's outline now.
     let rule = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N2"],"op":"outline"}"#);
-    assert_eq!(text(&rule), "Done: N2 <path id=\"rule\"> (6 anchors). node_info lists a path's anchors.");
+    // One path: its anchors come with it, which are what's wanted next.
+    assert_eq!(text(&rule), "Done: N2 <path id=\"rule\"> (6 anchors), in its own coordinates (path_edit takes these ids):\n  Run 1 of 1, closed, 6 anchors:\n    A3 at 20,13  then a line to A4\n    A4 at 4,13  then an arc of radii 1 1 to A5\n    A5 at 3,12  then an arc of radii 1 1 to A6\n    A6 at 4,11  then a line to A7\n    A7 at 20,11  then an arc of radii 1 1 to A8\n    A8 at 21,12  then an arc of radii 1 1 to A3");
+    assert_eq!((rule.path("structuredContent.anchors[0].id").and_then(Doc::as_str), rule.path("structuredContent.node_ids[0]").and_then(Doc::as_str)), (Some("A3"), Some("N2")));
     assert_eq!(node(&mut s, "N2"), "<path id='rule' d='M20 13 H4 A1 1 0 0 1 3 12 A1 1 0 0 1 4 11 H20 A1 1 0 0 1 21 12 A1 1 0 0 1 20 13 Z' fill='#ffc800' stroke='none'/>", "said where it was said, in the quotes it had");
     // A filled shape keeps its fill: the ring is a new path over it.
     let coin = ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N3"],"op":"outline"}"#);
@@ -302,7 +304,7 @@ fn a_path_is_said_with_fewer_segments() {
     // once it's within it.
     assert_eq!(text(&ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N3"],"op":"simplify","tolerance":5}"#)), "Nothing changed: they were like that already.");
     assert_eq!(text(&ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N5"],"op":"simplify"}"#)), "Nothing changed: they were like that already.");
-    assert_eq!(text(&ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N5"],"op":"simplify","tolerance":0.5}"#)), "Done: N5 <path id=\"wobble\"> (2 anchors). node_info lists a path's anchors.");
+    assert_eq!(text(&ok(&mut s, "path_op", r#"{"doc_id":"d1","node_ids":["N5"],"op":"simplify","tolerance":0.5}"#)), "Done: N5 <path id=\"wobble\"> (2 anchors), in its own coordinates (path_edit takes these ids):\n  Run 1 of 1, open, 2 anchors:\n    A38 at 2,20  then a line to A41\n    A41 at 14,20  (the end)");
     assert_eq!(node(&mut s, "N5"), "<path id='wobble' d='M2 20 H14'/>");
     for (args, says) in [
         (r#""node_ids":["N4"],"op":"simplify""#, "N4 is a <rect>: only a path has segments to do with fewer of (a rect or a circle is as simple as it gets)"),

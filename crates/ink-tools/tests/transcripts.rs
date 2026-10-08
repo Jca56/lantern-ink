@@ -50,7 +50,7 @@ fn a_drawing_is_made_looked_at_and_saved() {
     assert_eq!(data(&disc, "node_id"), "N2");
     // Markup as it's written, nested, under the disc.
     let face = ok(&mut s, "node_add_svg", r##"{"doc_id":"d1","svg":"<g id='face' fill='none' stroke='#12100e' stroke-linecap='round'>\n  <path d='M8 14 Q12 18 16 14'/>\n  <line x1='9' y1='9' x2='9' y2='10'/>\n</g>","above":"N2"}"##);
-    assert_eq!(text(&face), "Added N3 <g id=\"face\"> with 2 inside at 8,9 8×7.");
+    assert_eq!(text(&face), "Added N3 <g id=\"face\"> with 2 inside at 8,9 8×7. doc_info with a node_id lists the ids of what's inside one.");
     // Any attribute, set or taken off.
     let set = ok(&mut s, "node_set", r##"{"doc_id":"d1","node_id":"N3","attrs":{"stroke-width":1.5,"stroke-linecap":null,"opacity":0.9}}"##);
     assert!(text(&set).starts_with("Set. It's now N3 <g id=\"face\">"), "{}", text(&set));
@@ -70,7 +70,13 @@ fn a_drawing_is_made_looked_at_and_saved() {
     assert_eq!(lines[0], "d1 (no file yet), never saved.");
     assert_eq!(lines[1], "Page 24 × 24, viewBox 0 0 24 24. 5 nodes. Undo: 3 (latest: \"node_set\" by Claude). Redo: 0.");
     assert_eq!(&lines[3..], ["N1 svg  at 2.5,2.5 19×19", "  N3 g #face  fill none  stroke #12100e 1.5  opacity 0.9  at 8,9 8×7", "    N5 line  at 9,9 0×1", "    N4 path  at 8,14 8×2", "  N2 circle  fill #ffc800  at 2.5,2.5 19×19"]);
-    assert_eq!(info.path("structuredContent.nodes[1].id").and_then(Doc::as_str), Some("N3"));
+    assert!(info.path("structuredContent.nodes").is_none() && info.path("structuredContent.node_count").is_some(), "the listing is said once: in the text");
+    // One node and what's in it: the ids inside a group.
+    let face = ok(&mut s, "doc_info", r#"{"doc_id":"d1","node_id":"N3"}"#);
+    let lines: Vec<&str> = text(&face).lines().collect();
+    assert!(lines[2].starts_with("N3 and what's in it, front to back ("), "{}", lines[2]);
+    assert_eq!(&lines[3..], ["N3 g #face  fill none  stroke #12100e 1.5  opacity 0.9  at 8,9 8×7", "  N5 line  at 9,9 0×1", "  N4 path  at 8,14 8×2"]);
+    assert_eq!(refused(&mut s, "doc_info", r#"{"doc_id":"d1","node_id":"N99"}"#), "no node N99 in this document (doc_info lists its nodes)");
 
     // A look, at the size asked for.
     let seen = ok(&mut s, "doc_preview", r#"{"doc_id":"d1","max_edge":96}"#);

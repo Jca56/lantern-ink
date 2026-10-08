@@ -15,13 +15,33 @@ use crate::env::Env;
 /// Nodes named by earlier steps of a batch (`"as": "sun"` → `"@sun"`).
 pub(crate) type Names = HashMap<String, NodeId>;
 
+/// What a document's refusal leaves for a tool's caller to be told: the
+/// argument that says what it asks to be told, the tool that gets
+/// round it. (The document says why in words the window can use too.)
+fn hint(why: &str) -> Option<&'static str> {
+    if why.contains(" is locked: ") {
+        // A lock is Alva's way of saying leave this alone.
+        Some("node_mark unlocks, but Alva locks what she doesn't want changed: ask her first")
+    } else if why.ends_with(" or say to drop it") || why.ends_with(" or say to drop them") {
+        Some("drop: true says so")
+    } else if why.ends_with(" Say so to make them anyway") {
+        Some("as_drawn: true says so")
+    } else if why.contains(" is a <text>: ") {
+        Some("text_to_path makes a text paths, which are shapes")
+    } else {
+        None
+    }
+}
+
 /// A core's refusal, in words that say what to do next.
 pub(crate) fn refused(e: CoreError) -> ToolError {
     match e {
         CoreError::NoSuchDoc(id) => ToolError(format!("no open document {id} (doc_list shows the open ones)")),
         CoreError::Doc(DocError::NoSuchNode(id)) => ToolError(format!("no node {id} in this document (doc_info lists its nodes)")),
-        // A lock is Alva's way of saying leave this alone.
-        CoreError::Doc(DocError::Invalid(why)) if why.contains(" is locked: ") => ToolError(format!("{why} (node_mark unlocks, but Alva locks what she doesn't want changed: ask her first)")),
+        CoreError::Doc(DocError::Invalid(why)) => match hint(&why) {
+            Some(hint) => ToolError(format!("{why} ({hint})")),
+            None => ToolError(why),
+        },
         e => ToolError(e.to_string()),
     }
 }
@@ -212,6 +232,13 @@ mod tests {
         assert!(b.node("node_id").unwrap_err().0.contains("no earlier step of this batch is named \"sun\""));
         assert_eq!(refused(CoreError::NoSuchDoc(DocId(4))).0, "no open document d4 (doc_list shows the open ones)");
         assert_eq!(refused_edit(DocError::NoSuchNode(NodeId(4))).0, "no node N4 in this document (doc_info lists its nodes)");
+        // What a document's refusal asks to be told, a tool is told how.
+        let told = |why: &str| refused_edit(DocError::Invalid(why.to_owned())).0;
+        assert_eq!(told("N2 is locked: nothing about it changes until it's unlocked"), "N2 is locked: nothing about it changes until it's unlocked (node_mark unlocks, but Alva locks what she doesn't want changed: ask her first)");
+        assert!(told("N5 has a clip path: ungrouping would lose it. Take it off first, or say to drop it").ends_with("or say to drop it (drop: true says so)"));
+        assert!(told("paths made of it would be that font's for good. Say so to make them anyway").ends_with("(as_drawn: true says so)"));
+        assert!(told("N5 is a <text>: a clip path is cut from shapes").ends_with("(text_to_path makes a text paths, which are shapes)"));
+        assert_eq!(told("there's nothing to copy"), "there's nothing to copy");
     }
 
     #[test]

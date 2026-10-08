@@ -124,6 +124,15 @@ pub fn check(lines: &[Vec<Span>]) -> Result<(), DocError> {
 }
 
 impl Document {
+    /// How far apart the text `id`'s lines are set, in ems, as
+    /// [`content`] writes them: the least any line is below the one
+    /// before (a line after empty ones is further). `None` for a text
+    /// of one line, or one whose lines aren't written this way.
+    pub fn leading(&self, id: NodeId) -> Option<f64> {
+        let rows = self.get(id)?.elements().filter_map(|row| self.get(row)).filter(|row| row.kind == Kind::TSpan && row.attr("x").is_some());
+        rows.filter_map(|row| row.attr("dy")?.trim().strip_suffix("em")?.trim().parse::<f64>().ok()).filter(|down| down.is_finite() && *down > 0.0).min_by(f64::total_cmp)
+    }
+
     /// Make the text `id` say `lines`, `leading` ems apart. Everything
     /// that was in it goes. Returns the elements now in it, and the ones
     /// taken out.

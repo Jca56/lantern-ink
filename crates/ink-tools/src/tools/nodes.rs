@@ -3,6 +3,7 @@
 //! step, and a step a batch can hold.
 
 use ink_core::ink_doc::geometry::page_bounds;
+use ink_core::ink_doc::refs::{Ids, users};
 use ink_core::ink_doc::style::prop;
 use ink_core::ink_doc::{Document, Element, Precision, elements};
 use ink_core::{Applied, Command, NodeId};
@@ -43,11 +44,11 @@ pub(super) fn tools() -> Vec<Entry> {
             changed,
         ),
         edit("node_move", "Move in the stack", "Move nodes, each with everything in it, to another place in the drawing's order or into another group: just above or below a node, into one, or to the top or bottom of the whole drawing. Later in the file is further up the picture. This moves them in the stack, not on the page: each stays where it shows, so one that lands in a group with a transform has its own numbers (or its transform) changed to make up for it. It takes on its new group's inherited paint.", move_schema, Kind::Set, relocate, moved),
-        edit("node_delete", "Delete nodes", "Delete nodes, each with everything in it. Undoable with history_undo.", delete_schema, Kind::Destroy, delete, deleted),
+        edit("node_delete", "Delete nodes", "Delete nodes, each with everything in it. Undoable with history_undo. Deleting a gradient, clip path or filter that's in use leaves what used it drawing without it: the reply says which nodes.", delete_schema, Kind::Destroy, delete, deleted),
         edit(
             "node_mark",
             "Label, lock",
-            "Give nodes a label, or lock them. `label` is a name for a person to know a node by (doc_info shows it in brackets, and a layers panel will): \"\" takes it off. `locked`: true makes each node, and everything in it, refuse every edit until it's unlocked with false: it can't be changed, moved or deleted, and neither can anything in it, though things can still go beside it and a group it's in can be painted. Alva locks what she doesn't want changed, so ask her before unlocking one. Both are Ink's own marks (ink:label, ink:locked): they change nothing of how the drawing draws, other programs ignore them, and an .svg from doc_export leaves them out.",
+            "Give nodes a label, or lock them. `label` is a name for a person to know a node by (doc_info shows it in brackets, and a layers panel will): \"\" takes it off. `locked`: true makes each node, and everything in it, refuse every edit until it's unlocked with false: it can't be changed, moved or deleted, and neither can anything in it, nor the gradient, clip path or filter it's drawn with; things can still go beside it, a group it's in can be painted, and a copy of it isn't locked. Alva locks what she doesn't want changed, so ask her before unlocking one. Both are Ink's own marks (ink:label, ink:locked): they change nothing of how the drawing draws, other programs ignore them, and an .svg from doc_export leaves them out.",
             mark_schema,
             Kind::Set,
             mark,
@@ -171,7 +172,9 @@ fn added(doc: &Document, applied: &Applied) -> Reply {
     if let [only] = applied.created.as_slice() {
         m.insert("node_id", only.to_string().into());
     }
-    Reply::text(format!("Added {}.", listed.join("; "))).data(Doc::Map(m))
+    // What came in with something inside it has ids of its own in there.
+    let nested = applied.created.iter().any(|&id| doc.get(id).is_some_and(|node| node.elements().next().is_some()));
+    Reply::text(format!("Added {}.{}", listed.join("; "), if nested { " doc_info with a node_id lists the ids of what's inside one." } else { "" })).data(Doc::Map(m))
 }
 
 fn set_schema() -> Doc {
@@ -259,9 +262,28 @@ fn delete(doc: &Document, input: &In) -> Result<Command, ToolError> {
     Ok(Command::Delete { nodes })
 }
 
+/// The most nodes named as left without what they used.
+const MAX_LEFT: usize = 12;
+
+/// The ids nodes name that nothing has, each with the nodes naming it:
+/// what a gradient, clip path or filter deleted while in use leaves.
+fn dangling(doc: &Document) -> Vec<(String, Vec<NodeId>)> {
+    let ids = Ids::of(doc);
+    let mut left: Vec<(String, Vec<NodeId>)> = users(doc).into_iter().filter(|(name, _)| ids.get(name).is_none()).collect();
+    left.sort();
+    left
+}
+
 fn deleted(doc: &Document, applied: &Applied) -> Reply {
     let gone: Vec<String> = applied.removed.iter().map(NodeId::to_string).collect();
     let mut m = Map::new();
     m.insert("node_ids", ids(&applied.removed));
-    Reply::text(format!("Deleted {} (and what was in {}). {} nodes are left.", gone.join(", "), if gone.len() == 1 { "it" } else { "them" }, doc.len())).data(Doc::Map(m))
+    let mut text = format!("Deleted {} (and what was in {}). {} nodes are left.", gone.join(", "), if gone.len() == 1 { "it" } else { "them" }, doc.len());
+    let left = dangling(doc);
+    if !left.is_empty() {
+        let said: Vec<String> = left.iter().map(|(name, nodes)| format!("#{name} ({}{})", nodes.iter().take(MAX_LEFT).map(NodeId::to_string).collect::<Vec<_>>().join(", "), if nodes.len() > MAX_LEFT { format!(", and {} more", nodes.len() - MAX_LEFT) } else { String::new() })).collect();
+        text += &format!(" Note: nothing in the drawing is called {} now, so what names it draws without it (unpainted, unclipped, unfiltered) until it's back (history_undo) or is given something else.", said.join("; "));
+        m.insert("left_without", Doc::List(left.iter().flat_map(|(_, nodes)| nodes.iter().map(|id| id.to_string().into())).collect()));
+    }
+    Reply::text(text).data(Doc::Map(m))
 }

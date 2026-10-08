@@ -231,8 +231,17 @@ enum  Child { Node(NodeId), Text(String) /* text, comments, CDATA, as written */
   an ungroup or a boolean does (refused as well when anything in it is
   locked); or it only locks or unlocks (refused only by a lock further
   up). So things still go beside a locked node, a group it's in can be
-  painted, and a copy of it is a node of its own. Tidying steps round
-  what's locked. A clean copy to ship carries neither mark. The marks
+  painted, and a copy of it is a node of its own: **not locked** (Alva,
+  2026-10-07: nobody locked the copy, and one that couldn't be moved
+  off its original was no use). **A lock holds what its node is drawn
+  with** (Alva, the same day): the gradient, clip path or filter it
+  names, in an attribute or by a `<style>` rule, and what those name
+  in turn. Changing one, or what's in one, or deleting the `<defs>`
+  it's in, is refused like a change to the node itself, or a locked
+  node could be recoloured or blanked from the side
+  (`Document::held`). What only unlocked nodes use stays free.
+  Tidying steps round what's locked. A clean copy to ship carries
+  neither mark. The marks
   are read under whichever prefix stands for Ink's namespace, and
   written as `ink:`, declared on the root the first time one is needed.
 - **Dirty state is derived:** `modified = version != saved_version`.
@@ -270,7 +279,11 @@ What's at a point (§4.1's `hit`) is `hit.rs`.
 
 **As built in M3b:** `SetStyle` (`styling.rs`): properties by SVG's own
 names, each value checked where Ink draws with it, set on any number
-of nodes, each written where its node has it (D14). `Define` puts
+of nodes, each written where its node has it (D14). What would paint
+nothing is a slip too, and refused: a `url(#…)` that names nothing in
+the drawing (unless the paint says what to use then), and a gradient
+measured by the box of what it paints on a shape with no height or no
+width (a level line: SVG paints nothing there). `Define` puts
 elements (gradients, and in time clip paths and filters) into the
 drawing's `<defs>`, made as the root's first child if there isn't one;
 `SetGradient` is `gradient_set`, over `SetAttr`, `Delete` and `Insert`
@@ -356,7 +369,9 @@ tested.
   the file can write). Where a stroke is wider than its line bends (it folds
   over itself) that stretch is built from short straight slices
   instead: no one ribbon's outline says what a folded stroke covers. A
-  shape with no fill becomes its stroke's outline; one with a fill
+  shape with no fill becomes its stroke's outline, and so does one
+  with no inside for a fill to cover (a `<line>`, which says
+  `fill="none"` only when someone thought to); one with a fill
   keeps it, and the outline is a new path over it (in a group that
   takes over the shape's opacity, filter, clip path and mask, if it had
   any: they applied to fill and stroke as one). What is measured
@@ -368,7 +383,14 @@ tested.
   each stretch becomes one line, one arc of a circle or one fitted
   cubic if that stays within the tolerance of it both ways, and is
   halved and tried again if not. No anchor moves and none is made, so
-  the anchors left keep their ids.
+  the anchors left keep their ids. **What's fitted either side of a
+  join shares its heading there:** half way between the one the join
+  is reached with and the one it's left with, which for short lines
+  drawn round a curve is what the curve had (each half fitted to its
+  own end lines met the other at a kink, and missed the tolerance
+  where the shared heading meets it: M3's done-test). A curve whose
+  handles pass each other is no fit: it pinches into the corner it was
+  meant to smooth.
 
 **A gradient in a shape's own coordinates goes with the shape**
 (`settle.rs`, since M3b) when it is that shape's alone: into the
@@ -606,7 +628,12 @@ shape's.
   `font-family`, and a text with none left is set in the sans. So text
   looks as it does in Lantern's apps, not as a browser on the same
   machine (which asks fontconfig) would set it. `lntrn-text` has two
-  weights: from 600 up is bold.
+  weights: from 600 up is bold. **A text `text_add` makes says
+  `font-family="sans-serif"`** when it's given no font and no group
+  above hands one down: with none said, a browser sets it in a serif.
+  **Italic in a family with no italic is upright** (Ink slants nothing
+  itself; a browser does), and the replies say so
+  (`fonts::slants`, `Lettered::no_italic`).
 - **A character that comes back as a picture** (the engine falls back
   to the colour emoji font for a heart from some families) can't be
   filled or stroked, so it's asked for again in families that draw
@@ -871,7 +898,7 @@ As LS3 §7, to the letter where it can be:
 | **M0** ✅ | This doc and its decisions | Alva approves it and answers the "before M1" rows of §12: she did, 2026-10-05 |
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
-| **M3** | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (built 2026-10-07), **e** tidy (built 2026-10-07) (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP |
+| **M3** ✅ | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (built 2026-10-07), **e** tidy (built 2026-10-07) (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP. They do: the done-test (a stress sheet, all 39 tools, a fresh session) ran 2026-10-07, and what it found was fixed the same day |
 | **M4** | `lantern-ink`, the window, in the LS3 look | A scope checklist written with Alva at M4's start (D20), every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 

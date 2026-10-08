@@ -4,7 +4,7 @@ use ink_core::{Actor, Command, NodeId};
 use lntrn_data::{Doc, Map};
 use lntrn_mcp::{Args, Kind, Reply, Tool, ToolError, fail, schema};
 
-use crate::describe::actor;
+use crate::describe::{actor, is_definition};
 use crate::input::{In, Names, common, refused, refused_edit};
 use crate::tools::{Ctx, Entry, Handler, previewed};
 
@@ -21,7 +21,7 @@ pub(super) fn tools() -> Vec<Entry> {
         direct(
             "batch",
             "Many edits as one",
-            "Run many edits on one drawing as ONE undo step, all or nothing: if any step is refused, none happen, and the reply says which step and why. Each step is {tool, args, as}: tool is any edit (node_add, node_add_svg, node_set, node_move, node_delete, node_transform, node_align, node_duplicate, node_group, node_ungroup, node_style, gradient_add, gradient_set, clip_set, filter_set, path_set, path_edit, path_op, doc_set); args are that tool's, without doc_id; `as` names the node the step makes (what it adds, a copy, a group), so later steps can refer to it as \"@name\" before its id exists (e.g. as \"face\", then into: \"@face\"). Attaches a picture of the result unless preview: false.",
+            "Run many edits on one drawing as ONE undo step, all or nothing: if any step is refused, none happen, and the reply says which step and why. Each step is {tool, args, as}: tool is any edit (every tool that changes a drawing: `tool` lists them); args are that tool's, without doc_id; `as` names the node the step makes (what it adds, a copy, a group), so later steps can refer to it as \"@name\" before its id exists (e.g. as \"face\", then into: \"@face\"). Attaches a picture of the result unless preview: false.",
             batch_schema,
             Kind::Set,
             batch,
@@ -138,8 +138,11 @@ fn batch(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
     let (made, unmade): (Vec<NodeId>, Vec<NodeId>) = applied.created.iter().partition(|node| scratch.get(**node).is_some());
     named.retain(|(_, node)| made.contains(node));
     let mut text = format!("Ran {} steps on {id} as one undo step (history_undo undoes all of them).", steps.len());
+    // A gradient, clip path or filter with the name it ended up with:
+    // the one asked for may have been taken.
+    let called = |node: &NodeId| scratch.get(*node).filter(|n| is_definition(n.kind)).and_then(|n| n.attr("id"));
     if !made.is_empty() {
-        text += &format!(" New nodes: {}.", made.iter().map(NodeId::to_string).collect::<Vec<_>>().join(", "));
+        text += &format!(" New nodes: {}.", made.iter().map(|node| called(node).map_or(node.to_string(), |id| format!("{node} (#{id})"))).collect::<Vec<_>>().join(", "));
     }
     if !named.is_empty() {
         text += &format!(" Named: {}.", named.iter().map(|(label, node)| format!("@{label} = {node}")).collect::<Vec<_>>().join(", "));
@@ -154,5 +157,12 @@ fn batch(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
         by_name.insert(label.as_str(), node.to_string().into());
     }
     m.insert("names", Doc::Map(by_name));
+    let mut defined = Map::new();
+    for node in &made {
+        if let Some(id) = called(node) {
+            defined.insert(id, node.to_string().into());
+        }
+    }
+    m.insert("defined", Doc::Map(defined));
     previewed(ctx, id, Reply::text(text).data(Doc::Map(m)), input.args.opt_bool("preview")? != Some(false))
 }

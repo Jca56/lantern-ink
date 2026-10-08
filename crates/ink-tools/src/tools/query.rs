@@ -19,6 +19,8 @@ use crate::tools::{Ctx, Direct, Entry, Handler};
 const MAX_VALUE: usize = 200;
 /// The most nodes named as using one.
 const MAX_USERS: usize = 12;
+/// The most of what's in a node named one by one.
+const MAX_HELD: usize = 24;
 
 fn direct(name: &'static str, title: &'static str, description: &'static str, schema: fn() -> Doc, f: Direct) -> Entry {
     Entry { spec: Tool { name, title, description, schema, kind: Kind::Read }, handler: Handler::Direct(f) }
@@ -29,7 +31,7 @@ pub(super) fn tools() -> Vec<Entry> {
         direct(
             "node_info",
             "Describe node",
-            "Everything about one node: its element and where it is in the tree, every attribute as the file writes it, the paint it has from the groups above, the box where it shows in the drawing's coordinates, the transforms its own numbers are under, what it uses (a gradient, a clip path) and what uses it.",
+            "Everything about one node: its element and where it is in the tree, what's directly in it, every attribute as the file writes it, the paint it has from the groups above, the box where it shows in the drawing's coordinates, the transforms its own numbers are under, what it uses (a gradient, a clip path) and what uses it, and a path's anchors.",
             info_schema,
             info,
         ),
@@ -65,6 +67,13 @@ fn info(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
         Some(parent) => format!("{id} {}, in {} {}; {inside} inside.", tag(node), parent.id, tag(parent)),
         None => format!("{id} {}, the drawing's root; {inside} inside.", tag(node)),
     }];
+    // What's directly in it: the ids to go on with.
+    let held: Vec<&Node> = node.elements().filter_map(|child| doc.get(child)).collect();
+    if !held.is_empty() {
+        let said: Vec<String> = held.iter().take(MAX_HELD).map(|child| format!("{} {}", child.id, tag(child))).collect();
+        let more = held.len().saturating_sub(MAX_HELD);
+        lines.push(format!("Directly in it, in the file's order (the last is on top): {}{}.", said.join(", "), if more > 0 { format!(", and {more} more (doc_info with this node_id lists them all, and what's in them)") } else { String::new() }));
+    }
     lines.push(match node.attrs.as_slice() {
         [] => "No attributes.".to_owned(),
         attrs => format!("Attributes: {}", attrs.iter().map(|a| format!("{}=\"{}\"", a.name, shown(&a.value))).collect::<Vec<_>>().join(" ")),
@@ -134,13 +143,14 @@ fn info(ctx: &mut Ctx, input: &In) -> Result<Reply, ToolError> {
             lines.push(format!("Anchors, in its own coordinates (path_edit takes these ids):\n{said}"));
             m = data;
         }
-        None if node.kind.is_shape() && node.kind != NodeKind::Path => lines.push("No anchors of its own: path_edit (or path_op to_path) makes it a path that has.".to_owned()),
+        None if node.kind.is_shape() && node.kind != NodeKind::Path => lines.push("No anchors of its own: path_op to_path makes it a path that has, and lists them.".to_owned()),
         None if node.kind == NodeKind::Path => lines.push("Its path data can't all be read, so it has no anchors to edit it by.".to_owned()),
         None => {}
     }
     m.insert("node_id", id.to_string().into());
     m.insert("element", node.name.as_str().into());
     m.insert("parent", above.first().map_or(Doc::Null, |p| p.id.to_string().into()));
+    m.insert("children", Doc::List(held.iter().map(|child| child.id.to_string().into()).collect()));
     let mut attrs = Map::new();
     for attr in &node.attrs {
         attrs.insert(attr.name.as_str(), attr.value.as_str().into());

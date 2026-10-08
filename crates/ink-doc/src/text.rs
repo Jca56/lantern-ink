@@ -253,6 +253,8 @@ pub struct Lettered {
     pub family: String,
     pub bold: bool,
     pub italic: bool,
+    /// Italic was asked for, and the family has none: it's upright.
+    pub no_italic: bool,
     pub size: f64,
     /// Families asked for ahead of it that aren't installed here.
     pub missing: Vec<String>,
@@ -264,7 +266,8 @@ pub fn lettered(doc: &Document, text: &Node) -> Vec<Lettered> {
     for piece in &gather(doc, text, Vec2::ZERO).pieces {
         let face = piece.font.face();
         let missing = piece.font.families.iter().take_while(|name| crate::fonts::family(name).is_none()).cloned().collect();
-        let set = Lettered { family: crate::fonts::called(&face.family), bold: face.bold, italic: face.italic, size: piece.font.size, missing };
+        let italic = face.italic && crate::fonts::slants(&face);
+        let set = Lettered { family: crate::fonts::called(&face.family), bold: face.bold, italic, no_italic: face.italic && !italic, size: piece.font.size, missing };
         if !all.contains(&set) {
             all.push(set);
         }
@@ -424,8 +427,12 @@ pub(crate) mod tests {
         let d = Document::parse(DocId(1), r#"<svg><text font-family="No Such Font, 'Ink Test', serif" font-size="10">a<tspan font-weight="bold" font-size="20">b</tspan><tspan>c</tspan></text></svg>"#).unwrap();
         let fonts = lettered(&d, d.node(NodeId(2)).unwrap());
         assert_eq!(fonts.len(), 2, "a span lettered as its text is no new font: {fonts:?}");
-        assert_eq!(fonts[0], Lettered { family: "Ink Test".into(), bold: false, italic: false, size: 10.0, missing: vec!["No Such Font".into()] });
+        assert_eq!(fonts[0], Lettered { family: "Ink Test".into(), bold: false, italic: false, no_italic: false, size: 10.0, missing: vec!["No Such Font".into()] });
         assert_eq!((fonts[1].bold, fonts[1].size), (true, 20.0));
+        // Italic in a family with no italic of its own is upright, and says so.
+        let leaning = Document::parse(DocId(1), r#"<svg><text font-family="Ink Test" font-style="italic">a</text></svg>"#).unwrap();
+        let fonts = lettered(&leaning, leaning.node(NodeId(2)).unwrap());
+        assert_eq!((fonts[0].italic, fonts[0].no_italic), (false, true));
     }
 
     #[test]

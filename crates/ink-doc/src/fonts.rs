@@ -257,6 +257,15 @@ fn shape_as_said(text: &str, face: &Face) -> Line {
     Line { glyphs, width: f64::from(metrics.width) / em, ascent: f64::from(metrics.ascent) / em, descent: f64::from(metrics.descent) / em }
 }
 
+/// Whether `face`'s family has letters of its own for italic: asked
+/// for upright and for italic, an "a" comes back drawn differently.
+/// In a family with none, italic is set upright: Ink slants nothing
+/// itself (other programs do, so the same file leans there).
+pub fn slants(face: &Face) -> bool {
+    let a = |italic: bool| shape_as_said("a", &Face { italic, ..face.clone() }).glyphs.first().map(|glyph| glyph.outline.clone());
+    a(true) != a(false)
+}
+
 /// How tall `face`'s lowercase letters are, for a font size of 1: its
 /// `x`, measured. Half an em where it has none.
 pub fn x_height(face: &Face) -> f64 {

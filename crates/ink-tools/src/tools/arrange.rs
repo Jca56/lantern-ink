@@ -175,7 +175,7 @@ fn align_schema() -> Doc {
             ("node_ids", node_ids("The nodes to move")),
             ("x", schema::one_of(&["left", "center", "right"], "Put these edges (or centers) in line, left to right")),
             ("y", schema::one_of(&["top", "middle", "bottom"], "Put these edges (or middles) in line, top to bottom")),
-            ("to", schema::string("What to line up against: \"page\", or a node id like \"N3\" (default: the box around the nodes; the page, for one node)")),
+            ("to", schema::string("What to line up against: \"page\", or a node id like \"N3\" (or \"@name\" inside a batch); default: the box around the nodes (the page, for one node)")),
             ("spread", schema::one_of(&["horizontal", "vertical"], "Share the space between the first and last evenly")),
         ],
     )
@@ -228,7 +228,8 @@ fn align(doc: &Document, input: &In) -> Result<Command, ToolError> {
             None if shown.len() == 1 => (page(), None),
             None => (shown.iter().skip(1).fold(shown[0].1, |all, (_, b)| all.union(b)), None),
             Some(other) => {
-                let id: NodeId = other.parse().map_err(|_| ToolError(format!("\"to\" is \"page\" or a node id like \"N3\", not \"{other}\"")))?;
+                // A node an earlier step of the batch made, by its name.
+                let id: NodeId = if other.starts_with('@') { input.node("to")? } else { other.parse().map_err(|_| ToolError(format!("\"to\" is \"page\" or a node id like \"N3\", not \"{other}\"")))? };
                 let node = doc.node(id).map_err(crate::input::refused_edit)?;
                 (*boxes.get(&id).ok_or_else(|| ToolError(format!("{id} {} shows nowhere, so there's nothing to line up against", tag(node))))?, Some(id))
             }

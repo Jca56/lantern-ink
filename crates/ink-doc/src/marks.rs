@@ -12,7 +12,10 @@
 //!   beside it, and a group it's in can be painted differently; but
 //!   what would move it, rewrite it or take it out (a transform, an
 //!   ungroup, a delete of that group) is refused, saying which node
-//!   holds the lock.
+//!   holds the lock. So is changing what it's drawn with: the gradient,
+//!   clip path or filter it uses by name (and what those use) is held
+//!   by its lock too, or a locked node could be recoloured, or blanked,
+//!   from the side. A copy of it is a new node, and isn't locked.
 
 use crate::command::Command;
 use crate::document::Document;
@@ -21,6 +24,7 @@ use crate::error::{DocError, invalid};
 use crate::id::NodeId;
 use crate::kind::{INK_NS, INK_PREFIX, Kind};
 use crate::node::{local, prefix};
+use crate::refs::{Ids, named};
 
 /// The names of Ink's marks, after its prefix.
 pub const LABEL: &str = "label";
@@ -109,8 +113,42 @@ impl Document {
         self.set_attr(id, &name, locked.then_some("true"))
     }
 
-    /// Refuse reaching `id` as `reach` says, if a lock is in the way.
-    fn reach(&self, id: NodeId, reach: Reach) -> Result<(), DocError> {
+    /// What something locked is drawn with: each gradient, clip path,
+    /// filter or whatever else it uses by name (in an attribute, or by
+    /// a `<style>` rule), and what those use in turn; each with the
+    /// locked node it's used under. A lock holds these too.
+    fn held(&self) -> Vec<(NodeId, NodeId)> {
+        let mut look: Vec<(NodeId, NodeId)> = Vec::new();
+        for lock in self.descendants(self.root).into_iter().filter(|&id| self.is_locked(id)) {
+            look.extend(self.descendants(lock).into_iter().map(|id| (id, lock)));
+        }
+        // Nothing locked, nothing held: the usual case is one walk.
+        if look.is_empty() {
+            return Vec::new();
+        }
+        let ids = Ids::of(self);
+        let mut held: Vec<(NodeId, NodeId)> = Vec::new();
+        while let Some((user, lock)) = look.pop() {
+            let Some(node) = self.get(user) else { continue };
+            let said = node.attrs.iter().map(|a| (a.name.as_str(), a.value.as_str()));
+            let ruled = node.ruled.iter().flat_map(|rules| rules.iter()).map(|said| (&*said.name, &*said.value));
+            for (name, value) in said.chain(ruled) {
+                for used in named(name, value).into_iter().filter_map(|name| ids.get(name)) {
+                    // One under a lock of its own is held by that one.
+                    if self.lock_over(used).is_none() && !held.iter().any(|(def, _)| *def == used) {
+                        held.push((used, lock));
+                        look.extend(self.descendants(used).into_iter().map(|id| (id, lock)));
+                    }
+                }
+            }
+        }
+        held
+    }
+
+    /// Refuse reaching `id` as `reach` says, if a lock is in the way:
+    /// its own, one over it, one in it, or one that holds it (`held`)
+    /// as what a locked node is drawn with.
+    fn reach(&self, id: NodeId, reach: Reach, held: &[(NodeId, NodeId)]) -> Result<(), DocError> {
         // A node that isn't there is the Command's own to refuse.
         if self.get(id).is_none() {
             return Ok(());
@@ -129,6 +167,19 @@ impl Document {
         {
             return invalid(format!("{id} holds {lock}, which is locked: that would move or change it. Unlock {lock} first, or leave {id} as it is"));
         }
+        if reach == Reach::Lock || held.is_empty() {
+            return Ok(());
+        }
+        let holds = |id: NodeId| held.iter().find(|(def, _)| *def == id).copied();
+        if let Some((def, lock)) = std::iter::once(id).chain(self.ancestors(id).map(|n| n.id)).find_map(holds) {
+            let what = if def == id { format!("{id} is") } else { format!("{id} is in {def}, which is") };
+            return invalid(format!("{what} what {lock} is drawn with, and {lock} is locked: nothing it's drawn with changes until {lock} is unlocked"));
+        }
+        if reach == Reach::Deep
+            && let Some((def, lock)) = self.descendants(id).into_iter().skip(1).find_map(holds)
+        {
+            return invalid(format!("{id} holds {def}, which {lock} is drawn with, and {lock} is locked: that would move or change it. Unlock {lock} first, or leave {id} as it is"));
+        }
         Ok(())
     }
 
@@ -143,15 +194,22 @@ impl Document {
     /// Refuse `command` (one that isn't a batch) if it would change
     /// something locked.
     pub(crate) fn guard(&self, command: &Command) -> Result<(), DocError> {
-        let each = |nodes: &[NodeId], reach: Reach| nodes.iter().try_for_each(|&id| self.reach(id, reach));
+        // Tidying steps round what's locked; a batch's Commands are
+        // each guarded as their turn comes.
+        if matches!(command, Command::Tidy { .. } | Command::Batch(_)) {
+            return Ok(());
+        }
+        let held = self.held();
+        let reach = |id: NodeId, reach: Reach| self.reach(id, reach, &held);
+        let each = |nodes: &[NodeId], how: Reach| nodes.iter().try_for_each(|&id| reach(id, how));
         // Something new beside a node goes into that node's parent.
-        let into = |place: Place| self.parent_at(place).map_or(Ok(()), |parent| self.reach(parent, Reach::Own));
-        let beside = |nodes: &[NodeId]| nodes.iter().filter_map(|id| self.get(*id).and_then(|n| n.parent)).try_for_each(|parent| self.reach(parent, Reach::Own));
+        let into = |place: Place| self.parent_at(place).map_or(Ok(()), |parent| reach(parent, Reach::Own));
+        let beside = |nodes: &[NodeId]| nodes.iter().filter_map(|id| self.get(*id).and_then(|n| n.parent)).try_for_each(|parent| reach(parent, Reach::Own));
         match command {
             Command::SetAttr { node, name, .. } => {
                 // The lock itself, said as an attribute, is locking.
                 let is_lock = local(name) == LOCKED && prefix(name).is_some_and(|p| self.namespace(*node, Some(p)) == Some(INK_NS));
-                self.reach(*node, if is_lock { Reach::Lock } else { Reach::Own })
+                reach(*node, if is_lock { Reach::Lock } else { Reach::Own })
             }
             Command::Insert { place, .. } => into(*place),
             Command::Delete { nodes } | Command::Ungroup { nodes, .. } | Command::Transform { nodes, .. } | Command::Boolean { nodes, .. } => each(nodes, Reach::Deep),
@@ -162,16 +220,14 @@ impl Document {
             Command::Duplicate { nodes } => beside(nodes),
             Command::Define { .. } => {
                 let defs = self.get(self.root).and_then(|root| root.elements().find(|&id| self.get(id).is_some_and(|n| n.kind == Kind::Defs)));
-                self.reach(defs.unwrap_or(self.root), Reach::Own)
+                reach(defs.unwrap_or(self.root), Reach::Own)
             }
             Command::SetClip { nodes, by, .. } => each(nodes, Reach::Own).and_then(|()| each(by, Reach::Deep)),
             Command::SetStyle { nodes, .. } | Command::ToPath { nodes } | Command::Simplify { nodes, .. } | Command::TextToPath { nodes, .. } => each(nodes, Reach::Own),
             // The outline may be a new path beside its shape.
             Command::OutlineStroke { nodes, .. } => each(nodes, Reach::Own).and_then(|()| beside(nodes)),
-            Command::EditPath { node, .. } | Command::SetPath { node, .. } | Command::SetText { node, .. } | Command::SetLabel { node, .. } => self.reach(*node, Reach::Own),
+            Command::EditPath { node, .. } | Command::SetPath { node, .. } | Command::SetText { node, .. } | Command::SetLabel { node, .. } => reach(*node, Reach::Own),
             Command::SetLocked { nodes, .. } => each(nodes, Reach::Lock),
-            // Tidying steps round what's locked; a batch's Commands
-            // are each guarded as their turn comes.
             Command::Tidy { .. } | Command::Batch(_) => Ok(()),
         }
     }
@@ -261,14 +317,47 @@ mod tests {
         ok(Command::SetAttr { node: n(6), name: "r".into(), value: Some("3".into()) });
         ok(Command::Insert { place: Place::After(n(2)), elements: vec![crate::node::Element::new("path")] });
         ok(Command::Delete { nodes: vec![n(6), n(7)] });
-        // A copy of a locked node is its own node (and locked like it).
-        let copied = ok(Command::Duplicate { nodes: vec![n(2)] });
-        assert!(copied.is_locked(n(8)) && copied.is_locked(n(2)));
+        // A copy of a locked node is a new node nobody locked, all the
+        // way down: the lock stays where it was put.
+        let copied = ok(Command::Duplicate { nodes: vec![n(2), n(4)] });
+        assert!(copied.is_locked(n(2)) && copied.is_locked(n(5)) && copied.lock_over(n(8)).is_none() && copied.lock_inside(n(10)).is_none());
+        assert!(copied.to_svg().contains(r#"<g id="held-2"><rect id="in-2" width="4" height="4"/></g>"#) && copied.to_svg().contains(r#"<path id="pinned-2" d="M0 0h4"/>"#), "{}", copied.to_svg());
         // Unlocking by the attribute itself is unlocking.
         let unlocked = ok(Command::SetAttr { node: n(2), name: "ink:locked".into(), value: None });
         assert!(!unlocked.is_locked(n(2)));
         // In a batch, what an earlier step unlocked a later one may change.
         ok(Command::Batch(vec![Command::SetLocked { nodes: vec![n(5)], locked: false }, Command::Transform { nodes: vec![n(4)], by: Affine::translate(1.0, 0.0) }, Command::SetLocked { nodes: vec![n(5)], locked: true }]));
+    }
+
+    #[test]
+    fn a_lock_holds_what_its_node_is_drawn_with() {
+        let inner = r##"<defs><linearGradient id="base"><stop offset="0"/></linearGradient><linearGradient id="sky" href="#base"/><clipPath id="cut"><rect id="hole" width="4" height="4"/></clipPath><filter id="free"/></defs><g ink:locked="true"><rect id="kept" width="4" height="4" fill="url(#sky)" clip-path="url(#cut)"/></g><rect id="loose" width="2" height="2" fill="url(#sky)" filter="url(#free)"/>"##;
+        // N2 defs, N3 base, N4 its stop, N5 sky, N6 cut, N7 hole, N8
+        // free, N9 the locked group, N10 kept (in it), N11 loose.
+        let refused = |c: Command| doc(inner).apply(&c).unwrap_err().to_string();
+        let attr = |node: u64, name: &str| Command::SetAttr { node: n(node), name: name.into(), value: Some("1".into()) };
+        let until = "what N9 is drawn with, and N9 is locked: nothing it's drawn with changes until N9 is unlocked";
+        assert_eq!(refused(attr(5, "x2")), format!("N5 is {until}"));
+        assert_eq!(refused(Command::Delete { nodes: vec![n(5)] }), format!("N5 is {until}"));
+        // What it uses uses, and what's in either.
+        assert_eq!(refused(attr(3, "x2")), format!("N3 is {until}"));
+        assert_eq!(refused(attr(4, "offset")), format!("N4 is in N3, which is {until}"));
+        assert_eq!(refused(Command::Transform { nodes: vec![n(7)], by: Affine::translate(1.0, 0.0) }), format!("N7 is in N6, which is {until}"));
+        assert_eq!(refused(Command::Insert { place: Place::LastIn(n(5)), elements: vec![crate::node::Element::new("stop")] }), format!("N5 is {until}"));
+        // From above: the <defs> they're in can't go, or be moved.
+        let above = refused(Command::Delete { nodes: vec![n(2)] });
+        assert!(above.starts_with("N2 holds N") && above.ends_with(", which N9 is drawn with, and N9 is locked: that would move or change it. Unlock N9 first, or leave N2 as it is"), "{above}");
+        // What only loose things use is free, and so is painting them
+        // with something else, or making more to paint with.
+        let ok = |c: Command| assert!(!doc(inner).apply(&c).unwrap_or_else(|e| panic!("{c:?}: {e}")).is_nothing(), "{c:?}");
+        ok(attr(8, "x"));
+        ok(Command::SetStyle { nodes: vec![n(11)], set: vec![("fill".into(), Some("red".into()))] });
+        ok(Command::Define { elements: vec![crate::node::Element::new("linearGradient").with("id", "new")] });
+        // Unlocked, it's all free again.
+        ok(Command::Batch(vec![Command::SetLocked { nodes: vec![n(9)], locked: false }, attr(5, "x2"), attr(4, "offset")]));
+        // What a <style> rule paints a locked node with is held too.
+        let mut ruled = doc(r##"<style>.k { fill: url(#sky) }</style><linearGradient id="sky"/><rect class="k" width="4" height="4" ink:locked="true"/>"##);
+        assert_eq!(ruled.apply(&attr(3, "x2")).unwrap_err().to_string(), "N3 is what N4 is drawn with, and N4 is locked: nothing it's drawn with changes until N4 is unlocked");
     }
 
     #[test]

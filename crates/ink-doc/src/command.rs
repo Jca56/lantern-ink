@@ -93,7 +93,8 @@ pub enum Command {
     /// Make the text `node` say `lines`, each a row of stretches with
     /// whatever lettering or paint each sets for itself
     /// ([`crate::lettering`]): everything that was in it goes. Lines
-    /// are set `leading` ems apart (`None`: 1.2).
+    /// are set `leading` ems apart (`None`: as far as its lines were;
+    /// 1.2 where it had one).
     SetText { node: NodeId, lines: Vec<Vec<Span>>, leading: Option<f64> },
     /// Make each of the texts `nodes` paths that draw what it draws
     /// ([`crate::outlined`]): one path, or a group of them where its
@@ -128,6 +129,9 @@ pub struct Applied {
     pub moved: Vec<NodeId>,
     /// Anchors a path edit made (the node they're in is in `changed`).
     pub anchors: Vec<AnchorId>,
+    /// What went for good because the Command was told to let it: a
+    /// group's opacity or clip path, at an ungroup told to drop them.
+    pub lost: Vec<String>,
 }
 
 impl Applied {
@@ -253,10 +257,11 @@ impl Document {
                     return invalid("there's nothing to ungroup");
                 }
                 for &id in nodes {
-                    let (inside, changed) = self.ungroup(id, *drop)?;
+                    let did = self.ungroup(id, *drop)?;
+                    applied.lost.extend(did.lost);
                     applied.removed.push(id);
-                    applied.moved.extend(inside);
-                    applied.note(changed);
+                    applied.moved.extend(did.inside);
+                    applied.note(did.changed);
                 }
             }
             Command::Transform { nodes, by } => {
@@ -325,7 +330,7 @@ impl Document {
             }
             Command::SetText { node, lines, leading } => {
                 let was = self.markup(*node)?;
-                let (made, gone) = self.set_text(*node, lines, leading.unwrap_or(LEADING))?;
+                let (made, gone) = self.set_text(*node, lines, leading.or_else(|| self.leading(*node)).unwrap_or(LEADING))?;
                 // The same words again, written the same, are no change.
                 if self.markup(*node)? != was {
                     applied.note(vec![*node]);
