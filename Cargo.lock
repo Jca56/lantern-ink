@@ -232,6 +232,7 @@ dependencies = [
  "ink-render",
  "lntrn-app",
  "lntrn-core",
+ "lntrn-data",
  "lntrn-image",
  "lntrn-math",
  "lntrn-props",

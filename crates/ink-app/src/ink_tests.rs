@@ -22,6 +22,7 @@ use crate::tools::Tool;
 
 mod canvas;
 mod ops;
+mod paint;
 mod pointer;
 mod tree;
 

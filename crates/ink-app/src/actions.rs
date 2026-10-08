@@ -140,6 +140,11 @@ impl Ink {
             ROTATE_CW => self.op(Op::Quarter(true), cx),
             ROTATE_CCW => self.op(Op::Quarter(false), cx),
             LOCK => self.op(Op::Lock, cx),
+            PALETTE_OP => {
+                if let (Some(Value::Str(op)), Some(Value::I64(index))) = (action.arg("op"), action.arg("index")) {
+                    self.palette_op(op, usize::try_from(*index).unwrap_or(usize::MAX));
+                }
+            }
             ESCAPE => self.escape(),
             NUDGE => {
                 if let (Some(Value::F64(dx)), Some(Value::F64(dy))) = (action.arg("dx"), action.arg("dy")) {

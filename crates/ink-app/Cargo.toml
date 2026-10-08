@@ -20,6 +20,7 @@ ink-geom.workspace = true
 ink-render.workspace = true
 lntrn-app.workspace = true
 lntrn-core.workspace = true
+lntrn-data.workspace = true
 lntrn-image.workspace = true
 lntrn-math.workspace = true
 lntrn-props.workspace = true

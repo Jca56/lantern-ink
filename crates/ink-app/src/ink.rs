@@ -63,6 +63,14 @@ pub struct Ink {
     /// frame; and a paste waiting for the clipboard's text.
     pub(crate) clip_out: Option<String>,
     pub(crate) pasting: Option<crate::ops::Pasting>,
+    /// The paint section: its face, the one colour picker, the
+    /// palettes, what the next shape drawn is painted with, and a
+    /// paint being dragged to.
+    pub(crate) paint_panel: crate::colour::section::Section,
+    pub(crate) picker: crate::colour::picker::Picker,
+    pub(crate) palettes: crate::colour::palettes::Library,
+    pub(crate) paints: crate::paint::Paints,
+    pub(crate) painting: Option<crate::painting::Painting>,
     /// The panel's width while its grip is dragged, logical px.
     pub(crate) panel_drag: Option<f64>,
     /// Last frame's regions.
@@ -105,6 +113,11 @@ impl Ink {
             boxing: None,
             clip_out: None,
             pasting: None,
+            paint_panel: crate::colour::section::Section::default(),
+            picker: crate::colour::picker::Picker::default(),
+            palettes: crate::colour::palettes::Library::load(crate::settings::dir().as_deref(), crate::settings::studio_palettes().as_deref()),
+            paints: crate::paint::Paints::default(),
+            painting: None,
             panel_drag: None,
             layout: Layout::default(),
             toast: None,

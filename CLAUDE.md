@@ -805,6 +805,42 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **`pointer.rs` is 480 lines:** the next thing the Pointer learns
     wants its picking (`pick`, `caught`) moved out first.
 
+- **M4c (paint and the shape tools) is under way**, in four pieces:
+  **c1** fill, stroke and the picker, **c2** stroke settings, opacity
+  and a gradient as a kind of paint, **c3** the shape tools, **c4** a
+  drawn shape's own handles. Alva's calls, 2026-10-08: **Fill and
+  Stroke are two rows** at the top of the right panel (a swatch, its
+  hex, and the kind of paint), with the stroke's settings, the
+  opacity, the palette grid and the palettes under them; **Ink starts
+  with her LS3 palettes** (read once, then its own file); and **each
+  piece is committed and pushed once it's tested and deployed, without
+  asking first** ("M4c fill, stroke and the picker", "M4c stroke
+  settings", "M4c shape tools", "M4c shape handles"), **stopping with a
+  checklist after each**.
+- **M4c's c1 is built** (2026-10-08, 461 tests, deployed; **not yet
+  looked at by Alva**).
+  - **The paint model** is `paint.rs`: `Paint` (none, a colour whose
+    alpha is its opacity, a gradient by name), `Paints` (a fill and a
+    stroke), `read` (a node as it's drawn: what it says over what it
+    inherits), `painted` (the shapes and texts a selection's paint goes
+    on, through its groups) and `set` (the properties that say a
+    paint).
+  - **`painting.rs`** is the window's side: `Ink::paints` is what the
+    section shows with nothing selected and what the next shape will
+    get; `set_paint` puts a paint on the selection (one `SetStyle`,
+    labelled "Fill" or "Stroke") and, while the button is down on what
+    chose it, as a gesture (`Ink::painting`).
+  - **`colour/`**: `picker.rs`, `palettes.rs` and `drawer.rs` are
+    LS3's files, copied and retitled (keep them near LS3's: a fix
+    there wants making here); `section.rs` is Ink's own face for them.
+    Palettes are `~/.lantern/config/lantern-ink/palettes.json`,
+    started from Studio's (`settings::studio_palettes`).
+  - The palette grid's swatches are capped at 36 px so a full palette
+    of 64 leaves the tree its room.
+  - **Not in c1:** the gradient kind and the picker for its stops (c2
+    makes one; e edits it), the stroke's width and the rest (c2), the
+    node's opacity (c2), a swatch in a tree row.
+
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a
   machine whose LUI2 is behind won't even load the workspace (it was

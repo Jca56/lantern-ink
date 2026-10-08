@@ -51,6 +51,8 @@ pub const FLIP_V: &str = "object.flip_v";
 pub const ROTATE_CW: &str = "object.rotate_cw";
 pub const ROTATE_CCW: &str = "object.rotate_ccw";
 pub const LOCK: &str = "object.lock";
+/// A row of a palette swatch's menu: `op`, on swatch `index`.
+pub const PALETTE_OP: &str = "palette.op";
 pub const ZOOM_IN: &str = "view.zoom_in";
 pub const ZOOM_OUT: &str = "view.zoom_out";
 pub const FIT: &str = "view.fit";

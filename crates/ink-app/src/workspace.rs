@@ -78,6 +78,10 @@ impl Ink {
             }
             None => {}
         }
+        // The paint section, then the object tree in what's left of the
+        // panel under it.
+        let (paint_h, swatch_menu) = self.paint_section(ui, l.panel, ui.clip());
+        let tree_room = Rect::new(Vec2::new(l.panel.min.x, (l.panel.min.y + paint_h).min(l.panel.max.y)), l.panel.max);
         // The object tree, of the drawing as it looks: what it asks for
         // is done once it's drawn.
         let shown = self.tabs.active_mut().and_then(|tab| {
@@ -86,7 +90,7 @@ impl Ink {
             Some((tab.doc, drawing, &mut tab.selection))
         });
         let doc = shown.as_ref().map(|(doc, ..)| *doc);
-        let asked = tree::draw(ui, l.panel, &mut self.tree, shown.map(|(_, drawing, selection)| (drawing, selection)), &self.icons);
+        let asked = tree::draw(ui, tree_room, &mut self.tree, shown.map(|(_, drawing, selection)| (drawing, selection)), &self.icons);
         let mut menu_at = None;
         if let Some(doc) = doc {
             for intent in asked {
@@ -138,7 +142,10 @@ impl Ink {
             }
         }
         // A right press on a row or on the canvas: the selection's menu.
-        if let Some(at) = menu_at.or(self.pointing.menu_at.take()) {
+        // On a palette swatch: that swatch's.
+        if let Some(menu) = swatch_menu {
+            cx.request(ShellRequest::ContextMenu(Box::new(menu)));
+        } else if let Some(at) = menu_at.or(self.pointing.menu_at.take()) {
             cx.request(ShellRequest::ContextMenu(Box::new(self.selection_menu(at))));
         }
     }

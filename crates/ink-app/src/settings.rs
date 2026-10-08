@@ -29,9 +29,15 @@ props! {
     }
 }
 
-fn dir() -> Option<PathBuf> {
+/// Ink's own config folder.
+pub(crate) fn dir() -> Option<PathBuf> {
     // Tests keep their hands off the real settings.
     if cfg!(test) { None } else { persist::config_dir(APP_ID) }
+}
+
+/// Lantern Studio's palettes: what Ink's start as, the first time.
+pub(crate) fn studio_palettes() -> Option<PathBuf> {
+    if cfg!(test) { None } else { persist::config_dir("lantern-studio").map(|d| d.join("palettes.json")) }
 }
 
 impl Settings {

@@ -848,6 +848,25 @@ As LS3 §7, to the letter where it can be:
   window for what it wants done (`tree::Intent`); the window applies
   each as one Command (`edits.rs`). What's selected, what's open and
   what's being renamed are the tab's, not the document's.
+  **The paint section, as built in M4c** (`ink-app/src/colour/`,
+  `paint.rs`, `painting.rs`), over the tree:
+  - A row each for Fill and Stroke (Alva's choice of layout): a swatch
+    that opens the picker, the colour in hex beside it, and what kind
+    of paint it is. It shows the paint of what's selected, read as it's
+    drawn (what a node says over what it inherits); with nothing
+    selected, what the next shape drawn will get.
+  - **A paint set goes on every shape and text of the selection**
+    (through its groups: set on a group it would be outvoted by
+    whatever in the group says its own), as `Command::SetStyle`: the
+    colour as `#rrggbb`, its opacity beside it as `fill-opacity` or
+    `stroke-opacity`, taken off when it's whole.
+  - **The picker, the palettes and their drawer are LS3's**, copied
+    (D12): one picker for the window, floating by the swatch it was
+    opened for. A colour dragged in it (or a palette swatch held) is a
+    gesture in the core, landing as one step when the button comes up.
+  - A palette swatch pressed is the fill; with Shift, the stroke.
+    Ink's palettes are its own file; the first time, Lantern Studio's
+    are read in its place (Alva's choice).
 - **The canvas:** the CPU renderer draws 256 px tiles on the job pool at
   the current zoom, and the window shows them as LUI2 images. While
   zooming, the old tiles stretch until sharp ones land; a frame never
