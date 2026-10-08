@@ -57,8 +57,19 @@ fn renamed(value: &str, names: &HashMap<String, String>) -> Option<String> {
 /// of the old ones at the new: a copy must not answer to its
 /// original's name, and what's in it should go on using what's in it.
 fn rename(el: &mut Element, taken: &mut HashSet<String>) {
-    fn collect(el: &Element, taken: &mut HashSet<String>, names: &mut HashMap<String, String>) {
-        if let Some(old) = el.attr("id") {
+    rename_if(el, taken, false);
+}
+
+/// The same for what comes from another drawing: only an `id` that's
+/// taken here needs another. The rest keep theirs, which are then
+/// taken too.
+pub(crate) fn rename_taken(el: &mut Element, taken: &mut HashSet<String>) {
+    rename_if(el, taken, true);
+}
+
+fn rename_if(el: &mut Element, taken: &mut HashSet<String>, only_taken: bool) {
+    fn collect(el: &Element, taken: &mut HashSet<String>, names: &mut HashMap<String, String>, only_taken: bool) {
+        if let Some(old) = el.attr("id").filter(|old| !only_taken || !taken.insert((*old).to_owned())) {
             // "sun" becomes "sun-2", and that "sun-3".
             let stem = old.rsplit_once('-').filter(|(_, n)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())).map_or(old, |(stem, _)| stem);
             let new = (2..).map(|n| format!("{stem}-{n}")).find(|name| !taken.contains(name)).expect("there is always another number");
@@ -67,7 +78,7 @@ fn rename(el: &mut Element, taken: &mut HashSet<String>) {
         }
         for child in &el.children {
             if let Content::Element(child) = child {
-                collect(child, taken, names);
+                collect(child, taken, names, only_taken);
             }
         }
     }
@@ -89,7 +100,7 @@ fn rename(el: &mut Element, taken: &mut HashSet<String>) {
         }
     }
     let mut names = HashMap::new();
-    collect(el, taken, &mut names);
+    collect(el, taken, &mut names, only_taken);
     if !names.is_empty() {
         apply(el, &names);
     }

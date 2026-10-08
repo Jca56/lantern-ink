@@ -211,7 +211,7 @@ impl Document {
                 let is_lock = local(name) == LOCKED && prefix(name).is_some_and(|p| self.namespace(*node, Some(p)) == Some(INK_NS));
                 reach(*node, if is_lock { Reach::Lock } else { Reach::Own })
             }
-            Command::Insert { place, .. } => into(*place),
+            Command::Insert { place, .. } | Command::Paste { place, .. } => into(*place),
             Command::Delete { nodes } | Command::Ungroup { nodes, .. } | Command::Transform { nodes, .. } | Command::Resize { nodes, .. } | Command::Boolean { nodes, .. } => each(nodes, Reach::Deep),
             Command::Move { nodes, place } => each(nodes, Reach::Deep).and_then(|()| into(*place)),
             Command::Group { nodes } => each(nodes, Reach::Deep).and_then(|()| beside(nodes)),

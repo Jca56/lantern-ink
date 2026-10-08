@@ -31,6 +31,8 @@ pub struct Cx<'a> {
     /// to settle (a row among several selected: all of them may be
     /// about to be dragged).
     pub pressed: Option<(NodeId, bool)>,
+    /// A right press landed on a row this frame.
+    pub menu: bool,
     /// Rows are being dragged: none lights up under the pointer.
     pub dragging: bool,
 }
@@ -201,6 +203,17 @@ pub fn draw(ui: &mut Ui, r: Rect, row: Row, cx: &mut Cx) {
                 cx.pressed = Some((row.id, false));
             }
         }
+        ui.state.request_rebuild = true;
+    }
+    // A right press: the row's menu, for the selection it's in (or it
+    // alone, if it wasn't in one).
+    if !renaming && ui.state.right_pressed && !ui.state.shielded(ui.layer(), ui.state.right_press_pos) && card.intersection(&ui.clip()).contains(ui.state.right_press_pos) {
+        if !cx.sel.is_selected(row.id) {
+            cx.sel.click(document, row.id, Click::Plain);
+        } else {
+            cx.sel.active = Some(row.id);
+        }
+        cx.menu = true;
         ui.state.request_rebuild = true;
     }
     ui.pop_id();

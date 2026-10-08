@@ -763,6 +763,47 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Not in b3:** a box turned with the one thing in it (the box is
     always upright, so a turned rect scaled unevenly skews); snapping
     (slice f); a right-click menu (b4); dragging with Alt to copy.
+- **M4b's b4 is built** (2026-10-08, 450 tests, deployed; **not yet
+  looked at by Alva**), and with it **all of M4b**. Next: M4c (paint
+  and the shape tools), once she has looked at b4.
+  - **`ops.rs`** is the Edit and Object menus' work: `Ink::op(Op, cx)`
+    for every row, the keys and the right-click menu
+    (`selection_menu`). `Picked` is what the menus need of the
+    selection to light their rows. Order (`restack`) moves things past
+    the next one in their own group's stack that isn't selected; "to
+    the back" is over the definitions, never under them.
+  - **Two new Commands' worth in `ink-doc`:** `Command::Paste` and
+    `Document::clipping` (`paste.rs`), and `arrange.rs` (lining up and
+    spreading out: `ink-tools`' `node_align` uses it too now, so the
+    window and Claude can't disagree).
+  - **Copy and paste are two frames each** (`Ink::clip_out`,
+    `Ink::pasting`): an action has no `Ui`, so what's copied goes to
+    `ui.state.set_clipboard` with the next frame, and a paste asks for
+    the system's text (`clipboard_wanted`) in one frame and reads it in
+    the next.
+  - **The Box** is `toolbox.rs` (LS3's frame: the square, the panel)
+    and `boxes.rs` (what it holds with the Pointer in hand). A number
+    dragged along is `Ink::boxing`: a gesture, like a drag on the
+    canvas, with the selection's box on the canvas carried along
+    (`Pointer::carried`); while a drag on the canvas goes, the numbers
+    read where it has the box (`Pointer::live`).
+  - **`controls/`** is LS3's number field and toggle, copied (D12). The
+    slider, dropdown and button come when a slice needs them: copy
+    LS3's file, don't write another.
+  - **Nothing floats over the canvas without `Ui::child` on a layer
+    above it:** that's what keeps a press on the Box from being the
+    canvas's. (An `interact` across the whole panel took every press
+    from the rows in it: drawn first wins.)
+  - `Settings` has `scale_strokes` and `align_to_page` now.
+  - **Left as they are, for Alva to say:** paste lands where it was
+    copied from (no offset, not at the pointer); a copy of something
+    inside a group leaves behind what it inherited from the group (its
+    place is made up for, its group's paint isn't); pasted `<style>`
+    rules are dropped; the clipboard is plain text (no `image/svg+xml`
+    without a LUI2 change); `node_transform` has no way to keep strokes
+    yet (`Command::Resize` is the window's only).
+  - **`pointer.rs` is 480 lines:** the next thing the Pointer learns
+    wants its picking (`pick`, `caught`) moved out first.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

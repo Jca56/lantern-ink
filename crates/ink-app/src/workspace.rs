@@ -5,7 +5,7 @@ use ink_core::DocId;
 use ink_doc::Viewport;
 use ink_geom::Affine;
 use lntrn_math::{Rect, Vec2};
-use lntrn_ui::{AreaCx, CursorIcon, Ui};
+use lntrn_ui::{AreaCx, CursorIcon, ShellRequest, Ui};
 
 use crate::camera::{CLICK_STEP, Camera};
 use crate::canvas::{self, Hold};
@@ -14,6 +14,7 @@ use crate::chrome::status::{Click, Status};
 use crate::chrome::tabs::{TabClick, TabLabel};
 use crate::ink::{Ink, TOAST_SECONDS};
 use crate::layout::Layout;
+use crate::ops::Pasting;
 use crate::pointer::View;
 use crate::tools::Tool;
 use crate::{chrome, overlay, page, tree};
@@ -28,6 +29,24 @@ impl Ink {
         let popup = ui.state.shields().iter().any(|(_, layer)| *layer >= lntrn_ui::POPUP_LAYER);
         if popup && ui.state.pressed {
             ui.state.press_claimed = true;
+        }
+        // The clipboard: what was copied goes out with this frame; a
+        // paste is asked of the system in one frame and done with what
+        // the next one has.
+        if let Some(svg) = self.clip_out.take() {
+            ui.state.set_clipboard(svg);
+        }
+        match self.pasting.take() {
+            Some(Pasting::Wanted(doc)) => {
+                ui.state.clipboard_wanted = true;
+                ui.state.request_rebuild = true;
+                self.pasting = Some(Pasting::Asked(doc));
+            }
+            Some(Pasting::Asked(doc)) => {
+                let svg = ui.state.clipboard.clone();
+                self.paste(doc, svg);
+            }
+            None => {}
         }
         let now = ui.now();
         if let Some(text) = self.pending_toast.take() {
@@ -68,9 +87,13 @@ impl Ink {
         });
         let doc = shown.as_ref().map(|(doc, ..)| *doc);
         let asked = tree::draw(ui, l.panel, &mut self.tree, shown.map(|(_, drawing, selection)| (drawing, selection)), &self.icons);
+        let mut menu_at = None;
         if let Some(doc) = doc {
             for intent in asked {
-                self.tree_asked(doc, intent);
+                match intent {
+                    tree::Intent::Menu(at) => menu_at = Some(at),
+                    intent => self.tree_asked(doc, intent),
+                }
             }
         }
 
@@ -102,9 +125,21 @@ impl Ink {
 
         self.pointer = None;
         match (self.tabs.active_doc(), viewport) {
-            (Some(doc), Some(viewport)) => self.canvas(ui, l.canvas, doc, &viewport, click, popup),
+            (Some(doc), Some(viewport)) => {
+                // The Box first: a press on it is its own, not the
+                // canvas's under it.
+                self.the_box(ui, l.canvas);
+                self.canvas(ui, l.canvas, doc, &viewport, click, popup);
+            }
             // No drawing yet: the files it started with are on their way.
-            _ => ui.draw.rect(l.canvas, crate::theme::GROUND),
+            _ => {
+                self.toolbox.gone();
+                ui.draw.rect(l.canvas, crate::theme::GROUND);
+            }
+        }
+        // A right press on a row or on the canvas: the selection's menu.
+        if let Some(at) = menu_at.or(self.pointing.menu_at.take()) {
+            cx.request(ShellRequest::ContextMenu(Box::new(self.selection_menu(at))));
         }
     }
 

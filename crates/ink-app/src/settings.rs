@@ -23,6 +23,9 @@ props! {
         /// A shape scaled by its handles has its stroke scale with it
         /// (off: the stroke keeps its width).
         pub scale_strokes: bool = false => { id: 2 },
+        /// Object > Align lines things up against the page, not the
+        /// box round what's selected.
+        pub align_to_page: bool = false => { id: 3 },
     }
 }
 

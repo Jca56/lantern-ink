@@ -4,7 +4,7 @@
 //! Command, one undo step.
 
 use ink_core::ink_doc::geometry::page_bounds;
-use ink_core::ink_doc::{Document, Viewport};
+use ink_core::ink_doc::{Document, arrange};
 use ink_core::{Applied, Command, NodeId};
 use ink_geom::{Affine, Rect, Vec2};
 use lntrn_data::{Doc, Map};
@@ -181,12 +181,6 @@ fn align_schema() -> Doc {
     )
 }
 
-/// How far along `whole` a box's `part` goes for an alignment: at its
-/// start, its middle or its end.
-fn along(at: f64, from: f64, to: f64) -> f64 {
-    from + (to - from) * at
-}
-
 fn align(doc: &Document, input: &In) -> Result<Command, ToolError> {
     let nodes = input.nodes("node_ids")?;
     let boxes = page_bounds(doc);
@@ -218,14 +212,9 @@ fn align(doc: &Document, input: &In) -> Result<Command, ToolError> {
     }
     let mut moves: Vec<(NodeId, Vec2)> = shown.iter().map(|(id, _)| (*id, Vec2::ZERO)).collect();
     if x.is_some() || y.is_some() {
-        let page = || {
-            let v = Viewport::of(doc.node(doc.root()).expect("a document has its root"));
-            let (a, b) = v.to_page.inverse().map_or((Vec2::ZERO, v.size), |back| (back.apply(Vec2::ZERO), back.apply(v.size)));
-            Rect::new(a.min(b), a.max(b))
-        };
         let (against, still) = match input.args.opt_str("to")? {
-            Some("page") => (page(), None),
-            None if shown.len() == 1 => (page(), None),
+            Some("page") => (arrange::page_box(doc), None),
+            None if shown.len() == 1 => (arrange::page_box(doc), None),
             None => (shown.iter().skip(1).fold(shown[0].1, |all, (_, b)| all.union(b)), None),
             Some(other) => {
                 // A node an earlier step of the batch made, by its name.
@@ -234,17 +223,7 @@ fn align(doc: &Document, input: &In) -> Result<Command, ToolError> {
                 (*boxes.get(&id).ok_or_else(|| ToolError(format!("{id} {} shows nowhere, so there's nothing to line up against", tag(node))))?, Some(id))
             }
         };
-        for ((id, b), (_, shift)) in shown.iter().zip(&mut moves) {
-            if still == Some(*id) {
-                continue;
-            }
-            if let Some(at) = x {
-                shift.x = along(at, against.min.x, against.max.x) - along(at, b.min.x, b.max.x);
-            }
-            if let Some(at) = y {
-                shift.y = along(at, against.min.y, against.max.y) - along(at, b.min.y, b.max.y);
-            }
-        }
+        moves = arrange::line_up(&shown, x, y, against, still);
     }
     if let Some(way) = spread {
         let across = match way {
@@ -255,21 +234,10 @@ fn align(doc: &Document, input: &In) -> Result<Command, ToolError> {
         if shown.len() < 3 {
             return fail("spread shares out the space between the first and the last: it takes three nodes or more");
         }
-        let side = |b: &Rect| if across { (b.min.x, b.max.x) } else { (b.min.y, b.max.y) };
-        // In the order they stand, the outer two staying put: the gaps
-        // between them are made the same.
-        let mut order: Vec<usize> = (0..shown.len()).collect();
-        order.sort_by(|&a, &b| side(&shown[a].1).0.total_cmp(&side(&shown[b].1).0));
-        let (start, end) = (side(&shown[order[0]].1).0, order.iter().map(|&i| side(&shown[i].1).1).fold(f64::MIN, f64::max));
-        let taken: f64 = order.iter().map(|&i| side(&shown[i].1).1 - side(&shown[i].1).0).sum();
-        let gap = (end - start - taken) / (shown.len() - 1) as f64;
-        let mut at = start;
-        for &i in &order {
-            let (lo, hi) = side(&shown[i].1);
-            if across { moves[i].1.x = at - lo } else { moves[i].1.y = at - lo }
-            at += hi - lo + gap;
+        // That way it's the spread's to say, whatever lined them up.
+        for ((_, total), (_, shared)) in moves.iter_mut().zip(arrange::spread(&shown, across)) {
+            if across { total.x = shared.x } else { total.y = shared.y }
         }
     }
-    let commands: Vec<Command> = moves.into_iter().filter(|(_, d)| *d != Vec2::ZERO).map(|(id, d)| Command::Transform { nodes: vec![id], by: Affine::translate(d.x, d.y) }).collect();
-    Ok(Command::Batch(commands))
+    Ok(arrange::moved(moves))
 }

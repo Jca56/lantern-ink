@@ -120,6 +120,12 @@ pub enum Command {
     /// everything in it, refuses every other Command until it's
     /// unlocked.
     SetLocked { nodes: Vec<NodeId>, locked: bool },
+    /// Put what the drawing `svg` holds (text off the clipboard) into
+    /// this one ([`crate::Document::clipping`] makes such text): what it
+    /// draws at `place`, its definitions into `<defs>`. A definition
+    /// this drawing has already is used as it is; any other `id` that's
+    /// taken gets another, and what's pasted goes by that.
+    Paste { svg: String, place: Place },
     /// Several Commands as one step: all of them, or none.
     Batch(Vec<Command>),
 }

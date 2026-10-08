@@ -21,6 +21,7 @@
 //! `<text>` draws, set in the machine's [`fonts`]).
 
 mod apply;
+pub mod arrange;
 mod clip;
 mod boolean;
 pub mod color;
@@ -43,6 +44,7 @@ pub mod marks;
 mod node;
 pub mod outline;
 mod outlined;
+mod paste;
 pub mod pathedit;
 pub mod paths;
 mod props;

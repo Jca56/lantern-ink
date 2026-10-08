@@ -253,7 +253,7 @@ all-or-nothing before anything changes. Families:
 
 | | Commands |
 |---|---|
-| Structure | `Insert`, `Delete`, `Move` (reorder or re-parent, keeping the look), `Duplicate`, `Group`, `Ungroup` |
+| Structure | `Insert`, `Delete`, `Move` (reorder or re-parent, keeping the look), `Duplicate`, `Group`, `Ungroup`, `Paste` (a drawing off the clipboard put into this one, M4b) |
 | Geometry | `SetGeometry` (a shape's own numbers), `SetPath`, `Transform` (any affine on any nodes, D13), `Resize` (the same, lines left as they are: what a handle does, M4b), `ToPath` |
 | Style | `SetStyle` (fill, stroke, width, caps, joins, dashes, opacity, rule), `SetGradient`, `SetClip`, `SetFilter` |
 | Path work | `Boolean` (union, subtract, intersect, exclude), `OutlineStroke`, `Simplify`, `Reverse`, `Join`, `Break` |
@@ -967,6 +967,37 @@ As LS3 §7, to the letter where it can be:
   - The arrow keys nudge by a unit of the drawing (ten with Shift),
     each press a step. In the middle of a drag no key does anything but
     Escape, which gives the drag up.
+  **The menus' work and the Box, as built in M4b** (`ops.rs`,
+  `boxes.rs`, `toolbox.rs`, `controls/`):
+  - **Every row of Edit and Object is one Command on the selection**
+    (`Ink::op`): what's selected afterwards is what the step made or
+    left (a copy, a new group, a group's children). The same rows are
+    on the keys and in the menu a right-click opens, on the canvas or
+    on a row of the tree (`selection_menu`).
+  - **The clipboard is SVG text** (`ink-doc/src/paste.rs`). A copy is a
+    drawing of its own (`Document::clipping`): the things picked, each
+    out at the top level showing where it showed, with the definitions
+    they're drawn with, under the drawing's own `<svg>`. A paste is
+    `Command::Paste`: what that drawing draws goes on top of the level
+    the Pointer is in, where it was copied from; a definition the
+    drawing has already is used as it is, and any other `id` that's
+    taken gets another. It goes out as plain text (LUI2 has text and
+    pictures on its clipboard): apps that read pasted SVG markup take
+    it; one that wants the `image/svg+xml` type would need that added
+    to LUI2.
+  - **Lining up is one reckoning** for the window and for Claude's
+    `node_align` (`ink-doc/src/arrange.rs`): several things against the
+    box round them all, one alone (or with "To the Page" ticked)
+    against the page.
+  - **The Box** is LS3's: a gold square at the canvas's top right that
+    opens a panel. With the Pointer in hand it holds the selection's
+    X, Y, W and H (dragged along, a gesture in the core that lands as
+    one step; typed in, one step at once; scaled about the top left
+    corner) and the Pointer's own "Scale strokes". Other tools'
+    settings come with their tools.
+  - **A group that would lose something by being ungrouped is asked
+    about** (a dialog, "Ungroup anyway?") instead of refused: §3.4's
+    refusal is for a caller who can say `drop`.
 - **Tools, first set:** Pointer (select, move, scale, rotate), Node
   (anchors and handles; drag a segment to bend it), Pen (click points,
   bend after: Alva's May preference, D17), Rectangle, Ellipse, Line,

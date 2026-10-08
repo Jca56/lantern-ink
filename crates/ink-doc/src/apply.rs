@@ -116,6 +116,10 @@ impl Document {
                 let made = self.define(elements)?;
                 applied.created.extend(made);
             }
+            Command::Paste { svg, place } => {
+                let made = self.paste(svg, *place)?;
+                applied.created.extend(made);
+            }
             Command::SetClip { nodes, by, id } => {
                 let did = if by.is_empty() { self.unclip(nodes)? } else { self.clip(nodes, by, id)? };
                 applied.created.extend(did.created);

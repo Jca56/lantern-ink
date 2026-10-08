@@ -32,6 +32,8 @@ pub enum Intent {
     Rename(NodeId, String),
     /// Put these, back to front, there.
     Move(Vec<NodeId>, Place),
+    /// Open the selection's menu here (window px).
+    Menu(Vec2),
 }
 
 /// What the tree keeps between frames.
@@ -78,7 +80,7 @@ pub fn draw(ui: &mut Ui, r: Rect, st: &mut Tree, shown: Option<(&Document, &mut 
     };
     let rows = sel.rows(document);
     let dragging = st.drag.is_some_and(|(d, _)| d.live);
-    let mut cx = rows::Cx { document, sel, icons, out: &mut out, pressed: None, dragging };
+    let mut cx = rows::Cx { document, sel, icons, out: &mut out, pressed: None, menu: false, dragging };
     let mut laid = Vec::with_capacity(rows.len());
     let layer = ui.layer();
     let scroll = ui.id("list");
@@ -101,7 +103,7 @@ pub fn draw(ui: &mut Ui, r: Rect, st: &mut Tree, shown: Option<(&Document, &mut 
             ui.state.request_rebuild = true;
         }
     });
-    let rows::Cx { sel, pressed, .. } = cx;
+    let rows::Cx { sel, pressed, menu, .. } = cx;
     // A row asked for that's out of sight: the list goes to it.
     if let Some((_, r)) = st.scroll_to.take().and_then(|id| laid.iter().find(|(row, _)| row.id == id)) {
         let by = if r.min.y < list.min.y {
@@ -163,6 +165,9 @@ pub fn draw(ui: &mut Ui, r: Rect, st: &mut Tree, shown: Option<(&Document, &mut 
             }
             st.drag = None;
         }
+    }
+    if menu {
+        out.push(Intent::Menu(ui.state.right_press_pos));
     }
     ui.pop_id();
     out

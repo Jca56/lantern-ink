@@ -88,6 +88,16 @@ pub struct Pointer {
     /// The last refusal said during this drag: said once, not at every
     /// frame.
     said: Option<String>,
+    /// A drag going on somewhere else (a number of the Box): what it
+    /// has the selection going through this frame, so its box on the
+    /// canvas goes along.
+    pub(crate) carried: Option<(DocId, Affine)>,
+    /// A right press on the canvas this frame: where its menu opens.
+    pub(crate) menu_at: Option<Vec2>,
+    /// The selection's box as a drag on the canvas has it this frame,
+    /// in the drawing's coordinates: what the Box's numbers read while
+    /// it goes.
+    pub(crate) live: Option<Rect>,
 }
 
 impl Pointer {
@@ -206,6 +216,23 @@ impl Ink {
         let (mut ask, mut show, mut say) = (Vec::new(), None, None);
         let mut scene = Scene { handles: active, ..Scene::default() };
         let mut by = Affine::IDENTITY;
+        // A right press: on something not picked, it's picked first;
+        // then the selection's menu opens there.
+        if active && input.over && ui.state.right_pressed && self.pointing.drag.is_none() {
+            match pick(drawing, context, at, REACH * s / per_unit) {
+                Some((node, out)) if !sel.is_selected(node) => {
+                    sel.click(drawing, node, Click::Plain);
+                    if out {
+                        sel.within = None;
+                    }
+                    show = Some(node);
+                }
+                None if zone.is_none() => sel.clear(),
+                _ => {}
+            }
+            self.pointing.menu_at = Some(pointer);
+        }
+        let carried = self.pointing.carried.take().filter(|(on, _)| *on == doc).map(|(_, by)| by);
         let released = input.released || !input.held;
         let drag = match self.pointing.drag.take().map(|(_, drag)| drag) {
             None if active && input.pressed => {
@@ -310,12 +337,15 @@ impl Ink {
             Some(Drag::Shaping { was, nodes, .. }) => {
                 scene.boxes = nodes.iter().map(|(_, b)| view.quad(*b, &by)).collect();
                 scene.joint = Some(view.quad(*was, &by));
+                self.pointing.live = Some(by.bounds(was));
             }
             _ => {
-                // After a pick this frame, the selection's as it is now.
+                // After a pick this frame, the selection's as it is now;
+                // and where a number of the Box has it going.
+                let through = carried.unwrap_or(Affine::IDENTITY);
                 let tops: Vec<Rect> = sel.tops(drawing).into_iter().filter_map(|id| boxes.get(&id).copied()).collect();
-                scene.joint = tops.iter().copied().reduce(|a, b| a.union(&b)).map(|j| view.quad(j, &Affine::IDENTITY));
-                scene.boxes = tops.into_iter().map(|b| view.quad(b, &Affine::IDENTITY)).collect();
+                scene.joint = tops.iter().copied().reduce(|a, b| a.union(&b)).map(|j| view.quad(j, &through));
+                scene.boxes = tops.into_iter().map(|b| view.quad(b, &through)).collect();
                 if drag.is_none()
                     && let Some(zone) = zone
                 {

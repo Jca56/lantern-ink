@@ -52,6 +52,7 @@ pub const FONT_SM: f64 = 18.0;
 pub const FONT_BASE: f64 = 20.0;
 pub const FONT_MD: f64 = 22.0;
 pub const FONT_LG: f64 = 24.0;
+pub const FONT_2XL: f64 = 30.0;
 pub const FONT_3XL: f64 = 34.0;
 
 // Chrome sizes (LS3's).

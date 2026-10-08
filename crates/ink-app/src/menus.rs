@@ -9,6 +9,7 @@ use lntrn_ui::{Action, Key, KeyConfig, KeyItem, KeyPress, Menu, MenuItem, Modifi
 
 use ink_core::{Actor, Step};
 
+use crate::ops::Picked;
 use crate::settings::Recent;
 use crate::tools;
 
@@ -24,6 +25,32 @@ pub const CLEAR_RECENT: &str = "file.clear_recent";
 pub const CLOSE_TAB: &str = "file.close_tab";
 pub const UNDO: &str = "edit.undo";
 pub const REDO: &str = "edit.redo";
+pub const CUT: &str = "edit.cut";
+pub const COPY: &str = "edit.copy";
+pub const PASTE: &str = "edit.paste";
+pub const DUPLICATE: &str = "edit.duplicate";
+pub const DELETE: &str = "edit.delete";
+pub const SELECT_ALL: &str = "edit.select_all";
+pub const DESELECT: &str = "edit.deselect";
+pub const GROUP: &str = "object.group";
+pub const UNGROUP: &str = "object.ungroup";
+/// "Ungroup anyway?" answered yes: what only the group held goes.
+pub const UNGROUP_ANYWAY: &str = "object.ungroup_anyway";
+pub const TO_FRONT: &str = "object.to_front";
+pub const FORWARD: &str = "object.forward";
+pub const BACKWARD: &str = "object.backward";
+pub const TO_BACK: &str = "object.to_back";
+/// Line the selection up: `x` or `y`, which part of each (0, 0.5, 1).
+pub const ALIGN: &str = "object.align";
+/// Whether Align is against the page: a setting, flipped.
+pub const ALIGN_TO_PAGE: &str = "object.align_to_page";
+/// Share the space out: `across`, or down.
+pub const DISTRIBUTE: &str = "object.distribute";
+pub const FLIP_H: &str = "object.flip_h";
+pub const FLIP_V: &str = "object.flip_v";
+pub const ROTATE_CW: &str = "object.rotate_cw";
+pub const ROTATE_CCW: &str = "object.rotate_ccw";
+pub const LOCK: &str = "object.lock";
 pub const ZOOM_IN: &str = "view.zoom_in";
 pub const ZOOM_OUT: &str = "view.zoom_out";
 pub const FIT: &str = "view.fit";
@@ -57,6 +84,10 @@ pub struct MenuState<'a> {
     pub undo: Option<&'a Step>,
     pub redo: Option<&'a Step>,
     pub recent: &'a Recent,
+    /// What's selected.
+    pub picked: Picked,
+    /// Align is against the page.
+    pub align_to_page: bool,
 }
 
 fn row(label: &str, id: &str) -> MenuItem {
@@ -79,9 +110,16 @@ fn step_row(verb: &str, id: &str, step: Option<&Step>) -> MenuItem {
     row(&label, id).enabled(step.is_some())
 }
 
+/// A row of the Align menu: which part of each thing goes in line.
+fn align_row(label: &str, way: &str, at: f64) -> MenuItem {
+    MenuItem::new(label, Action::new(ALIGN).with(way, Value::F64(at)))
+}
+
 pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
     let doc = st.has_doc;
     let sep = MenuItem::separator;
+    // Something selected; something of it that's drawn, so can be moved.
+    let (any, drawn) = (st.picked.count > 0, st.picked.drawn > 0);
     Some(match name {
         "file" => {
             let mut items = vec![row("New", NEW), row("Open\u{2026}", OPEN)];
@@ -97,14 +135,14 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
                 step_row("Undo", UNDO, st.undo),
                 step_row("Redo", REDO, st.redo),
                 sep(),
-                later("Cut"),
-                later("Copy"),
-                later("Paste"),
-                later("Duplicate"),
-                later("Delete"),
+                row("Cut", CUT).enabled(any),
+                row("Copy", COPY).enabled(any),
+                row("Paste", PASTE).enabled(doc),
+                row("Duplicate", DUPLICATE).enabled(any),
+                row("Delete", DELETE).enabled(any),
                 sep(),
-                later("Select All"),
-                later("Deselect"),
+                row("Select All", SELECT_ALL).enabled(doc),
+                row("Deselect", DESELECT).enabled(any),
                 sep(),
                 later("Tidy"),
                 sep(),
@@ -115,28 +153,42 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
         "object" => Menu::new(
             "Object",
             vec![
-                later("Group"),
-                later("Ungroup"),
+                row("Group", GROUP).enabled(drawn),
+                row("Ungroup", UNGROUP).enabled(st.picked.group),
                 sep(),
-                later("Bring to Front"),
-                later("Bring Forward"),
-                later("Send Backward"),
-                later("Send to Back"),
+                row("Bring to Front", TO_FRONT).enabled(drawn),
+                row("Bring Forward", FORWARD).enabled(drawn),
+                row("Send Backward", BACKWARD).enabled(drawn),
+                row("Send to Back", TO_BACK).enabled(drawn),
                 sep(),
-                MenuItem::sub("Align", vec![later("Left"), later("Centre"), later("Right"), sep(), later("Top"), later("Middle"), later("Bottom")]).enabled(false),
-                MenuItem::sub("Distribute", vec![later("Across"), later("Down")]).enabled(false),
+                MenuItem::sub(
+                    "Align",
+                    vec![
+                        align_row("Left", "x", 0.0),
+                        align_row("Centre", "x", 0.5),
+                        align_row("Right", "x", 1.0),
+                        sep(),
+                        align_row("Top", "y", 0.0),
+                        align_row("Middle", "y", 0.5),
+                        align_row("Bottom", "y", 1.0),
+                        sep(),
+                        row("To the Page", ALIGN_TO_PAGE).checked(st.align_to_page),
+                    ],
+                )
+                .enabled(drawn),
+                MenuItem::sub("Distribute", vec![MenuItem::new("Across", Action::new(DISTRIBUTE).with("across", Value::Bool(true))), MenuItem::new("Down", Action::new(DISTRIBUTE).with("across", Value::Bool(false)))]).enabled(st.picked.drawn >= 3),
                 sep(),
-                later("Flip Horizontal"),
-                later("Flip Vertical"),
-                later("Rotate 90\u{b0} CW"),
-                later("Rotate 90\u{b0} CCW"),
+                row("Flip Horizontal", FLIP_H).enabled(drawn),
+                row("Flip Vertical", FLIP_V).enabled(drawn),
+                row("Rotate 90\u{b0} CW", ROTATE_CW).enabled(drawn),
+                row("Rotate 90\u{b0} CCW", ROTATE_CCW).enabled(drawn),
                 sep(),
                 later("Clip"),
                 later("Release Clip"),
                 later("Drop Shadow\u{2026}"),
                 later("Blur\u{2026}"),
                 sep(),
-                later("Lock or Unlock"),
+                row(if st.picked.locked { "Unlock" } else { "Lock" }, LOCK).enabled(any),
             ],
         ),
         "path" => Menu::new("Path", vec![later("Object to Path"), sep(), later("Union"), later("Subtract"), later("Intersect"), later("Exclude"), sep(), later("Outline Stroke"), later("Simplify"), later("Reverse")]),
@@ -187,6 +239,18 @@ pub fn keys() -> KeyConfig {
         ('q', ctrl, QUIT),
         ('z', ctrl, UNDO),
         ('z', shift, REDO),
+        ('x', ctrl, CUT),
+        ('c', ctrl, COPY),
+        ('v', ctrl, PASTE),
+        ('d', ctrl, DUPLICATE),
+        ('a', ctrl, SELECT_ALL),
+        ('a', shift, DESELECT),
+        ('g', ctrl, GROUP),
+        ('g', shift, UNGROUP),
+        (']', ctrl, FORWARD),
+        ('[', ctrl, BACKWARD),
+        ('}', shift, TO_FRONT),
+        ('{', shift, TO_BACK),
         // The key comes as the sign or, shifted, what's above it.
         ('=', ctrl, ZOOM_IN),
         ('+', shift, ZOOM_IN),
@@ -224,6 +288,7 @@ pub fn canvas_key(press: KeyPress) -> Option<Action> {
     let step = if m.shift() { NUDGE_BY * NUDGE_MORE } else { NUDGE_BY };
     let (dx, dy) = match press.key {
         Key::Escape => return Some(Action::new(ESCAPE)),
+        Key::Delete | Key::Backspace => return Some(Action::new(DELETE)),
         Key::ArrowLeft => (-step, 0.0),
         Key::ArrowRight => (step, 0.0),
         Key::ArrowUp => (0.0, -step),
@@ -240,7 +305,7 @@ mod tests {
     #[test]
     fn every_title_menu_is_there() {
         let recent = Recent::default();
-        let st = MenuState { has_doc: true, undo: None, redo: None, recent: &recent };
+        let st = MenuState { has_doc: true, undo: None, redo: None, recent: &recent, picked: Picked::default(), align_to_page: false };
         for (_, name) in TITLE_MENUS {
             assert!(menu(name, &st).is_some(), "{name}");
         }

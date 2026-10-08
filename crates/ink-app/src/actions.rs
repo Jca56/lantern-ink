@@ -12,6 +12,7 @@ use crate::camera::Camera;
 use crate::files::Then;
 use crate::ink::Ink;
 use crate::menus::*;
+use crate::ops::{Op, Order};
 
 fn doc_arg(action: &Action) -> Option<DocId> {
     match action.arg("doc") {
@@ -103,6 +104,42 @@ impl Ink {
                 self.quitting = true;
                 cx.request(ShellRequest::Quit);
             }
+            CUT => self.op(Op::Cut, cx),
+            COPY => self.op(Op::Copy, cx),
+            PASTE => self.op(Op::Paste, cx),
+            DUPLICATE => self.op(Op::Duplicate, cx),
+            DELETE => self.op(Op::Delete, cx),
+            SELECT_ALL => self.op(Op::SelectAll, cx),
+            DESELECT => self.op(Op::Deselect, cx),
+            GROUP => self.op(Op::Group, cx),
+            UNGROUP => self.op(Op::Ungroup(false), cx),
+            UNGROUP_ANYWAY => {
+                // The answer to a question about this tab's drawing.
+                if doc_arg(action) == active {
+                    self.op(Op::Ungroup(true), cx);
+                }
+            }
+            TO_FRONT => self.op(Op::Order(Order::Front), cx),
+            FORWARD => self.op(Op::Order(Order::Forward), cx),
+            BACKWARD => self.op(Op::Order(Order::Backward), cx),
+            TO_BACK => self.op(Op::Order(Order::Back), cx),
+            ALIGN => {
+                let part = |way: &str| match action.arg(way) {
+                    Some(Value::F64(at)) => Some(*at),
+                    _ => None,
+                };
+                self.op(Op::Align(part("x"), part("y")), cx);
+            }
+            ALIGN_TO_PAGE => {
+                self.settings.align_to_page = !self.settings.align_to_page;
+                self.settings.save();
+            }
+            DISTRIBUTE => self.op(Op::Distribute(matches!(action.arg("across"), Some(Value::Bool(true)))), cx),
+            FLIP_H => self.op(Op::Flip(true), cx),
+            FLIP_V => self.op(Op::Flip(false), cx),
+            ROTATE_CW => self.op(Op::Quarter(true), cx),
+            ROTATE_CCW => self.op(Op::Quarter(false), cx),
+            LOCK => self.op(Op::Lock, cx),
             ESCAPE => self.escape(),
             NUDGE => {
                 if let (Some(Value::F64(dx)), Some(Value::F64(dy))) = (action.arg("dx"), action.arg("dy")) {

@@ -76,6 +76,8 @@ impl Ink {
             Intent::Move(nodes, place) => {
                 self.edit(doc, &Command::Move { nodes, place }, "Restack");
             }
+            // The window's to open.
+            Intent::Menu(_) => {}
         }
     }
 }

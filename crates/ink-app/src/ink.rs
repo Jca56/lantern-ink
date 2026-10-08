@@ -56,6 +56,13 @@ pub struct Ink {
     pub(crate) pointing: Pointer,
     /// The desktop's resize and turn cursors.
     pub(crate) cursor_theme: crate::cursors::Themed,
+    /// The Box over the canvas, and a number of it being dragged along.
+    pub(crate) toolbox: crate::toolbox::ToolBox,
+    pub(crate) boxing: Option<crate::boxes::Boxing>,
+    /// What was copied, on its way to the clipboard with the next
+    /// frame; and a paste waiting for the clipboard's text.
+    pub(crate) clip_out: Option<String>,
+    pub(crate) pasting: Option<crate::ops::Pasting>,
     /// The panel's width while its grip is dragged, logical px.
     pub(crate) panel_drag: Option<f64>,
     /// Last frame's regions.
@@ -94,6 +101,10 @@ impl Ink {
             tree: Tree::default(),
             pointing: Pointer::default(),
             cursor_theme: if cfg!(test) { Default::default() } else { crate::cursors::themed() },
+            toolbox: crate::toolbox::ToolBox::default(),
+            boxing: None,
+            clip_out: None,
+            pasting: None,
             panel_drag: None,
             layout: Layout::default(),
             toast: None,
@@ -144,6 +155,6 @@ impl Ink {
 
     pub(crate) fn menu_state(&self) -> MenuState<'_> {
         let history = self.tabs.active_doc().and_then(|d| self.core.history(d).ok());
-        MenuState { has_doc: self.tabs.active_doc().is_some(), undo: history.and_then(|h| h.undoable().next_back()), redo: history.and_then(|h| h.redoable().next()), recent: &self.recent }
+        MenuState { has_doc: self.tabs.active_doc().is_some(), undo: history.and_then(|h| h.undoable().next_back()), redo: history.and_then(|h| h.redoable().next()), recent: &self.recent, picked: self.picked(), align_to_page: self.settings.align_to_page }
     }
 }
