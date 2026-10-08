@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use ink_core::{DocId, Document, Look, NodeId};
+use ink_core::{DocId, Document, NodeId};
 use lntrn_math::Rect;
 
 use crate::camera::Camera;
@@ -19,10 +19,10 @@ pub struct Tab {
     pub name: String,
     /// What's selected, and how its object tree looks.
     pub selection: Selection,
-    /// Where each node shows in the drawing's coordinates, as it looked
-    /// at one moment: worked out again when the drawing looks another
-    /// way.
-    boxes: Option<(Look, HashMap<NodeId, Rect>)>,
+    /// Where each node shows in the drawing's coordinates, in one
+    /// state of it (`History::stamp`): worked out again when it's in
+    /// another.
+    boxes: Option<(u64, HashMap<NodeId, Rect>)>,
 }
 
 impl Tab {
@@ -30,11 +30,11 @@ impl Tab {
         Tab { doc, camera: None, name, selection: Selection::default(), boxes: None }
     }
 
-    /// Where each node of `drawing` (this tab's, as it `look`s now)
-    /// shows, in the drawing's coordinates.
-    pub fn boxes(&mut self, drawing: &Document, look: Look) -> &HashMap<NodeId, Rect> {
-        if self.boxes.as_ref().is_none_or(|(at, _)| *at != look) {
-            self.boxes = Some((look, ink_doc::geometry::page_bounds(drawing)));
+    /// Where each node of `drawing` (this tab's document, in the state
+    /// `stamp`) shows, in the drawing's coordinates.
+    pub fn boxes(&mut self, drawing: &Document, stamp: u64) -> &HashMap<NodeId, Rect> {
+        if self.boxes.as_ref().is_none_or(|(at, _)| *at != stamp) {
+            self.boxes = Some((stamp, ink_doc::geometry::page_bounds(drawing)));
         }
         &self.boxes.as_ref().expect("just made").1
     }
@@ -69,6 +69,10 @@ impl Tabs {
 
     pub fn iter(&self) -> impl Iterator<Item = &Tab> {
         self.tabs.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Tab> {
+        self.tabs.iter_mut()
     }
 
     pub fn active_index(&self) -> usize {

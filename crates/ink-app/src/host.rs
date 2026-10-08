@@ -48,7 +48,13 @@ impl Host for Ink {
     }
 
     fn key(&self, press: KeyPress, _: Option<Editor>) -> Option<Action> {
-        self.keys.resolve(&[CTX_WINDOW], &press.to_event(), |_| true).map(KeyItem::action).or_else(|| menus::tool_key(press))
+        // In the middle of a drag no key does anything (it would end
+        // under another tool, or another state of the drawing) but
+        // Escape, which gives the drag up.
+        if self.pointing.busy() {
+            return (press.key == lntrn_ui::Key::Escape).then(|| Action::new(menus::ESCAPE));
+        }
+        self.keys.resolve(&[CTX_WINDOW], &press.to_event(), |_| true).map(KeyItem::action).or_else(|| menus::tool_key(press)).or_else(|| menus::canvas_key(press))
     }
 
     fn paints_body(&self, _: Editor) -> bool {
@@ -81,6 +87,14 @@ impl Host for Ink {
 }
 
 impl AppHost for Ink {
+    fn cursors(&self, scale: f64) -> Vec<lntrn_app::CursorImage> {
+        crate::cursors::images(scale, &self.cursor_theme)
+    }
+
+    fn cursor(&self, wanted: lntrn_ui::CursorIcon) -> lntrn_ui::CursorIcon {
+        crate::cursors::shown(wanted, &self.cursor_theme)
+    }
+
     fn waker(&mut self, waker: Waker) {
         self.files.set_waker(waker.clone());
         self.tiles.set_waker(waker);

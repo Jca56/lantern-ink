@@ -725,6 +725,44 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Not in b2:** a row's right-click menu (b4), picking on the
     canvas (b3), a thumbnail or a swatch on a row, scrolling the tree
     to what's picked.
+- **M4b's b3 is built** (2026-10-08, 434 tests, deployed; **not yet
+  looked at by Alva**). ARCHITECTURE §8 has the Pointer "as built".
+  - **`Command::Resize`** is `Transform` with lines left as they are
+    (`settle.rs`: `Settle::keep`): what a scale handle does. A stroke
+    keeps its width and dashes and a rect its corner rounding (my
+    reading of "the stroke keeps its width": Alva chose that, and was
+    told of the rounding and of circle → ellipse at b3's handoff).
+    `ink-doc/tests/resize.rs` has what the file then says, and holds a
+    sixth of the corpus against `Transform`. **Not over MCP yet:**
+    `node_transform` always scales strokes.
+  - **`command.rs` was split**: the Commands are there, applying one
+    is `apply.rs`. A new Command still needs its arm in `guard`.
+  - **The Pointer** is `pointer.rs` (`Ink::pointer_tool`, once a frame
+    before the canvas is drawn; `pick`; the marquee's `caught`),
+    `handles.rs` (the box's geometry and what each drag comes to, by
+    itself and tested by itself) and `overlay.rs` (what's drawn over
+    the canvas, from a `Scene` the Pointer hands back). Its state is
+    `Ink::pointing` (`Ink::pointer` was taken: the status bar's).
+  - **A frame of the Pointer reads the drawing, then asks the core**
+    (`Ask`): the drawing is borrowed from the core while it's read, so
+    what a drag wants (`begin`, `update`, `commit`) is done after.
+  - **The Pointer works at one level** (`Selection::within`,
+    `context()`): a pick is a child of that level's group. A row
+    picked alone in the tree puts the Pointer in that row's group.
+  - **The selection's box comes from the committed drawing's boxes**
+    (`Tab::boxes`, by `History::stamp`), never a preview's: during a
+    drag the box is the box as it was through the drag's affine.
+  - **Keys:** `menus::canvas_key` (Escape, the arrows) after the bound
+    keys and the tools' letters; mid-drag `Host::key` lets only Escape
+    through (`Pointer::busy`).
+  - **Cursors** are `cursors.rs`: the desktop's own resize and turn
+    arrows from `~/.lantern/icons/cursors/`, drawn by `ink-render`.
+    Without them, the system's shapes (and the arrow for a turn).
+  - "Scale strokes" is `Settings::scale_strokes`, off; its tick comes
+    with the Box (b4).
+  - **Not in b3:** a box turned with the one thing in it (the box is
+    always upright, so a turned rect scaled unevenly skews); snapping
+    (slice f); a right-click menu (b4); dragging with Alt to copy.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

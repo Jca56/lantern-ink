@@ -254,7 +254,7 @@ all-or-nothing before anything changes. Families:
 | | Commands |
 |---|---|
 | Structure | `Insert`, `Delete`, `Move` (reorder or re-parent, keeping the look), `Duplicate`, `Group`, `Ungroup` |
-| Geometry | `SetGeometry` (a shape's own numbers), `SetPath`, `Transform` (any affine on any nodes, D13), `ToPath` |
+| Geometry | `SetGeometry` (a shape's own numbers), `SetPath`, `Transform` (any affine on any nodes, D13), `Resize` (the same, lines left as they are: what a handle does, M4b), `ToPath` |
 | Style | `SetStyle` (fill, stroke, width, caps, joins, dashes, opacity, rule), `SetGradient`, `SetClip`, `SetFilter` |
 | Path work | `Boolean` (union, subtract, intersect, exclude), `OutlineStroke`, `Simplify`, `Reverse`, `Join`, `Break` |
 | Text | `SetText`, `TextToPath` |
@@ -933,6 +933,40 @@ As LS3 §7, to the letter where it can be:
 - **Overlays** (selection boxes, handles, anchors, guides, the pixel
   grid) are drawn in screen px over the canvas with LUI2's own lines, so
   they stay the same size at every zoom.
+  **The Pointer, as built in M4b** (`ink-app/src/pointer.rs`,
+  `handles.rs`, `overlay.rs`):
+  - **A click picks the thing on top at the level the Pointer is in**
+    (`pointer::pick`, on `hit::at`): at the drawing's top level, the
+    outermost group a shape is in. A double-click on a group goes into
+    it, and clicks then pick one level down; a click outside it, or
+    Escape, comes back out. Nothing locked is picked: a click goes
+    through it. Shift adds or takes away; a drag on nothing is a
+    marquee, which catches a shape by its box and a group by what it
+    holds.
+  - **The selection's box** is round what's selected and drawn (the
+    boxes of `geometry::page_bounds`, strokes aside): sixteen-px white
+    handles at its corners and sides, gold over a dark edge so it shows
+    on the tan ground and over any drawing. Inside it a drag moves; a
+    corner or a side scales (Shift keeps the shape, Alt about the
+    middle); within 34 px outside a corner it turns (Shift in steps of
+    15°). `handles::dragged` is what each drag comes to, as one affine
+    in the drawing's coordinates.
+  - **A drag of the box is a gesture** (§4.3): `Command::Transform` for
+    a move or a turn, `Command::Resize` for a scale (Transform, with
+    "Scale strokes" on), said again each frame from where the drag
+    began. The box and its handles are worked out by the window from
+    the box as it was and that affine, so they keep up with the pointer
+    whatever the tiles are doing.
+  - **A resize keeps lines as they are** (Alva's call; `settle.rs`,
+    `keep`): a stroke's width and dashes, and a rect's corner rounding.
+    So a stroked shape stretched one way still takes it into its own
+    numbers, and a circle becomes an ellipse to do so. Where the
+    numbers can't say it (a rect scaled across the way it's turned;
+    anything under a shadow) it falls back to Transform's way, stroke
+    and all.
+  - The arrow keys nudge by a unit of the drawing (ten with Shift),
+    each press a step. In the middle of a drag no key does anything but
+    Escape, which gives the drag up.
 - **Tools, first set:** Pointer (select, move, scale, rotate), Node
   (anchors and handles; drag a segment to bend it), Pen (click points,
   bend after: Alva's May preference, D17), Rectangle, Ellipse, Line,

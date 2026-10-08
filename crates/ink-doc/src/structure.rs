@@ -11,7 +11,7 @@ use crate::error::{DocError, invalid};
 use crate::id::NodeId;
 use crate::kind::Kind;
 use crate::length::unit;
-use crate::node::{Child, Content, Element, prefix};
+use crate::node::{Attr, Child, Content, Element, prefix};
 use crate::settle::{self, Edit};
 use crate::style::{INHERITED, prop};
 use crate::value::Precision;
@@ -118,12 +118,36 @@ impl Document {
             let (node, did) = match edit {
                 Edit::Attr { node, name, value } => (*node, self.set_attr(*node, name, value.as_deref())?),
                 Edit::Prop { node, name, value } => (*node, self.set_prop(*node, name, value.as_deref())?),
+                Edit::Ellipse { node, rx, ry } => (*node, self.make_ellipse(*node, rx, ry)?),
             };
             if did && !changed.contains(&node) {
                 changed.push(node);
             }
         }
         Ok(changed)
+    }
+
+    /// Make the `<circle>` `id` an `<ellipse>` with the radii `rx` and
+    /// `ry`, said where its `r` was and written as that was.
+    fn make_ellipse(&mut self, id: NodeId, rx: &str, ry: &str) -> Result<bool, DocError> {
+        let node = self.node(id)?;
+        if node.kind != Kind::Circle {
+            return invalid(format!("{id} is a <{}>: only a circle is made an ellipse", node.name));
+        }
+        let name = prefix(&node.name).map_or("ellipse".to_owned(), |p| format!("{p}:ellipse"));
+        let node = self.edit(id)?;
+        let at = node.attrs.iter().position(|a| a.name == "r");
+        let mut radii = [Attr::new("rx", rx), Attr::new("ry", ry)];
+        if let Some(was) = at.map(|i| &node.attrs[i]) {
+            for radius in &mut radii {
+                (radius.lead, radius.eq, radius.quote) = (was.lead.clone(), was.eq.clone(), was.quote);
+            }
+        }
+        node.attrs.retain(|a| a.name != "r");
+        let at = at.unwrap_or(node.attrs.len()).min(node.attrs.len());
+        node.attrs.splice(at..at, radii);
+        (node.name, node.kind) = (name, Kind::Ellipse);
+        Ok(true)
     }
 
     /// Copy `id`, with everything in it, right on top of itself (just

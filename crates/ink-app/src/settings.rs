@@ -20,6 +20,9 @@ props! {
     pub struct Settings {
         /// The right panel's width, logical px.
         pub panel_width: f64 = 400.0 => { id: 1, hard: 260.0..=520.0 },
+        /// A shape scaled by its handles has its stroke scale with it
+        /// (off: the stroke keeps its width).
+        pub scale_strokes: bool = false => { id: 2 },
     }
 }
 

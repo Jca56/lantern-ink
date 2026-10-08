@@ -31,6 +31,13 @@ pub const FIT: &str = "view.fit";
 pub const ACTUAL: &str = "view.actual";
 /// A tool's letter was pressed: `key`.
 pub const TOOL_KEY: &str = "tool.key";
+/// Escape on the canvas, and the arrow keys.
+pub const ESCAPE: &str = "pointer.escape";
+pub const NUDGE: &str = "pointer.nudge";
+/// How far an arrow key moves the selection, in the drawing's units,
+/// and how many times that with Shift.
+pub const NUDGE_BY: f64 = 1.0;
+pub const NUDGE_MORE: f64 = 10.0;
 /// A row whose work isn't built yet: greyed, and it does nothing.
 pub const LATER: &str = "later";
 /// "Save first?" answered: save, then close.
@@ -205,6 +212,25 @@ pub fn tool_key(press: KeyPress) -> Option<Action> {
     let c = c.to_ascii_lowercase();
     tools::key_cycle(c)?;
     Some(Action::new(TOOL_KEY).with("key", Value::Str(c.to_string())))
+}
+
+/// Escape and the arrow keys, as what they do on the canvas. Ctrl, Alt
+/// and Super are other bindings'.
+pub fn canvas_key(press: KeyPress) -> Option<Action> {
+    let m = press.mods;
+    if m.ctrl() || m.alt() || m.super_key() {
+        return None;
+    }
+    let step = if m.shift() { NUDGE_BY * NUDGE_MORE } else { NUDGE_BY };
+    let (dx, dy) = match press.key {
+        Key::Escape => return Some(Action::new(ESCAPE)),
+        Key::ArrowLeft => (-step, 0.0),
+        Key::ArrowRight => (step, 0.0),
+        Key::ArrowUp => (0.0, -step),
+        Key::ArrowDown => (0.0, step),
+        _ => return None,
+    };
+    Some(Action::new(NUDGE).with("dx", Value::F64(dx)).with("dy", Value::F64(dy)))
 }
 
 #[cfg(test)]

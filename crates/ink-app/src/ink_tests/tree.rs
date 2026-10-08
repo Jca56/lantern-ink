@@ -58,25 +58,6 @@ impl Running {
         let r = self.row(id);
         Vec2::new(r.min.x + 16.0 * depth as f64 + 20.0, r.center().y)
     }
-
-    fn click_with(&mut self, at: Vec2, mods: Modifiers) {
-        self.h.set_mods(mods);
-        self.click(at);
-        self.h.set_mods(Modifiers::NONE);
-        self.frames(1);
-    }
-
-    fn selected(&self) -> Vec<NodeId> {
-        self.ink.tabs.active().unwrap().selection.nodes.clone()
-    }
-
-    fn steps(&self) -> Vec<String> {
-        self.ink.core.history(self.doc()).unwrap().undoable().map(|s| s.label.clone()).collect()
-    }
-
-    fn svg(&self) -> String {
-        self.ink.core.doc(self.doc()).unwrap().to_svg()
-    }
 }
 
 #[test]

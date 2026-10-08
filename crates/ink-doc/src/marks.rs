@@ -212,7 +212,7 @@ impl Document {
                 reach(*node, if is_lock { Reach::Lock } else { Reach::Own })
             }
             Command::Insert { place, .. } => into(*place),
-            Command::Delete { nodes } | Command::Ungroup { nodes, .. } | Command::Transform { nodes, .. } | Command::Boolean { nodes, .. } => each(nodes, Reach::Deep),
+            Command::Delete { nodes } | Command::Ungroup { nodes, .. } | Command::Transform { nodes, .. } | Command::Resize { nodes, .. } | Command::Boolean { nodes, .. } => each(nodes, Reach::Deep),
             Command::Move { nodes, place } => each(nodes, Reach::Deep).and_then(|()| into(*place)),
             Command::Group { nodes } => each(nodes, Reach::Deep).and_then(|()| beside(nodes)),
             // A copy changes nothing of what it copies: only where it's

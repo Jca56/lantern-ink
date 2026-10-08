@@ -3,6 +3,7 @@
 
 use ink_core::DocId;
 use ink_doc::Viewport;
+use ink_geom::Affine;
 use lntrn_math::{Rect, Vec2};
 use lntrn_ui::{AreaCx, CursorIcon, Ui};
 
@@ -13,6 +14,7 @@ use crate::chrome::status::{Click, Status};
 use crate::chrome::tabs::{TabClick, TabLabel};
 use crate::ink::{Ink, TOAST_SECONDS};
 use crate::layout::Layout;
+use crate::pointer::View;
 use crate::tools::Tool;
 use crate::{chrome, overlay, page, tree};
 
@@ -109,7 +111,7 @@ impl Ink {
     /// The canvas: the view moved as the pointer asks, the tool in
     /// hand, and the drawing as the camera shows it.
     fn canvas(&mut self, ui: &mut Ui, area: Rect, doc: DocId, viewport: &Viewport, click: Option<Click>, popup: bool) {
-        let (tool, page) = (self.tools.active(), viewport.size);
+        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy());
         let Some(tab) = self.tabs.active_mut() else { return };
         // A tab first laid out is fitted.
         let cam = tab.camera.get_or_insert_with(|| Camera::fit(area, page));
@@ -121,7 +123,7 @@ impl Ink {
             Some(Click::Claude) | None => {}
         }
         // The view holds still under a menu or a dialog.
-        let input = canvas::input(ui, area, cam, Hold { locked: popup, owns_alt: tool.owns_alt(), hand: tool == Tool::Hand });
+        let input = canvas::input(ui, area, cam, Hold { locked: popup, busy, owns_alt: tool.owns_alt(), hand: tool == Tool::Hand });
         if tool == Tool::Zoom && input.clicked {
             let out = ui.state.mods.alt();
             cam.zoom_about(area, if out { 1.0 / CLICK_STEP } else { CLICK_STEP }, ui.state.pointer);
@@ -132,13 +134,19 @@ impl Ink {
         self.pointer = input.pointer.and_then(|p| Some(viewport.to_page.inverse()?.apply(p)));
 
         let cam = *cam;
+        // The Pointer, and the selection's box whatever is in hand:
+        // first, so that what a drag comes to this frame is what the
+        // canvas is asked to show.
+        let origin = cam.window_at(area, Vec2::ZERO);
+        let unit = cam.window_at(area, Vec2::new(1.0, 1.0)) - origin;
+        let to_window = viewport.to_page.then(&Affine::new(unit.x, 0.0, 0.0, unit.y, origin.x, origin.y));
+        let Some(to_doc) = to_window.inverse() else { return };
+        let view = View { to_window, to_doc, scale: ui.m.scale };
+        let scene = self.pointer_tool(ui, &view, doc, &input, tool == Tool::Pointer && !popup);
         // As a gesture under way would leave it, else as it is.
         let Ok((drawing, look)) = self.core.shown(doc) else { return };
         self.tiles.want(doc, drawing, look, cam.zoom, Rect::from_min_size(Vec2::ZERO - cam.corner(), area.size()));
         page::draw(ui, area, &cam, page, self.icons.checker(), &self.tiles, doc);
-        if let Some(tab) = self.tabs.active_mut().filter(|tab| !tab.selection.nodes.is_empty()) {
-            let selected = tab.selection.nodes.clone();
-            overlay::selection(ui, area, &cam, viewport, tab.boxes(drawing, look), &selected);
-        }
+        overlay::draw(ui, area, &scene);
     }
 }

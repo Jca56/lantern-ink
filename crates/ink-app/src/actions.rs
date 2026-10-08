@@ -103,6 +103,12 @@ impl Ink {
                 self.quitting = true;
                 cx.request(ShellRequest::Quit);
             }
+            ESCAPE => self.escape(),
+            NUDGE => {
+                if let (Some(Value::F64(dx)), Some(Value::F64(dy))) = (action.arg("dx"), action.arg("dy")) {
+                    self.nudge(lntrn_math::Vec2::new(*dx, *dy));
+                }
+            }
             // A greyed row: its slice hasn't come.
             LATER => {}
             other => lntrn_core::log_error!("no such action: {other}"),

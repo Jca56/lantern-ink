@@ -222,7 +222,11 @@ impl<'a> Settle<'a> {
             // their kind says, so dashes along one would start
             // somewhere else once it's turned or mirrored.
             limits.level |= !style.line.dashes.is_empty() && matches!(geometry, Geometry::Rect { .. } | Geometry::Circle { .. } | Geometry::Ellipse { .. });
-            limits.stroke = Some(Outline { width: style.line.width, dashes: style.line.dashes.clone(), offset: style.line.dash_offset });
+            // Resized, the line stays as it is: it asks nothing of the
+            // numbers.
+            if !self.keep {
+                limits.stroke = Some(Outline { width: style.line.width, dashes: style.line.dashes.clone(), offset: style.line.dash_offset });
+            }
         }
         limits
     }

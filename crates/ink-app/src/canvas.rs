@@ -17,6 +17,7 @@ const WHEEL_LINE: f64 = 30.0;
 const CLICK_SLOP: f64 = 4.0;
 
 /// What the pointer did on the canvas this frame.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct CanvasInput {
     /// Where on the page (its px) the pointer is, while it's over the
     /// canvas.
@@ -26,13 +27,23 @@ pub struct CanvasInput {
     /// The left button came up where it went down: a click, for the
     /// tool in hand (not one that dragged the view).
     pub clicked: bool,
+    /// The left button went down on the canvas for the tool in hand
+    /// (not to drag the view), is still down from there, came up; and
+    /// went down for the second time in a moment.
+    pub pressed: bool,
+    pub held: bool,
+    pub released: bool,
+    pub double: bool,
 }
 
 /// How the view takes the pointer this frame.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Hold {
-    /// A gesture is under way, or a menu is up: the view holds still.
+    /// A menu is up: the view holds still, and the tool gets nothing.
     pub locked: bool,
+    /// The tool in hand is in the middle of a drag: the view holds
+    /// still under it, and the drag goes on.
+    pub busy: bool,
     /// The tool in hand has its own use for Alt, so Alt+drag doesn't
     /// move the view.
     pub owns_alt: bool,
@@ -47,7 +58,14 @@ pub fn input(ui: &mut Ui, area: Rect, cam: &mut Camera, hold: Hold) -> CanvasInp
     let over = st.pointer_in_window && area.contains(pointer) && !st.shielded(ui.layer(), pointer);
     if hold.locked {
         ui.state.wheel = Vec2::ZERO;
-        return CanvasInput { pointer: over.then(|| cam.page_at(area, pointer)), over, clicked: false };
+        return CanvasInput { pointer: over.then(|| cam.page_at(area, pointer)), over, ..CanvasInput::default() };
+    }
+    if hold.busy {
+        // A jump of the view would have the drag streak across the
+        // picture: it waits for the button to come up.
+        let input = CanvasInput { pointer: over.then(|| cam.page_at(area, pointer)), over, held: resp.held, released: resp.released || !st.down, ..CanvasInput::default() };
+        ui.state.wheel = Vec2::ZERO;
+        return input;
     }
 
     // The middle button pans from wherever it went down on the canvas;
@@ -87,6 +105,8 @@ pub fn input(ui: &mut Ui, area: Rect, cam: &mut Camera, hold: Hold) -> CanvasInp
         cam.zoom_about(area, pinch_zoom(ui.state.pinch), pointer);
     }
 
-    // Where the pointer is now the view has moved.
-    CanvasInput { pointer: over.then(|| cam.page_at(area, pointer)), over, clicked }
+    // Where the pointer is now the view has moved. A press that drags
+    // the view isn't the tool's.
+    let tool = !grabbing;
+    CanvasInput { pointer: over.then(|| cam.page_at(area, pointer)), over, clicked, pressed: tool && resp.pressed, held: tool && resp.held, released: tool && resp.released, double: tool && resp.double_clicked }
 }

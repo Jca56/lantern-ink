@@ -28,6 +28,15 @@
 //!   keeps it as its own `transform` otherwise.
 //! - **A text takes a move** into its `x` and `y` and its lines'
 //!   (`lettered.rs`); a turn or a scale stays its `transform`.
+//!
+//! **Resizing** ([`crate::Command::Resize`], `keep`) is the same with
+//! one thing taken out: lines stay as they are. A stroke doesn't grow,
+//! so it holds nothing back from a shape's numbers (a rect stretched
+//! one way stays a plain rect, its line the width it was); a rect's
+//! corners stay as round as they were; and a circle stretched one way
+//! becomes the ellipse it then is. What still can't go into the
+//! numbers goes into `transform` as ever, and there a stroke grows
+//! with it: there is no other way to write that.
 
 use std::collections::HashMap;
 
@@ -55,6 +64,9 @@ pub(crate) enum Edit {
     Attr { node: NodeId, name: &'static str, value: Option<String> },
     /// A property, written where the node has it (D14).
     Prop { node: NodeId, name: &'static str, value: Option<String> },
+    /// A `<circle>` made an `<ellipse>` with these radii, said where
+    /// its `r` was.
+    Ellipse { node: NodeId, rx: String, ry: String },
 }
 
 /// What can be put through a transform: what shows where it stands.
@@ -76,13 +88,15 @@ pub(crate) struct Settle<'a> {
     p: Precision,
     /// Which nodes name each id.
     users: HashMap<String, Vec<NodeId>>,
+    /// Lines stay as they are (a resize): see the top of this file.
+    keep: bool,
     pub edits: Vec<Edit>,
 }
 
 impl<'a> Settle<'a> {
     pub fn new(doc: &'a Document) -> Settle<'a> {
         let view = doc.get(doc.root()).map_or(Vec2::ZERO, |root| Viewport::of(root).view);
-        Settle { doc, ids: Ids::of(doc), view, p: Precision::of(doc), users: refs::users(doc), edits: Vec::new() }
+        Settle { doc, ids: Ids::of(doc), view, p: Precision::of(doc), users: refs::users(doc), keep: false, edits: Vec::new() }
     }
 
     /// What `node` inherits: what its ancestors say, from the root down.
@@ -102,18 +116,32 @@ impl<'a> Settle<'a> {
     /// is, as the file will hold it.
     fn bake(&mut self, node: &Node, geometry: &Geometry, b: &Affine, limits: &Limits, p: &Precision) -> Option<Geometry> {
         let grow = limits.allows(b, p)?;
-        let baked = geometry.through(b, p)?.rounded(p);
+        let baked = match (geometry.through(b, p), geometry) {
+            // Resized, a rect's corners are as round as they were (the
+            // other way about, after a quarter turn).
+            (Some(Geometry::Rect { x, y, width, height, .. }), Geometry::Rect { rx, ry, .. }) if self.keep => {
+                let across = b.linear(Vec2::X);
+                let (rx, ry) = if across.x.abs() < across.y.abs() { (*ry, *rx) } else { (*rx, *ry) };
+                Geometry::Rect { x, y, width, height, rx, ry }
+            }
+            (Some(through), _) => through,
+            // Resized, a circle stretched one way is an ellipse.
+            (None, Geometry::Circle { c, r }) if self.keep => {
+                let Geometry::Ellipse { c, rx, ry } = Geometry::Ellipse { c: *c, rx: *r, ry: *r }.through(b, p)?.rounded(p) else { return None };
+                for (name, value) in (Geometry::Circle { c, r: *r }).write(node, p) {
+                    self.edits.push(Edit::Attr { node: node.id, name, value });
+                }
+                self.edits.push(Edit::Ellipse { node: node.id, rx: p.number(rx), ry: p.number(ry) });
+                self.carried(limits, b, p);
+                return Some(Geometry::Ellipse { c, rx, ry });
+            }
+            (None, _) => return None,
+        }
+        .rounded(p);
         for (name, value) in baked.write(node, p) {
             self.edits.push(Edit::Attr { node: node.id, name, value });
         }
-        if !p.same(b, &Affine::IDENTITY) {
-            for server in limits.own.iter().filter_map(|id| self.doc.get(*id)) {
-                self.carry(server, b);
-            }
-            if let Some(clip) = limits.clip.and_then(|id| self.doc.get(id)) {
-                self.carry_clip(clip, b);
-            }
-        }
+        self.carried(limits, b, p);
         if let Some(stroke) = limits.stroke.as_ref().filter(|_| (grow - 1.0).abs() > 1e-9) {
             let mut set = |name, value: String| self.edits.push(Edit::Prop { node: node.id, name, value: Some(value) });
             set("stroke-width", p.number(stroke.width * grow));
@@ -125,6 +153,20 @@ impl<'a> Settle<'a> {
             }
         }
         Some(baked)
+    }
+
+    /// What goes along with a shape whose numbers took `b`: a gradient
+    /// and a clip path that are its alone.
+    fn carried(&mut self, limits: &Limits, b: &Affine, p: &Precision) {
+        if p.same(b, &Affine::IDENTITY) {
+            return;
+        }
+        for server in limits.own.iter().filter_map(|id| self.doc.get(*id)) {
+            self.carry(server, b);
+        }
+        if let Some(clip) = limits.clip.and_then(|id| self.doc.get(id)) {
+            self.carry_clip(clip, b);
+        }
     }
 
     /// Give a shape the transform `to`. Returns what of it is left for
@@ -241,16 +283,17 @@ impl<'a> Settle<'a> {
     }
 }
 
-/// The edits that put `nodes` through `by`. One named along with a
-/// group it's in goes with the group, once.
-pub(crate) fn plan(doc: &Document, nodes: &[NodeId], by: &Affine) -> Result<Vec<Edit>, DocError> {
+/// The edits that put `nodes` through `by`: lines and all, or with
+/// `keep`, leaving their lines as they are (a resize). One named along
+/// with a group it's in goes with the group, once.
+pub(crate) fn plan(doc: &Document, nodes: &[NodeId], by: &Affine, keep: bool) -> Result<Vec<Edit>, DocError> {
     if !by.is_finite() || by.inverse().is_none() {
         return invalid("that transform squashes everything flat (or isn't numbers): give one that leaves things some size");
     }
     for &id in nodes {
         doc.node(id)?;
     }
-    let mut settle = Settle::new(doc);
+    let mut settle = Settle { keep, ..Settle::new(doc) };
     for (i, &id) in nodes.iter().enumerate() {
         let under_another = nodes.iter().any(|&other| other != id && doc.is_within(id, other));
         if !under_another && !nodes[..i].contains(&id) {

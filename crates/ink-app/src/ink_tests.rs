@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use ink_core::DocId;
+use ink_core::{DocId, NodeId};
 use lntrn_app::lntrn_render::ImageId;
 use lntrn_image::Image;
 use lntrn_math::{Rect, Vec2};
@@ -21,6 +21,7 @@ use crate::tiles::Store;
 use crate::tools::Tool;
 
 mod canvas;
+mod pointer;
 mod tree;
 
 /// Where the tiles' pictures are kept in a test.
@@ -153,6 +154,29 @@ impl Running {
     fn key(&mut self, key: Key, mods: Modifiers) {
         self.h.key_with(key, mods);
         self.frames(2);
+    }
+
+    /// A click with `mods` held.
+    fn click_with(&mut self, at: Vec2, mods: Modifiers) {
+        self.h.set_mods(mods);
+        self.click(at);
+        self.h.set_mods(Modifiers::NONE);
+        self.frames(1);
+    }
+
+    /// What's selected in the tab that shows, in the order picked.
+    fn selected(&self) -> Vec<NodeId> {
+        self.ink.tabs.active().unwrap().selection.nodes.clone()
+    }
+
+    /// The steps that can be undone, by name, the latest last.
+    fn steps(&self) -> Vec<String> {
+        self.ink.core.history(self.doc()).unwrap().undoable().map(|s| s.label.clone()).collect()
+    }
+
+    /// The drawing as it would be saved.
+    fn svg(&self) -> String {
+        self.ink.core.doc(self.doc()).unwrap().to_svg()
     }
 }
 

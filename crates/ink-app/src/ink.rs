@@ -17,6 +17,7 @@ use crate::files::Files;
 use crate::icons::Icons;
 use crate::layout::Layout;
 use crate::menus::{self, MenuState};
+use crate::pointer::Pointer;
 use crate::settings::{Recent, Settings};
 use crate::tiles::Tiles;
 use crate::tools::Tools;
@@ -51,6 +52,10 @@ pub struct Ink {
     pub(crate) grip: Grip,
     /// The object tree, in the right panel.
     pub(crate) tree: Tree,
+    /// The Pointer tool, and what it's in the middle of.
+    pub(crate) pointing: Pointer,
+    /// The desktop's resize and turn cursors.
+    pub(crate) cursor_theme: crate::cursors::Themed,
     /// The panel's width while its grip is dragged, logical px.
     pub(crate) panel_drag: Option<f64>,
     /// Last frame's regions.
@@ -87,6 +92,8 @@ impl Ink {
             scale: 0.0,
             grip: Grip::default(),
             tree: Tree::default(),
+            pointing: Pointer::default(),
+            cursor_theme: if cfg!(test) { Default::default() } else { crate::cursors::themed() },
             panel_drag: None,
             layout: Layout::default(),
             toast: None,

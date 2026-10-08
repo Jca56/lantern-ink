@@ -1,7 +1,8 @@
 //! What a tab keeps of its drawing beside the document (ARCHITECTURE §3:
 //! view state stays out of it; LS3's `view.rs`): which nodes are
-//! selected and which is in hand, which rows of the object tree are
-//! open, and the row being renamed.
+//! selected and which is in hand, the group the Pointer is working
+//! inside, which rows of the object tree are open, and the row being
+//! renamed.
 
 use std::collections::HashSet;
 
@@ -35,6 +36,10 @@ pub struct Selection {
     pub active: Option<NodeId>,
     /// Every selected node, the one in hand among them.
     pub nodes: Vec<NodeId>,
+    /// The group the Pointer has gone into (a double-click on it): a
+    /// click on the canvas picks what's in it, one level down. `None`:
+    /// the drawing's own top level.
+    pub within: Option<NodeId>,
     /// Rows the other way from how their kind starts out (groups open,
     /// everything else that holds elements closed).
     flipped: HashSet<NodeId>,
@@ -161,10 +166,32 @@ impl Selection {
         self.renaming = None;
     }
 
-    /// A click on `id`'s row.
+    /// The group a click on the canvas picks inside of: the one gone
+    /// into, while it's there and a group; else the drawing's root.
+    pub fn context(&self, doc: &Document) -> NodeId {
+        self.within.filter(|g| doc.get(*g).is_some_and(|n| n.kind.is_group())).unwrap_or(doc.root())
+    }
+
+    /// Have every row `id` is inside open, so its own shows.
+    pub fn reveal(&mut self, doc: &Document, id: NodeId) {
+        let above: Vec<NodeId> = doc.ancestors(id).map(|n| n.id).filter(|&a| a != doc.root()).collect();
+        for a in above {
+            if !self.is_open(doc, a) {
+                self.toggle_open(a);
+            }
+        }
+    }
+
+    /// A click on `id`: its row, or itself on the canvas. Picked alone,
+    /// the Pointer is inside whatever group holds it (a row deep in
+    /// the tree is picked where it is, and what's beside it is a click
+    /// away).
     pub fn click(&mut self, doc: &Document, id: NodeId, how: Click) {
         match how {
-            Click::Plain => self.select_only(id),
+            Click::Plain => {
+                self.select_only(id);
+                self.within = doc.get(id).and_then(|n| n.parent).filter(|&up| up != doc.root() && doc.get(up).is_some_and(|n| n.kind.is_group()));
+            }
             Click::Toggle => {
                 if !self.is_selected(id) {
                     self.nodes.push(id);
@@ -202,6 +229,9 @@ impl Selection {
             self.active = self.nodes.last().copied();
         }
         self.flipped.retain(there);
+        if self.within.is_some_and(|g| !there(&g)) {
+            self.within = None;
+        }
         if self.renaming.as_ref().is_some_and(|(id, _)| !there(id)) {
             self.renaming = None;
         }
@@ -268,7 +298,11 @@ mod tests {
         let d = doc();
         let mut s = Selection::default();
         s.click(&d, N(12), Click::Plain);
-        assert_eq!((s.active, s.nodes.clone()), (Some(N(12)), vec![N(12)]));
+        assert_eq!((s.active, s.nodes.clone(), s.within), (Some(N(12)), vec![N(12)], None));
+        // One inside a group, picked alone: the Pointer is in the group.
+        s.click(&d, N(8), Click::Plain);
+        assert_eq!((s.nodes.clone(), s.within), (vec![N(8)], Some(N(7))));
+        s.click(&d, N(12), Click::Plain);
         // Shift: the run of rows from the one in hand, which stays so.
         s.click(&d, N(9), Click::Range);
         assert_eq!((s.active, s.nodes.clone()), (Some(N(12)), vec![N(12), N(7), N(10), N(9)]));
@@ -298,5 +332,18 @@ mod tests {
         d.apply(&ink_doc::Command::Delete { nodes: vec![N(7)] }).unwrap();
         s.prune(&d);
         assert_eq!((s.nodes.clone(), s.active, s.flipped.len()), (vec![N(12), N(6)], Some(N(6)), 0));
+        // A node deep in closed rows is brought into sight; and a group
+        // gone into is where clicks pick, while it's there.
+        let mut d = doc();
+        let mut s = Selection::default();
+        s.toggle_open(N(7));
+        s.reveal(&d, N(11));
+        assert!(s.rows(&d).iter().any(|r| r.id == N(11)));
+        assert_eq!(s.context(&d), d.root());
+        s.within = Some(N(7));
+        assert_eq!(s.context(&d), N(7));
+        d.apply(&ink_doc::Command::Delete { nodes: vec![N(7)] }).unwrap();
+        s.prune(&d);
+        assert_eq!((s.within, s.context(&d)), (None, d.root()));
     }
 }

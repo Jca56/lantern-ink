@@ -40,9 +40,18 @@ pub struct Tree {
     /// The row pressed, whether it's being dragged, and whether letting
     /// go without a drag makes it the only one selected.
     drag: Option<(Drag, bool)>,
+    /// A row to bring into sight when the list is next drawn.
+    scroll_to: Option<NodeId>,
     /// Where each row was last drawn, the topmost first.
     #[cfg(test)]
     pub(crate) laid: Vec<(crate::select::Row, Rect)>,
+}
+
+impl Tree {
+    /// Have `id`'s row in sight: something was picked on the canvas.
+    pub fn show(&mut self, id: NodeId) {
+        self.scroll_to = Some(id);
+    }
 }
 
 /// Draw the tree in `r` (the right panel) for `shown`: the drawing as
@@ -93,6 +102,21 @@ pub fn draw(ui: &mut Ui, r: Rect, st: &mut Tree, shown: Option<(&Document, &mut 
         }
     });
     let rows::Cx { sel, pressed, .. } = cx;
+    // A row asked for that's out of sight: the list goes to it.
+    if let Some((_, r)) = st.scroll_to.take().and_then(|id| laid.iter().find(|(row, _)| row.id == id)) {
+        let by = if r.min.y < list.min.y {
+            r.min.y - list.min.y
+        } else if r.max.y > list.max.y {
+            r.max.y - list.max.y
+        } else {
+            0.0
+        };
+        if by != 0.0 {
+            let offset = &mut ui.state.scroll(scroll).offset.y;
+            *offset = (*offset + by).max(0.0);
+            ui.state.request_rebuild = true;
+        }
+    }
     #[cfg(test)]
     {
         st.laid.clone_from(&laid);

@@ -20,6 +20,7 @@
 //! [`refs`] (what a `url(#…)` points at) and [`text`] (the outlines a
 //! `<text>` draws, set in the machine's [`fonts`]).
 
+mod apply;
 mod clip;
 mod boolean;
 pub mod color;
