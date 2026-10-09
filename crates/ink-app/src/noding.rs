@@ -12,6 +12,10 @@
 //! Every drag is a gesture in the core (§4.3): the real drawing shows
 //! as it goes, and it lands as one step. A shape that isn't a path yet
 //! becomes one with the first change to its anchors (`anchors.rs`).
+//!
+//! A double click on a segment puts an anchor there; on an anchor, it
+//! turns a corner smooth and back (LS3's pen's way). A right press
+//! opens the menu of what's done to anchors (`nodeops.rs` does it).
 
 use ink_core::{Actor, Command, DocId, NodeId};
 use ink_doc::outline::{AnchorId, Outline};
@@ -25,13 +29,13 @@ use crate::anchors::{self, Picked, WouldBe};
 use crate::canvas::CanvasInput;
 use crate::edits::in_row_names;
 use crate::ink::Ink;
+use crate::nodeops::NodeOp;
 use crate::nodes::{self, Held, Hit};
 use crate::overlay::Scene;
 use crate::picking::top_at;
 use crate::pointer::View;
 use crate::select::Click;
 use crate::shapes;
-use crate::tools::Tool;
 
 /// How far the pointer may stray from a press and still have clicked,
 /// and how far from the pointer a click still finds a shape, logical
@@ -86,12 +90,18 @@ enum Drag {
 pub struct Noding {
     /// The anchors picked, in the order picked, and whose drawing's
     /// they are.
-    picked: Vec<Picked>,
-    of: Option<DocId>,
+    pub(crate) picked: Vec<Picked>,
+    pub(crate) of: Option<DocId>,
     drag: Option<(DocId, Drag)>,
     /// The last refusal said during this drag: said once.
     said: Option<String>,
-    would_be: WouldBe,
+    pub(crate) would_be: WouldBe,
+    /// A right press on the canvas this frame, with something of the
+    /// tool's to offer: where its menu opens. And the segment it was
+    /// on, for a new anchor there: which shape's, after which anchor,
+    /// how far along.
+    pub(crate) menu_at: Option<Vec2>,
+    pub(crate) target: Option<(NodeId, AnchorId, f64)>,
 }
 
 impl Noding {
@@ -134,34 +144,6 @@ impl Ink {
             Drag::Handle { .. } | Drag::Segment { .. } => self.core.cancel(doc),
             Drag::Marquee { keep, .. } => self.noding.picked = keep,
             Drag::Pressed(_) => {}
-        }
-    }
-
-    /// Whether a key is the picked anchors' to take: the Node tool is
-    /// in hand, and has some of the drawing that shows.
-    pub(crate) fn anchors_in_hand(&self) -> bool {
-        self.tools.active() == Tool::Node && !self.noding.picked.is_empty() && self.noding.of == self.tabs.active_doc()
-    }
-
-    /// Delete: the anchors picked go, each joined across.
-    pub(crate) fn delete_anchors(&mut self) {
-        let Some((doc, drawing)) = self.noding.of.and_then(|doc| Some((doc, self.core.doc(doc).ok()?))) else { return };
-        let Some(command) = anchors::deleted(drawing, &self.noding.would_be, &self.noding.picked) else { return };
-        let label = if self.noding.picked.len() == 1 { "Delete Anchor" } else { "Delete Anchors" };
-        if self.edit(doc, &command, label).is_some() {
-            self.noding.picked.clear();
-        }
-    }
-
-    /// The arrow keys: the anchors picked moved `by`, in the drawing's
-    /// units.
-    pub(crate) fn nudge_anchors(&mut self, by: Vec2) {
-        let Some((doc, drawing)) = self.noding.of.and_then(|doc| Some((doc, self.core.doc(doc).ok()?))) else { return };
-        let nodes: Vec<NodeId> = self.noding.picked.iter().map(|(node, _)| *node).collect();
-        let (_, names) = anchors::firsts(drawing, &self.noding.would_be, &nodes);
-        let Some(command) = anchors::moved(drawing, &self.noding.would_be, &self.noding.picked, by) else { return };
-        if self.edit(doc, &command, "Nudge").is_some() {
-            anchors::renamed(&mut self.noding.picked, &names);
         }
     }
 
@@ -229,11 +211,39 @@ impl Ink {
             shapes::grid_for(page.width().max(page.height()))
         };
 
-        let (mut ask, mut show, mut say) = (Vec::new(), None, None);
+        let (mut ask, mut show, mut say, mut op) = (Vec::new(), None, None, None);
+        // A right press: an anchor not picked is picked first; then the
+        // menu of what's done to anchors opens there (the selection's
+        // own, where there's nothing of the tool's to offer).
+        if input.over && ui.state.right_pressed && noding.drag.is_none() {
+            noding.target = None;
+            match hover {
+                Some((node, Hit::Anchor(id))) if !picked.contains(&(node, id)) => picked = vec![(node, id)],
+                Some((node, Hit::Segment { after, share })) => noding.target = Some((node, after, share)),
+                _ => {}
+            }
+            if picked.is_empty() && noding.target.is_none() {
+                self.pointing.menu_at = Some(pointer);
+            } else {
+                noding.menu_at = Some(pointer);
+            }
+        }
         let released = input.released || !input.held;
         let press = |what, was, on_shape| Drag::Pressed(Press { at: pointer, what, was, shift: mods.shift(), on_shape });
         let drag = match noding.drag.take().map(|(_, drag)| drag) {
             None if input.pressed => match hover {
+                // A second press in a moment: a new anchor on a segment;
+                // an anchor from a corner to smooth, or back.
+                Some((node, Hit::Segment { after, share })) if input.double => {
+                    op = Some(NodeOp::Add(node, after, share));
+                    None
+                }
+                Some((node, Hit::Anchor(id))) if input.double => {
+                    let has = find(node).is_some_and(|sh| sh.outline.handles(id) != (None, None));
+                    picked = vec![(node, id)];
+                    op = Some(if has { NodeOp::Corner } else { NodeOp::Smooth });
+                    None
+                }
                 Some((node, Hit::Anchor(id))) => {
                     let was = picked.contains(&(node, id));
                     if !was {
@@ -455,5 +465,8 @@ impl Ink {
             self.tree.show(node);
         }
         self.noding.drag = drag.map(|drag| (doc, drag));
+        if let Some(op) = op {
+            self.node_op(op);
+        }
     }
 }

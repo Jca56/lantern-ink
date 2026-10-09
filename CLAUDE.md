@@ -1005,7 +1005,44 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     other anchors (slice f). Every frame reads and flattens each shown
     path afresh: fine for icons, to be kept per `Look` if a big path
     drags slowly.
-  - **`noding.rs` is 459 lines:** d2's edits go in a file of their own.
+  - (`noding.rs` was 459 lines: d2's edits went into `nodeops.rs`.)
+- **M4d's d2 is built** (2026-10-09, 503 tests, deployed; **not yet
+  looked at by Alva**).
+  - **What's done to the anchors picked is `nodeops.rs`**:
+    `Ink::node_op(NodeOp)` (Smooth, Corner, Break, Join, Delete, Add),
+    one Command and one step each, from the Box's buttons, the
+    right-click menu (`node_menu`, `menus::NODE_OP`), the keys, and
+    double clicks on the canvas. `Can` says which there's anything to
+    do with, to grey the rest.
+  - **The Commands are `anchors.rs`'s**, all through `each`: the edits
+    a closure gives for each shape's picked anchors, only the shapes it
+    changes made paths first, and the names their anchors go by after.
+    `smoothed`, `broken`, `joined`, `added` (and d1's `moved` and
+    `deleted`).
+  - **Double clicks, as LS3's pen has them:** on a segment, an anchor
+    there (picked, to be dragged); on an anchor, a corner made smooth
+    and back. So a press on an anchor just after a click on it toggles
+    it instead of dragging it: LS3 does the same.
+  - **Join takes two loose ends of one path** (the core's `Join` is
+    within one outline): ends of two paths need the paths made one
+    first, which nothing in the window does yet. **Alva hasn't been
+    asked** whether Join should do that itself.
+  - **A corner takes off its own handles only:** the curve into it
+    keeps the handle at its other end, so it can still look curved.
+  - **The Node tool's Box** (`Ink::node_box`): X and Y of the one
+    anchor picked (typed, or dragged along as a gesture: `box_set`,
+    shared with the shape rows' `tune`), then Smooth and Corner, Break
+    and Join, Delete. Always the same buttons, greyed
+    (`controls::button_if`) while there's nothing for them to do.
+  - **`controls/button.rs`** is LS3's button, copied (D12), with Ink's
+    greyed form beside it. A context menu's rows can't be greyed
+    (LUI2's `Item` has no such state), so the menu leaves out what
+    can't be done.
+  - **Not in d2:** keys for smooth, corner, break and join (none
+    asked for); making a segment straight again (`Straighten` is in the
+    core); X and Y for several anchors at once.
+  - **`noding.rs` is 472 lines:** nothing more goes into it without
+    its drags moving out first.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

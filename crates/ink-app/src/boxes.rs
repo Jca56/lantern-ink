@@ -108,6 +108,11 @@ impl Ink {
         if let Some(kind) = shapes::kind_of(self.tools.active()).filter(|k| matches!(k, Kind::Rect | Kind::Polygon)) {
             return self.shape_box(ui, canvas, kind);
         }
+        // Under the Node tool: the anchors picked, and what's done to
+        // them.
+        if self.tools.active() == Tool::Node {
+            return self.node_box(ui, canvas);
+        }
         let chosen = if self.tools.active() == Tool::Pointer { self.chosen() } else { None };
         let Some(Chosen { doc, tops, boxed }) = chosen else {
             // No settings to show (yet) for the other tools.

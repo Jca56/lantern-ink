@@ -1,17 +1,19 @@
 //! Ink's own controls (LS3's `controls/`, copied as D12 says: the look
 //! is LS3's): the number field you drag along or type into, the
-//! toggle, and the slider. More of LS3's come with the slices that
-//! need them (the dropdown, the button). Only the text editing
+//! toggle, the slider and the button. More of LS3's come with the
+//! slices that need them (the dropdown). Only the text editing
 //! itself is LUI2's (`Ui::text_edit_core`): carets, selections and the
 //! clipboard are one thing everywhere.
 //!
 //! The look: surfaces with the sheen, lines 2 px wide, LS3's golds,
 //! text at LUI2's size (never under 18 px).
 
+mod button;
 mod field;
 mod slider;
 mod toggle;
 
+pub use button::button_if;
 pub use field::number_in;
 pub use slider::Slider;
 pub use toggle::toggle;
@@ -42,6 +44,13 @@ pub(crate) fn round(ui: &Ui) -> f64 {
 pub(crate) fn frame(ui: &mut Ui, r: Rect, color: Color) {
     let (w, radius) = (px(ui, LINE), round(ui));
     ui.draw.stroke_rect(r, w, radius, color);
+}
+
+/// A raised face (a button): `base` with the sheen, in a line.
+pub(crate) fn face(ui: &mut Ui, r: Rect, base: Color, edge: Color) {
+    let (g, radius) = (crate::theme::sheen(base), round(ui));
+    ui.draw.rounded_rect_gradient(r, radius, g.top, g.bottom);
+    frame(ui, r, edge);
 }
 
 /// A well (a value's box): the dark of a place to type, in a line.

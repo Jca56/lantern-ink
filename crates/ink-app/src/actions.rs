@@ -109,7 +109,7 @@ impl Ink {
             PASTE => self.op(Op::Paste, cx),
             DUPLICATE => self.op(Op::Duplicate, cx),
             // The Node tool's anchors, where it has some picked.
-            DELETE if self.anchors_in_hand() => self.delete_anchors(),
+            DELETE if self.anchors_in_hand() => self.node_op(crate::nodeops::NodeOp::Delete),
             DELETE => self.op(Op::Delete, cx),
             SELECT_ALL => self.op(Op::SelectAll, cx),
             DESELECT => self.op(Op::Deselect, cx),
@@ -145,6 +145,11 @@ impl Ink {
             PALETTE_OP => {
                 if let (Some(Value::Str(op)), Some(Value::I64(index))) = (action.arg("op"), action.arg("index")) {
                     self.palette_op(op, usize::try_from(*index).unwrap_or(usize::MAX));
+                }
+            }
+            NODE_OP => {
+                if let Some(Value::Str(op)) = action.arg("op") {
+                    self.node_op_named(op);
                 }
             }
             ESCAPE => self.escape(),

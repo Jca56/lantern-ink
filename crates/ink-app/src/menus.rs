@@ -53,6 +53,8 @@ pub const ROTATE_CCW: &str = "object.rotate_ccw";
 pub const LOCK: &str = "object.lock";
 /// A row of a palette swatch's menu: `op`, on swatch `index`.
 pub const PALETTE_OP: &str = "palette.op";
+/// A row of the Node tool's menu: `op` says which.
+pub const NODE_OP: &str = "node.op";
 pub const ZOOM_IN: &str = "view.zoom_in";
 pub const ZOOM_OUT: &str = "view.zoom_out";
 pub const FIT: &str = "view.fit";

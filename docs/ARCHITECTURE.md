@@ -1083,6 +1083,14 @@ As LS3 §7, to the letter where it can be:
   - **Smooth is how the handles lie**, not something kept: in line
     through their anchor, one dragged takes the other round (each its
     own length); Alt, or a corner, and each goes alone.
+  - **What's done to the anchors picked** (`nodeops.rs`) is one step
+    each: made smooth or corners, the path parted at them, two loose
+    ends of one path joined, taken out, a new one put on a segment.
+    They're the Box's buttons (greyed while there's nothing for them
+    to do), the rows of the menu a right press opens, Delete, and
+    double clicks: on a segment for a new anchor there, on an anchor
+    to turn a corner smooth and back (LS3's pen's way). The Box also
+    has the one picked anchor's X and Y, to type or drag along.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

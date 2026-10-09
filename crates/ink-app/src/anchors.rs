@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 use ink_core::{Command, DocId, Document, NodeId};
 use ink_doc::outline::{AnchorId, Outline};
-use ink_doc::pathedit::PathEdit;
+use ink_doc::pathedit::{Along, PathEdit};
 use ink_doc::{Kind, geometry};
 use lntrn_math::Vec2;
 
@@ -143,6 +143,72 @@ pub fn command(first: &[NodeId], edits: Vec<(NodeId, Vec<PathEdit>)>) -> Command
     if steps.len() == 1 { steps.remove(0) } else { Command::Batch(steps) }
 }
 
+/// Whether `id` is a loose end in `outline`: the first or the last
+/// anchor of a run that isn't closed.
+pub fn is_end(outline: &Outline, id: AnchorId) -> bool {
+    outline.find(id).is_some_and(|(r, i)| {
+        let run = &outline.runs[r];
+        !run.closed && (i == 0 || i + 1 == run.anchors.len())
+    })
+}
+
+/// The Command that makes, on each shape with anchors among `picked`,
+/// the edits `edit` gives for them (given the shape's outline and its
+/// anchors picked; none: that shape is left alone), the shapes that
+/// aren't paths yet made paths first. And what the anchors of those
+/// are called from then on, where that's not what they're called now.
+/// None where there's nothing to do.
+pub fn each(drawing: &Document, would_be: &WouldBe, picked: &[Picked], edit: impl Fn(&Outline, &[AnchorId]) -> Vec<PathEdit>) -> Option<(Command, HashMap<Picked, AnchorId>)> {
+    // Which shapes it changes, first: only those are made paths, and
+    // what anchors are called goes by which are.
+    let outline = |node: NodeId| outline_of(drawing, would_be, node);
+    let changed: Vec<(NodeId, Vec<AnchorId>)> = grouped(picked).into_iter().filter(|(node, ids)| outline(*node).is_some_and(|o| !edit(&o, ids).is_empty())).collect();
+    let nodes: Vec<NodeId> = changed.iter().map(|(node, _)| *node).collect();
+    let (first, names) = firsts(drawing, would_be, &nodes);
+    let named = |node: NodeId, id: AnchorId| names.get(&(node, id)).copied().unwrap_or(id);
+    let edits: Vec<(NodeId, Vec<PathEdit>)> = changed
+        .into_iter()
+        .filter_map(|(node, ids)| {
+            // The outline and the pick, called what they will be.
+            let mut o = outline(node)?;
+            o.runs.iter_mut().flat_map(|run| &mut run.anchors).for_each(|a| a.id = named(node, a.id));
+            let ids: Vec<AnchorId> = ids.into_iter().map(|id| named(node, id)).collect();
+            Some((node, edit(&o, &ids)))
+        })
+        .collect();
+    (!edits.is_empty()).then(|| (command(&first, edits), names))
+}
+
+/// What makes the anchors `picked` smooth (handles in line through
+/// each), or corners (no handles).
+pub fn smoothed(drawing: &Document, would_be: &WouldBe, picked: &[Picked], smooth: bool) -> Option<(Command, HashMap<Picked, AnchorId>)> {
+    each(drawing, would_be, picked, |_, ids| vec![if smooth { PathEdit::Smooth { anchors: ids.to_vec() } } else { PathEdit::Corner { anchors: ids.to_vec() } }])
+}
+
+/// What parts each path at its anchors among `picked`: a closed run
+/// opens there, an open one becomes two. A loose end is parted already.
+pub fn broken(drawing: &Document, would_be: &WouldBe, picked: &[Picked]) -> Option<(Command, HashMap<Picked, AnchorId>)> {
+    each(drawing, would_be, picked, |outline, ids| ids.iter().filter(|id| !is_end(outline, **id)).map(|id| PathEdit::Break { at: *id }).collect())
+}
+
+/// What joins the two anchors `picked`, where they're two loose ends of
+/// one path: with a line, or as one anchor where they lie together.
+pub fn joined(drawing: &Document, would_be: &WouldBe, picked: &[Picked]) -> Option<(Command, HashMap<Picked, AnchorId>)> {
+    match picked {
+        [(one, _), (other, _)] if one == other => each(drawing, would_be, picked, |outline, ids| match ids {
+            [a, b] if is_end(outline, *a) && is_end(outline, *b) => vec![PathEdit::Join { a: *a, b: *b }],
+            _ => Vec::new(),
+        }),
+        _ => None,
+    }
+}
+
+/// What puts an anchor on the segment after `after` of `node`, `share`
+/// of the way along it, the path keeping its shape.
+pub fn added(drawing: &Document, would_be: &WouldBe, node: NodeId, after: AnchorId, share: f64) -> Option<Command> {
+    each(drawing, would_be, &[(node, after)], |_, ids| ids.iter().map(|id| PathEdit::Add { after: *id, at: Along::Share(share.clamp(0.02, 0.98)) }).collect()).map(|(command, _)| command)
+}
+
 /// What moves the anchors `picked` by `by` (the drawing's coordinates):
 /// each shape's by as far in its own.
 pub fn moved(drawing: &Document, would_be: &WouldBe, picked: &[Picked], by: Vec2) -> Option<Command> {
@@ -249,6 +315,50 @@ mod tests {
         let mut picked = [(ONE, AnchorId(6)), (PATH, AnchorId(2))];
         would.refresh(DOC, 2, &d, &[ONE], &mut picked);
         assert_eq!((picked, ids(would.get(ONE).unwrap())), ([(ONE, AnchorId(7)), (PATH, AnchorId(2))], vec![5, 6, 7, 8]));
+    }
+
+    #[test]
+    fn anchors_are_smoothed_parted_joined_and_put_in() {
+        let mut d = doc();
+        let mut would = WouldBe::default();
+        would.refresh(DOC, 1, &d, &[ONE, TWO], &mut []);
+        fn run(d: &mut Document, made: impl FnOnce(&Document) -> Option<(Command, HashMap<Picked, AnchorId>)>) -> ink_doc::Applied {
+            let (command, _) = made(d).expect("something to do");
+            d.apply(&command).unwrap()
+        }
+        // The path's middle anchor made smooth, and a corner again.
+        run(&mut d, |d| smoothed(d, &would, &[(PATH, AnchorId(2))], true));
+        assert_eq!(data(&d, PATH), "M0 0 C0 0 6.114 -1.886 8 0 C9.886 1.886 8 8 8 8");
+        run(&mut d, |d| smoothed(d, &would, &[(PATH, AnchorId(2))], false));
+        assert_eq!(data(&d, PATH), "M0 0 H8 V8");
+        // Parted at its middle: two runs. Its ends are parted already,
+        // and a square opens at a corner.
+        assert!(is_end(&d.outline(PATH).unwrap(), AnchorId(1)) && !is_end(&d.outline(PATH).unwrap(), AnchorId(2)));
+        assert_eq!(broken(&d, &would, &[(PATH, AnchorId(1)), (PATH, AnchorId(3))]), None);
+        let applied = run(&mut d, |d| broken(d, &would, &[(PATH, AnchorId(1)), (PATH, AnchorId(2)), (ONE, AnchorId(5))]));
+        assert_eq!((data(&d, PATH).as_str(), data(&d, ONE).as_str(), applied.anchors.len()), ("M0 0 H8 M8 0 V8", "M14 10 V14 H10 V10 H14", 2));
+        // Two loose ends of one path are joined: with a line, or as one
+        // anchor where they lie together.
+        let ends: Vec<AnchorId> = d.outline(PATH).unwrap().anchors().filter(|a| a.at == Vec2::new(8.0, 0.0)).map(|a| a.id).collect();
+        run(&mut d, |d| joined(d, &would, &[(PATH, ends[0]), (PATH, ends[1])]));
+        assert_eq!(data(&d, PATH), "M0 0 H8 V8");
+        run(&mut d, |d| joined(d, &would, &[(PATH, AnchorId(1)), (PATH, AnchorId(3))]));
+        assert_eq!(data(&d, PATH), "M0 0 H8 V8 Z");
+        // Not two anchors, not two ends, or not of one path: no join.
+        let none = [vec![(PATH, AnchorId(1))], vec![(PATH, AnchorId(1)), (PATH, AnchorId(2))], vec![(PATH, AnchorId(1)), (TWO, AnchorId(4))]];
+        assert!(none.iter().all(|picked| joined(&d, &would, picked).is_none()));
+        // An anchor put on a side of a square that's no path yet: it's
+        // made one, the anchor is the next there is, and it draws as it
+        // did.
+        let mut d = doc();
+        let applied = d.apply(&added(&d, &would, TWO, AnchorId(5), 0.5).unwrap()).unwrap();
+        assert_eq!((data(&d, TWO).as_str(), applied.anchors), ("M0 0 H4 V2 V4 H0 Z", vec![AnchorId(8)]));
+        // Only the shapes a change is for are made paths by it.
+        let mut d = doc();
+        let (command, names) = smoothed(&d, &would, &[(ONE, AnchorId(4)), (TWO, AnchorId(6))], true).unwrap();
+        d.apply(&command).unwrap();
+        assert_eq!((names.get(&(TWO, AnchorId(6))), d.node(ONE).unwrap().name.as_str(), d.outline(TWO).unwrap().anchors().count()), (Some(&AnchorId(10)), "path", 4));
+        assert!(broken(&d, &would, &[]).is_none() && each(&d, &would, &[(PATH, AnchorId(1))], |_, _| Vec::new()).is_none());
     }
 
     #[test]

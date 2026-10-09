@@ -62,6 +62,26 @@ impl Running {
         assert_eq!(self.selected(), [HILL]);
     }
 
+    /// A double click at `at`.
+    fn twice(&mut self, at: Vec2) {
+        self.click(at);
+        self.h.press();
+        self.frames(1);
+        self.h.release();
+        self.frames(2);
+    }
+
+    /// The names of what the Box holds, top to bottom.
+    fn box_rows(&self) -> Vec<&'static str> {
+        self.ink.toolbox.laid.iter().map(|(name, _)| *name).collect()
+    }
+
+    /// A click on the Box's `name`.
+    fn press_in_box(&mut self, name: &str) {
+        let at = self.ink.toolbox.laid.iter().find(|(n, _)| *n == name).map(|(_, r)| r.center()).unwrap_or_else(|| panic!("the Box has no {name}"));
+        self.click(at);
+    }
+
     fn undo(&mut self, steps: usize) {
         for _ in 0..steps {
             self.key(Key::Char('z'), Modifiers::CTRL);
@@ -210,5 +230,95 @@ fn a_shape_becomes_a_path_when_its_anchors_are_first_changed() {
     r.key(Key::Delete, Modifiers::NONE);
     assert!(name(&r).is_none() && r.selected().is_empty() && r.steps() == ["Delete Anchors"]);
     r.undo(1);
+    assert_eq!(r.svg(), SCENE);
+}
+
+#[test]
+fn anchors_are_put_in_and_made_smooth_by_double_clicks() {
+    let mut r = scene("nodes-double");
+    r.hill();
+    // On a segment: an anchor there, picked, the path drawn as it was.
+    r.twice(r.spot(20.0, 25.0));
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps(), r.anchors()), (Some("M4 20 C4 8 20 8 20 20 V25 V30"), vec!["Add Anchor".to_owned()], vec![(HILL, a(11))]));
+    // On an anchor: a corner made smooth (handles a third of the way to
+    // its neighbours), and a corner again.
+    r.twice(r.spot(20.0, 25.0));
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps().last().map(String::as_str)), (Some("M4 20 C4 8 20 8 20 20 C20 20 20 23.333 20 25 C20 26.667 20 30 20 30"), Some("Smooth")));
+    r.twice(r.spot(20.0, 25.0));
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps().last().map(String::as_str), r.anchors()), (Some("M4 20 C4 8 20 8 20 20 V25 V30"), Some("Corner"), vec![(HILL, a(11))]));
+    // A side of a rectangle: it's made a path with five corners.
+    r.click(r.spot(35.0, 9.0));
+    r.twice(r.spot(35.0, 4.0));
+    assert_eq!((r.says(CARD, "d").as_deref(), r.anchors().len(), r.steps().len()), (Some("M28 4 H35 H42 V14 H28 Z"), 1, 4));
+    // A right press picks the anchor under it for its menu; on a
+    // segment, it's where "Add Anchor Here" puts one.
+    r.h.advance(1.0);
+    r.h.move_to(r.spot(42.0, 14.0));
+    r.frames(1);
+    r.h.right_press();
+    r.frames(2);
+    assert_eq!((r.anchors().len(), r.ink.noding.target), (1, None));
+    let corner = r.anchors()[0];
+    r.key(Key::Escape, Modifiers::NONE);
+    r.ink.node_op_named("smooth");
+    assert_eq!((r.steps().last().map(String::as_str), r.anchors()), (Some("Smooth"), vec![corner]));
+    r.h.move_to(r.spot(28.0, 9.0));
+    r.frames(1);
+    r.h.right_press();
+    r.frames(2);
+    assert!(r.ink.noding.target.is_some_and(|(node, _, share)| node == CARD && (share - 0.5).abs() < 0.01));
+    r.key(Key::Escape, Modifiers::NONE);
+    r.ink.node_op_named("add");
+    assert_eq!((r.steps().last().map(String::as_str), r.anchors().len(), r.ink.noding.target), (Some("Add Anchor"), 1, None));
+    r.undo(6);
+    assert_eq!(r.svg(), SCENE);
+}
+
+#[test]
+fn the_box_holds_what_is_done_to_the_anchors_picked() {
+    let mut r = scene("nodes-box");
+    let doc = r.doc();
+    let square = r.ink.toolbox.rect().expect("the Node tool's Box");
+    r.click(square.center());
+    // Always the same buttons, greyed while there's nothing for them to
+    // do: with no anchor picked, a press on one does nothing.
+    assert_eq!(r.box_rows(), ["Smooth", "Corner", "Break", "Join", "Delete"]);
+    r.hill();
+    r.press_in_box("Delete");
+    assert!(r.steps().is_empty() && r.selected() == [HILL]);
+    // One anchor picked: where it is, to type.
+    r.click(r.spot(20.0, 20.0));
+    assert_eq!(r.box_rows(), ["X", "Y", "Smooth", "Corner", "Break", "Join", "Delete"]);
+    r.press_in_box("X");
+    r.h.type_text("22");
+    r.frames(1);
+    r.key(Key::Enter, Modifiers::NONE);
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps()), (Some("M4 20 C4 8 22 8 22 20 L20 30"), vec!["Move Anchor".to_owned()]));
+    // Or to drag along: a tenth of a unit a pixel, shown as it goes.
+    let y = r.ink.toolbox.laid.iter().find(|(n, _)| *n == "Y").unwrap().1.center();
+    r.drag_to(y, y + Vec2::new(20.0, 0.0));
+    assert!(r.ink.core.gesturing(doc) && r.steps().len() == 1);
+    assert!(r.ink.core.shown(doc).unwrap().0.to_svg().contains("d=\"M4 20 C4 8 22 10 22 22 L20 30\""));
+    r.let_go();
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps().len(), r.anchors()), (Some("M4 20 C4 8 22 10 22 22 L20 30"), 2, vec![(HILL, a(2))]));
+    // Break: the path parts there, into two runs. Join is greyed until
+    // two loose ends of one path are picked; then they're one again.
+    r.press_in_box("Join");
+    assert_eq!(r.steps().len(), 2);
+    r.press_in_box("Break");
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps().last().map(String::as_str)), (Some("M4 20 C4 8 22 10 22 22 M22 22 L20 30"), Some("Break Path")));
+    r.drag(r.spot(24.0, 24.0), r.spot(21.0, 21.0));
+    assert_eq!(r.anchors().len(), 2);
+    r.press_in_box("Join");
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps().last().map(String::as_str), r.anchors().len()), (Some("M4 20 C4 8 22 10 22 22 L20 30"), Some("Join"), 1));
+    // Smooth, Corner and Delete, on what's picked.
+    r.press_in_box("Smooth");
+    assert_eq!(r.steps().last().map(String::as_str), Some("Smooth"));
+    r.press_in_box("Corner");
+    // (A corner has no handles of its own: its neighbour's stays.)
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps().last().map(String::as_str)), (Some("M4 20 C4 8 22 22 22 22 L20 30"), Some("Corner")));
+    r.press_in_box("Delete");
+    assert_eq!((r.says(HILL, "d").as_deref(), r.steps().last().map(String::as_str), r.box_rows().len()), (Some("M4 20 C4 8 20 30 20 30"), Some("Delete Anchor"), 5));
+    r.undo(7);
     assert_eq!(r.svg(), SCENE);
 }

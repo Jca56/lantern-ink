@@ -145,6 +145,8 @@ impl Ink {
         // On a palette swatch: that swatch's.
         if let Some(menu) = swatch_menu {
             cx.request(ShellRequest::ContextMenu(Box::new(menu)));
+        } else if let Some(at) = self.noding.menu_at.take() {
+            cx.request(ShellRequest::ContextMenu(Box::new(self.node_menu(at, self.noding.target.is_some()))));
         } else if let Some(at) = menu_at.or(self.pointing.menu_at.take()) {
             cx.request(ShellRequest::ContextMenu(Box::new(self.selection_menu(at))));
         }

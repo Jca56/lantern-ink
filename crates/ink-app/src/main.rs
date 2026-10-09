@@ -24,6 +24,7 @@ mod layout;
 mod lifecycle;
 mod log;
 mod menus;
+mod nodeops;
 mod nodes;
 mod noding;
 mod ops;

@@ -187,18 +187,25 @@ impl Ink {
     pub(crate) fn tune(&mut self, doc: DocId, tops: &[NodeId], tune: Tune, held: bool) {
         let Ok(drawing) = self.core.doc(doc) else { return };
         let Some(command) = command(drawing, tops, tune, self.shape_settings.depth) else { return };
-        if self.tuning.is_none() && (!held || matches!(tune, Tune::Star(_))) {
-            self.edit(doc, &command, tune.label());
+        self.box_set(doc, &command, tune.label(), held && !matches!(tune, Tune::Star(_)));
+    }
+
+    /// Do `command` from a row of the Box: at once, as the step `label`;
+    /// or, `held` (the button is down on the row that chose it), shown
+    /// and not yet done ([`Ink::tune_settled`] does it).
+    pub(crate) fn box_set(&mut self, doc: DocId, command: &Command, label: &'static str, held: bool) {
+        if self.tuning.is_none() && !held {
+            self.edit(doc, command, label);
             return;
         }
         if self.tuning.is_none() {
             if self.core.begin(doc, Actor::Alva).is_err() {
                 return;
             }
-            self.tuning = Some(Tuning { doc, label: tune.label() });
+            self.tuning = Some(Tuning { doc, label });
         }
         // A refusal waits for the button to come up to be said.
-        let _ = self.core.update(doc, &command);
+        let _ = self.core.update(doc, command);
     }
 
     /// The button came up: what a row was dragged to lands, as one step.
