@@ -30,6 +30,9 @@ impl Ink {
         if popup && ui.state.pressed {
             ui.state.press_claimed = true;
         }
+        // The keys that are a text's, while one is typed into: before
+        // anything else sees them.
+        self.text_keys_in(ui, popup);
         // The clipboard: what was copied goes out with this frame; a
         // paste is asked of the system in one frame and done with what
         // the next one has.
@@ -196,6 +199,8 @@ impl Ink {
             self.eyedrop_tool(ui, &view, doc, &input);
         }
         let mut scene = self.pointer_tool(ui, &view, doc, &input, tool == Tool::Pointer && !popup);
+        // The Text tool: a text typed into, and its caret.
+        self.text_tool(ui, &view, doc, &input, tool == Tool::Text && !popup, &mut scene);
         // The Gradient tool: the line of the gradient in hand, and drags
         // across a shape.
         self.grade_tool(ui, &view, doc, &input, tool == Tool::Gradient && !popup, &mut scene);

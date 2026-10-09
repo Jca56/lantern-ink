@@ -28,6 +28,9 @@ pub(crate) fn doc_action(id: &str, doc: DocId) -> Action {
 
 impl Ink {
     pub fn act(&mut self, action: &Action, cx: &mut HostCx) {
+        // What's been typed into a text lands first, as its own step:
+        // whatever this does is done to the drawing with it in.
+        self.type_settled();
         let active = self.tabs.active_doc();
         match action.id.as_str() {
             NEW => self.new_document(),

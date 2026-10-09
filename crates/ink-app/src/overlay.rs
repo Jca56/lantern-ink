@@ -41,6 +41,8 @@ pub struct Scene {
     pub ring: Option<Vec2>,
     /// The line of the gradient the Gradient tool has in hand.
     pub axis: Option<crate::grading::Axis>,
+    /// The caret of the text being typed into: its top, and its bottom.
+    pub caret: Option<(Vec2, Vec2)>,
 }
 
 /// A closed line round `quad`, gold over a dark edge: seen on the tan
@@ -110,6 +112,11 @@ pub fn draw(ui: &mut Ui, area: Rect, scene: &Scene) {
         let end = Rect::from_xywh((axis.to.x - radius).round(), (axis.to.y - radius).round(), radius * 2.0, radius * 2.0);
         ui.draw.rect(end.expand(w * 2.0), dark);
         ui.draw.rect(end, Color::WHITE);
+    }
+    // A caret: gold over a dark edge, as wide as it takes to see.
+    if let Some((top, bottom)) = scene.caret {
+        ui.draw.line(top, bottom, w * 5.0, Color::rgba(0.0, 0.0, 0.0, 0.7));
+        ui.draw.line(top, bottom, w * 3.0, ACCENT);
     }
     if let Some(at) = scene.ring {
         ui.draw.circle(at, crate::penning::CLOSE * s / 2.0, ACCENT.with_alpha(0.35));

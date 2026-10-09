@@ -49,11 +49,13 @@ mod shadows;
 mod shapebox;
 mod shapes;
 mod shaping;
+mod texting;
 mod theme;
 mod tiles;
 mod toolbox;
 mod tools;
 mod tree;
+mod typing;
 mod workspace;
 
 use std::path::PathBuf;

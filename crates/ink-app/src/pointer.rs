@@ -440,6 +440,10 @@ impl Ink {
         if self.grading.busy() {
             return self.drop_grade();
         }
+        // A text typed into is let go of (what was typed has landed).
+        if self.typing() {
+            return self.type_done();
+        }
         // The Node tool and the Pen let go of their anchors (and the Pen
         // of a first point not yet a path) before anything else.
         let tool = self.tools.active();

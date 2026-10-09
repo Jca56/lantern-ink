@@ -28,6 +28,7 @@ mod ops;
 mod paint;
 mod paths;
 mod pen;
+mod text;
 mod pointer;
 mod shapes;
 mod tree;

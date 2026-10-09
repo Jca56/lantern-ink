@@ -66,6 +66,8 @@ pub(super) fn set(pieces: &[Piece], chars: &[(char, usize)], starts: &[Start]) -
     let shapes_with = |a: usize, b: usize| a == b || (faces[a] == faces[b] && pieces[a].font.size == pieces[b].font.size && pieces[a].font.baseline == pieces[b].font.baseline);
 
     let (mut placed, mut cells): (Vec<Placed>, Vec<Rect>) = (Vec::new(), Vec::new());
+    // Which characters each cell is for: from this one, up to that one.
+    let mut cell_chars: Vec<(usize, usize)> = Vec::new();
     let mut pictures = 0;
     let mut pen = Vec2::ZERO;
     let mut chunk = Chunk { glyphs: 0, cells: 0, start: 0.0, anchor: Anchor::Start };
@@ -109,6 +111,9 @@ pub(super) fn set(pieces: &[Piece], chars: &[(char, usize)], starts: &[Start]) -
         // mark on it, or the rest of a ligature, isn't the next one).
         let (mut along, mut extra) = (0.0, 0.0);
         let mut owed: Option<(usize, usize)> = None;
+        // Where each glyph's characters stop: at the next glyph's.
+        let stands: Vec<usize> = line.glyphs.iter().map(|g| character(g.at)).collect();
+        let until = |c: usize| stands.iter().copied().filter(|other| *other > c).min().unwrap_or(to);
         for glyph in line.glyphs {
             let c = character(glyph.at);
             match owed {
@@ -124,6 +129,7 @@ pub(super) fn set(pieces: &[Piece], chars: &[(char, usize)], starts: &[Start]) -
             }
             let origin = pen + Vec2::new(extra, drop);
             cells.push(Rect::new(Vec2::new(origin.x + along * size, origin.y - ascent), Vec2::new(origin.x + (along + glyph.advance) * size, origin.y + descent)));
+            cell_chars.push((c, until(c)));
             along += glyph.advance;
             pictures += usize::from(glyph.picture);
             if !glyph.outline.is_empty() && size > 0.0 {
@@ -151,5 +157,26 @@ pub(super) fn set(pieces: &[Piece], chars: &[(char, usize)], starts: &[Start]) -
             _ => runs.push(Run { node, outline }),
         }
     }
-    Laid { runs, cells: cells.into_iter().reduce(|a, b| a.union(&b)), pictures }
+    // Each character's own cell: a glyph that stands for several (a
+    // ligature) is shared out among them, and marks on a character are
+    // part of its cell.
+    let mut each: Vec<Option<Rect>> = vec![None; chars.len()];
+    for (cell, &(from, to)) in cells.iter().zip(&cell_chars) {
+        let share = cell.width() / (to - from).max(1) as f64;
+        for (k, c) in (from..to.min(chars.len())).enumerate() {
+            let part = Rect::new(Vec2::new(cell.min.x + share * k as f64, cell.min.y), Vec2::new(cell.min.x + share * (k + 1) as f64, cell.max.y));
+            each[c] = Some(each[c].map_or(part, |had| had.union(&part)));
+        }
+    }
+    // (One with no glyph at all stands, with no width, where the one
+    // before it ends.)
+    let mut last = Rect::default();
+    let each = each
+        .into_iter()
+        .map(|cell| {
+            last = cell.unwrap_or(Rect::new(Vec2::new(last.max.x, last.min.y), last.max));
+            last
+        })
+        .collect();
+    Laid { runs, cells: cells.into_iter().reduce(|a, b| a.union(&b)), chars: each, pictures }
 }
