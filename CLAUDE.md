@@ -1177,6 +1177,46 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Not in e2:** a shadow and a blur on one thing at once (each
     replaces the other: one step to a filter here); spread, inner
     shadows, more than one shadow.
+- **M4e's e3 is built** (2026-10-09, 525 tests, deployed).
+  - **A shape's gradient in hand is `grads.rs`**: `Held` (which paint,
+    the gradient, its line in its own numbers and what takes those to
+    the drawing's coordinates, its stops), `Change` (its line, its
+    stops, its kind), `Held::set` and `fresh`. `ink_doc::gradient`
+    learnt `Gradient::line` and `to_user` for it (the renderer's
+    `Paint::fit` says the same in its own words: change both).
+  - **A gradient is changed where it is while it's that shape's
+    alone** and says its own stops: only the attributes that differ
+    (a stop's colour through `SetStyle`, so it's written where the stop
+    has it). One that other shapes use, or that takes its stops from
+    another, is left, and the shape gets a copy of its own with the
+    change made (Alva's rule since M3b). Linear to radial is another
+    element: a new one, and the old one goes if it was the shape's own.
+  - **The tool and its Box are `grading.rs`** (`Ink::grade_tool`,
+    `grade_box`, `Ink::grading`): a drag across a shape is its
+    gradient's line (a plain colour gets a new gradient, from that
+    colour to `section::gradient_of`'s darker one, measured by the
+    shape's box); a press on another shape takes that one up; the
+    line's ends are handles (round where it starts, square where it
+    ends), with the stops' colours along it. Shift holds to 45°.
+  - **"Radial" is the gradient in hand's kind**, and without one the
+    next one's: a radial one is about where the drag begins, out to
+    where it ends. **"Stroke"** has the tool work on the stroke's
+    gradient.
+  - **The stops bar:** a press near a stop takes it, anywhere else
+    puts one there (the gradient's own colour at that place); held, it
+    goes along with the pointer, no further than its neighbours. The
+    one picked has its colour (the paint section's picker), its place
+    ("At %") and "Remove Stop" (two are the fewest). The bar's drags go
+    through `box_set`, as the other rows' do.
+  - The Gradient tool works on one shape: of the selection, the one in
+    hand (or the first shape it holds).
+  - **Not in e3:** a text's gradient (its box is its glyphs' cells:
+    `Held::of` takes shapes only); a radial gradient's focus (set to
+    its middle when its line is moved); spread (pad, reflect, repeat);
+    reversing; dragging a stop on the canvas (they show there, and are
+    dragged on the bar).
+  - **`grading.rs` is 451 lines:** its Box wants a file of its own
+    before anything is added.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

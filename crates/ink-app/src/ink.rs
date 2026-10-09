@@ -58,6 +58,8 @@ pub struct Ink {
     pub(crate) noding: crate::noding::Noding,
     /// The Pen: a path being drawn, point by point.
     pub(crate) penning: crate::penning::Penning,
+    /// The Gradient tool: which paint, which kind, and a drag of it.
+    pub(crate) grading: crate::grading::Grading,
     /// The desktop's resize and turn cursors.
     pub(crate) cursor_theme: crate::cursors::Themed,
     /// The Box over the canvas, and a number of it being dragged along.
@@ -120,6 +122,7 @@ impl Ink {
             pointing: Pointer::default(),
             noding: crate::noding::Noding::default(),
             penning: crate::penning::Penning::default(),
+            grading: crate::grading::Grading::default(),
             cursor_theme: if cfg!(test) { Default::default() } else { crate::cursors::themed() },
             toolbox: crate::toolbox::ToolBox::default(),
             boxing: None,

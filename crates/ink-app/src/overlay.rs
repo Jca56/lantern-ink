@@ -39,6 +39,8 @@ pub struct Scene {
     pub levers: Vec<(Vec2, Vec2)>,
     /// The end of a path a press of the Pen would close it on.
     pub ring: Option<Vec2>,
+    /// The line of the gradient the Gradient tool has in hand.
+    pub axis: Option<crate::grading::Axis>,
 }
 
 /// A closed line round `quad`, gold over a dark edge: seen on the tan
@@ -90,6 +92,24 @@ pub fn draw(ui: &mut Ui, area: Rect, scene: &Scene) {
     for (line, closed) in scene.paths.iter().filter(|(line, _)| line.len() >= 2) {
         ui.draw.polyline(line, w * 3.0, dark, *closed);
         ui.draw.polyline(line, w * 1.5, ACCENT, *closed);
+    }
+    // A gradient's line: a round end where it starts and a square one
+    // where it stops, and each stop's colour along it.
+    if let Some(axis) = &scene.axis {
+        let radius = (DRAWN * s).round();
+        ui.draw.line(axis.from, axis.to, w * 4.0, dark);
+        ui.draw.line(axis.from, axis.to, w * 2.0, Color::WHITE);
+        for (offset, color) in &axis.stops {
+            let at = axis.from + (axis.to - axis.from) * offset.clamp(0.0, 1.0);
+            ui.draw.circle(at, radius * 0.7 + w * 2.0, dark);
+            ui.draw.circle(at, radius * 0.7 + w, Color::WHITE);
+            ui.draw.circle(at, radius * 0.7, color.with_alpha(1.0));
+        }
+        ui.draw.circle(axis.from, radius + w * 2.0, dark);
+        ui.draw.circle(axis.from, radius, Color::WHITE);
+        let end = Rect::from_xywh((axis.to.x - radius).round(), (axis.to.y - radius).round(), radius * 2.0, radius * 2.0);
+        ui.draw.rect(end.expand(w * 2.0), dark);
+        ui.draw.rect(end, Color::WHITE);
     }
     if let Some(at) = scene.ring {
         ui.draw.circle(at, crate::penning::CLOSE * s / 2.0, ACCENT.with_alpha(0.35));

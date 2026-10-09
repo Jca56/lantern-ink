@@ -155,7 +155,7 @@ impl Ink {
     /// The canvas: the view moved as the pointer asks, the tool in
     /// hand, and the drawing as the camera shows it.
     fn canvas(&mut self, ui: &mut Ui, area: Rect, doc: DocId, viewport: &Viewport, click: Option<Click>, popup: bool) {
-        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy() || self.noding.busy() || self.penning.busy() || self.shaping.is_some());
+        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy() || self.noding.busy() || self.penning.busy() || self.grading.busy() || self.shaping.is_some());
         let Some(tab) = self.tabs.active_mut() else { return };
         // A tab first laid out is fitted.
         let cam = tab.camera.get_or_insert_with(|| Camera::fit(area, page));
@@ -196,6 +196,9 @@ impl Ink {
             self.eyedrop_tool(ui, &view, doc, &input);
         }
         let mut scene = self.pointer_tool(ui, &view, doc, &input, tool == Tool::Pointer && !popup);
+        // The Gradient tool: the line of the gradient in hand, and drags
+        // across a shape.
+        self.grade_tool(ui, &view, doc, &input, tool == Tool::Gradient && !popup, &mut scene);
         // The Pen places points on bare canvas; whatever else the pointer
         // is on is the Node tool's, which runs under it. The Node tool:
         // the selected shapes' anchors, in place of the box.

@@ -2,7 +2,7 @@
 //! units, a transform and a spread, and what one takes over from another
 //! by `href`. Fitting one to a shape is the renderer's.
 
-use ink_geom::Affine;
+use ink_geom::{Affine, Rect, Vec2};
 use lntrn_math::Color;
 
 use crate::color;
@@ -138,6 +138,43 @@ fn is_gradient(node: &Node) -> bool {
 }
 
 impl Gradient {
+    /// Its line, in its own numbers: a linear one's two ends; a radial
+    /// one's middle, and the point of its circle straight across from
+    /// it. What isn't said is what SVG says it is (a linear one from
+    /// left to right of its space, a radial one's circle filling it).
+    /// Percentages are of `view`, where it's measured in user units.
+    pub fn line(&self, view: Vec2) -> (Vec2, Vec2) {
+        let (w, h) = match self.units {
+            Units::BBox => (1.0, 1.0),
+            Units::UserSpace => (view.x, view.y),
+        };
+        let len = |l: Option<Length>, default: f64, whole: f64| match self.units {
+            Units::BBox => l.map_or(default, Length::fraction),
+            Units::UserSpace => l.map_or(default * whole, |l| l.of(whole)),
+        };
+        let c = self.coords;
+        if self.radial {
+            let centre = Vec2::new(len(c[0], 0.5, w), len(c[1], 0.5, h));
+            (centre, centre + Vec2::new(len(c[2], 0.5, ((w * w + h * h) * 0.5).sqrt()), 0.0))
+        } else {
+            (Vec2::new(len(c[0], 0.0, w), len(c[1], 0.0, h)), Vec2::new(len(c[2], 1.0, w), len(c[3], 0.0, h)))
+        }
+    }
+
+    /// From its own numbers to the coordinates of a shape it paints,
+    /// whose box there is `bbox`. `None` for a gradient measured by the
+    /// box of a shape that has no width, or no height.
+    pub fn to_user(&self, bbox: Option<Rect>) -> Option<Affine> {
+        let to_user = match self.units {
+            Units::BBox => {
+                let b = bbox.filter(|b| b.width() > 0.0 && b.height() > 0.0)?;
+                Affine::new(b.width(), 0.0, 0.0, b.height(), b.min.x, b.min.y)
+            }
+            Units::UserSpace => Affine::IDENTITY,
+        };
+        Some(self.transform.then(&to_user))
+    }
+
     /// The gradient `node` is, with what it leaves unsaid taken from the
     /// gradients it points at. `None` when `node` isn't a gradient.
     pub fn of(doc: &Document, ids: &Ids, node: &Node) -> Option<Gradient> {
@@ -214,6 +251,27 @@ mod tests {
         assert_eq!((lost.units, lost.spread, lost.transform, lost.stops.len()), (Units::BBox, Spread::Pad, Affine::IDENTITY, 0));
         assert!(gradient(defs, "loop").is_some());
         assert!(gradient("<g id=\"g\"/>", "g").is_none());
+    }
+
+    #[test]
+    fn a_gradients_line_is_where_it_paints() {
+        let view = Vec2::new(48.0, 24.0);
+        let bbox = Some(Rect::from_xywh(10.0, 20.0, 8.0, 4.0));
+        // Nothing said: left to right of the shape's box; a radial one,
+        // from the box's middle to its side.
+        let plain = gradient(r#"<linearGradient id="g"/>"#, "g").unwrap();
+        let at = |g: &Gradient, p: Vec2| g.to_user(bbox).unwrap().apply(p);
+        assert_eq!((plain.line(view), at(&plain, plain.line(view).0), at(&plain, plain.line(view).1)), ((Vec2::ZERO, Vec2::new(1.0, 0.0)), Vec2::new(10.0, 20.0), Vec2::new(18.0, 20.0)));
+        let round = gradient(r#"<radialGradient id="g"/>"#, "g").unwrap();
+        assert_eq!((at(&round, round.line(view).0), at(&round, round.line(view).1)), (Vec2::new(14.0, 22.0), Vec2::new(18.0, 22.0)));
+        // Said, in the box's shares; and through its own transform.
+        let down = gradient(r#"<linearGradient id="g" x1="0.5" y1="0" x2="50%" y2="1" gradientTransform="translate(0.25 0)"/>"#, "g").unwrap();
+        assert_eq!((at(&down, down.line(view).0), at(&down, down.line(view).1)), (Vec2::new(16.0, 20.0), Vec2::new(16.0, 24.0)));
+        // In user units, where it says; a percentage is of the view.
+        let user = gradient(r#"<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2" y1="3" x2="50%" y2="3"/>"#, "g").unwrap();
+        assert_eq!((user.line(view), user.to_user(None)), ((Vec2::new(2.0, 3.0), Vec2::new(24.0, 3.0)), Some(Affine::IDENTITY)));
+        // By the box of a shape that has none, it's nowhere.
+        assert_eq!((plain.to_user(None), plain.to_user(Some(Rect::from_xywh(0.0, 0.0, 8.0, 0.0)))), (None, None));
     }
 
     #[test]

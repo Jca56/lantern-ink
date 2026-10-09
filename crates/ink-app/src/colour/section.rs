@@ -99,7 +99,7 @@ pub struct Shown<'a> {
 }
 
 /// A gradient's colours across `r`, as they run along it.
-fn gradient_face(ui: &mut Ui, r: Rect, stops: &[(f64, Color)]) {
+pub(crate) fn gradient_face(ui: &mut Ui, r: Rect, stops: &[(f64, Color)]) {
     let at = |t: f64| r.min.x + r.width() * t.clamp(0.0, 1.0);
     match stops {
         [] => ui.draw.rect_gradient_h(r, Color::hex(0xE8DCC8), Color::hex(0x4A4038)),

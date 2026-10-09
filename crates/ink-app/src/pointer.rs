@@ -437,6 +437,9 @@ impl Ink {
         if self.penning.busy() {
             return self.drop_pen();
         }
+        if self.grading.busy() {
+            return self.drop_grade();
+        }
         // The Node tool and the Pen let go of their anchors (and the Pen
         // of a first point not yet a path) before anything else.
         let tool = self.tools.active();

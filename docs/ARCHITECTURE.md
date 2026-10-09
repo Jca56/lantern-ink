@@ -1117,6 +1117,32 @@ As LS3 §7, to the letter where it can be:
   Outline Stroke, Simplify and Reverse are for every shape the
   selection is or holds. The same rows are under "Path" in the menu a
   right-click on the selection opens.
+  **Slice e's small things, as built** (`eyedrop.rs`, `effects.rs`,
+  `shadows.rs`):
+  - **The Eyedropper takes the colour you see** (Alva's choice): one
+    pixel of the drawing itself, drawn eight times finer than the
+    screen shows it with the point in its middle, so it's the colour
+    there through gradients, opacity and shadows. It's the selection's
+    fill and the next shape's (Shift: the stroke).
+  - **Object > Clip**: the thing on top of the selection, a shape,
+    cuts the rest (several under it are grouped, and the group is
+    cut). **Release Clip** takes it off again. **Text > Text to Path**
+    asks before making paths in a font the text didn't ask for.
+  - **Object > Drop Shadow and Blur** give the selection a filter of
+    one step, as Claude's `filter_set` does (the same arithmetic for
+    its room: `ink_doc::filter::region`), and open the Box, where its
+    settings are while the thing is selected. A filter is changed
+    where it is while it's the selection's alone.
+  **The Gradient tool, as built in M4e** (`grads.rs`, `grading.rs`):
+  - **A drag across a shape is its gradient's line**: from end to end
+    for a linear one, from the middle out for a radial one. A shape
+    with a plain colour gets a new gradient of that colour, measured by
+    its box so it goes where the shape goes. The line's ends stay on
+    the canvas as handles.
+  - **Its stops are on a bar in the Box**: put there by a press,
+    dragged along, recoloured, and taken off.
+  - **A gradient is changed where it is while it's that shape's
+    alone**; a shared one is left, and the shape gets its own.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

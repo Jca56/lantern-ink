@@ -16,6 +16,8 @@ mod edits;
 mod effects;
 mod eyedrop;
 mod files;
+mod grading;
+mod grads;
 mod handles;
 mod host;
 mod icons;
