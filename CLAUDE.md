@@ -1086,6 +1086,36 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     placing; a setting to join onto another path's end.
   - **`ink-doc/src/pathedit.rs` is 459 lines:** the next edit wants
     `Outline::edit`'s arms in two files first.
+- **M4d's d4 is built** (2026-10-09, 511 tests, deployed; **not yet
+  looked at by Alva**), and with it **all of M4d**. Next: M4e (text,
+  gradients and the eyedropper), once she has looked at d4.
+  - **The Path menu is `pathops.rs`**: `PathOp` (its rows, in
+    `PathOp::ROWS`), `can` (which are lit), `command` (the one Command
+    each is), and `Ink::path_op`. A row's action is `menus::PATH_OP`
+    with the row's label (`menus::path_action`). No Command is new:
+    they're M3c's.
+  - **Which shapes each is for** (my calls, told to Alva at d4's
+    handoff): Union, Subtract, Intersect and Exclude take the shapes
+    selected themselves, back to front, so **the one furthest back
+    takes the result and keeps its paint**, and Subtract is it less
+    the ones in front (as Inkscape, Illustrator and Figma have it).
+    Object to Path, Outline Stroke, Simplify and Reverse take every
+    shape the selection is or holds, as paint does: each the ones it
+    has something to do to. Nothing locked.
+  - Union is lit for one shape too (it's made simple where it crosses
+    itself); the other three need two.
+  - **The same rows are in the selection's right-click menu**, under
+    "Path", the ones with nothing to do left out.
+  - Afterwards what's selected is what was, that's still there, with
+    what the step made (a stroke's outline beside its shape).
+  - **Simplify's default tolerance is `ink_doc::paths::simplify_tolerance`**
+    (a five-hundredth of the path's size): `ink-tools` uses the same,
+    so the window and Claude simplify alike.
+  - **Not in d4:** keys for these (Inkscape's Ctrl + and Ctrl − are
+    Ink's zoom; none bound until Alva says which); a tolerance to set
+    for Simplify or Outline Stroke; shapes in a selected group made one
+    (select them themselves); a text made a path (Text to Path is
+    slice e's).
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

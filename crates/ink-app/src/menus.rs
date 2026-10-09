@@ -51,6 +51,8 @@ pub const FLIP_V: &str = "object.flip_v";
 pub const ROTATE_CW: &str = "object.rotate_cw";
 pub const ROTATE_CCW: &str = "object.rotate_ccw";
 pub const LOCK: &str = "object.lock";
+/// A row of the Path menu: `op` says which.
+pub const PATH_OP: &str = "path.op";
 /// A row of a palette swatch's menu: `op`, on swatch `index`.
 pub const PALETTE_OP: &str = "palette.op";
 /// A row of the Node tool's menu: `op` says which.
@@ -92,12 +94,19 @@ pub struct MenuState<'a> {
     pub recent: &'a Recent,
     /// What's selected.
     pub picked: Picked,
+    /// What the Path menu can do with it.
+    pub paths: crate::pathops::Can,
     /// Align is against the page.
     pub align_to_page: bool,
 }
 
 fn row(label: &str, id: &str) -> MenuItem {
     MenuItem::new(label, Action::new(id))
+}
+
+/// The action of the Path menu's row for `op`: it goes by its label.
+pub fn path_action(op: crate::pathops::PathOp) -> Action {
+    Action::new(PATH_OP).with("op", Value::Str(op.label().to_owned()))
 }
 
 /// A row that waits for its slice.
@@ -197,7 +206,17 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
                 row(if st.picked.locked { "Unlock" } else { "Lock" }, LOCK).enabled(any),
             ],
         ),
-        "path" => Menu::new("Path", vec![later("Object to Path"), sep(), later("Union"), later("Subtract"), later("Intersect"), later("Exclude"), sep(), later("Outline Stroke"), later("Simplify"), later("Reverse")]),
+        "path" => {
+            // Each row lit while the selection has something for it.
+            let mut items = Vec::new();
+            for group in crate::pathops::PathOp::ROWS {
+                if !items.is_empty() {
+                    items.push(sep());
+                }
+                items.extend(group.iter().map(|op| MenuItem::new(op.label(), path_action(*op)).enabled(st.paths.does(*op))));
+            }
+            Menu::new("Path", items)
+        }
         "text" => Menu::new("Text", vec![later("Text to Path")]),
         "view" => Menu::new(
             "View",
@@ -312,7 +331,7 @@ mod tests {
     #[test]
     fn every_title_menu_is_there() {
         let recent = Recent::default();
-        let st = MenuState { has_doc: true, undo: None, redo: None, recent: &recent, picked: Picked::default(), align_to_page: false };
+        let st = MenuState { has_doc: true, undo: None, redo: None, recent: &recent, picked: Picked::default(), paths: crate::pathops::Can::default(), align_to_page: false };
         for (_, name) in TITLE_MENUS {
             assert!(menu(name, &st).is_some(), "{name}");
         }

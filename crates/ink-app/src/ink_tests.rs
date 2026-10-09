@@ -25,6 +25,7 @@ mod handles;
 mod nodes;
 mod ops;
 mod paint;
+mod paths;
 mod pen;
 mod pointer;
 mod shapes;

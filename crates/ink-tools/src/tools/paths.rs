@@ -5,8 +5,8 @@
 use ink_core::ink_doc::outline::AnchorId;
 use ink_core::ink_doc::pathedit::{Along, PathEdit};
 use ink_core::ink_doc::paths::{NewAnchor, NewRun};
-use ink_core::ink_doc::geometry::{page_bounds, path_of};
-use ink_core::ink_doc::{Document, Kind, Precision};
+use ink_core::ink_doc::geometry::page_bounds;
+use ink_core::ink_doc::{Document, Kind};
 use ink_core::{Applied, Command, NodeId};
 use ink_geom::{Combine, Vec2};
 use lntrn_data::{Doc, Map};
@@ -350,9 +350,7 @@ fn op(doc: &Document, input: &In) -> Result<Command, ToolError> {
                 return fail("tolerance is how far the outline may move: more than nothing");
             }
             // Each by its own size, unless told.
-            let fine = Precision::of(doc).within() * 2.0;
-            let by_size = |id: &NodeId| doc.get(*id).and_then(|node| path_of(node).bounds()).map_or(fine, |b| (b.size().length() / 500.0).max(fine));
-            Ok(Command::Batch(nodes.iter().map(|id| Command::Simplify { nodes: vec![*id], tolerance: said.unwrap_or_else(|| by_size(id)) }).collect()))
+            Ok(Command::Batch(nodes.iter().map(|id| Command::Simplify { nodes: vec![*id], tolerance: said.unwrap_or_else(|| ink_core::ink_doc::paths::simplify_tolerance(doc, *id)) }).collect()))
         }
         other => fail(format!("op is to_path, reverse, union, subtract, intersect, exclude, outline or simplify, not \"{other}\"")),
     }

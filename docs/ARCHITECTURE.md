@@ -1109,6 +1109,14 @@ As LS3 §7, to the letter where it can be:
     shapes the pointer is on (an anchor, a handle, a segment) is
     dragged as the Node tool drags it, so a path is bent without
     putting the Pen down.
+  **The Path menu, as built in M4d** (`pathops.rs`): each row one of
+  §3.4's Commands on the selection, lit while there's something for it
+  to do. Union, Subtract, Intersect and Exclude make one shape of the
+  shapes selected, the one furthest back taking the result and keeping
+  its paint (Subtract: it, less the ones in front). Object to Path,
+  Outline Stroke, Simplify and Reverse are for every shape the
+  selection is or holds. The same rows are under "Path" in the menu a
+  right-click on the selection opens.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

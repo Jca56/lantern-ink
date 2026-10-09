@@ -35,6 +35,14 @@ pub struct NewRun {
     pub closed: bool,
 }
 
+/// How far a path may be moved by being simplified, when nobody says:
+/// a five-hundredth of `node`'s size, and no less than the file's
+/// numbers can tell apart.
+pub fn simplify_tolerance(doc: &Document, node: NodeId) -> f64 {
+    let fine = Precision::of(doc).within() * 2.0;
+    doc.get(node).and_then(|node| crate::geometry::path_of(node).bounds()).map_or(fine, |b| (b.size().length() / 500.0).max(fine))
+}
+
 impl Document {
     /// Make the shape `id` a `<path>` that draws the same outline (a
     /// rect's corners stay arcs). Everything else about it stays: its

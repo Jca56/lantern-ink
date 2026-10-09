@@ -31,6 +31,7 @@ mod ops;
 mod overlay;
 mod page;
 mod paint;
+mod pathops;
 mod painting;
 mod penning;
 mod picker;

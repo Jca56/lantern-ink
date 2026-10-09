@@ -149,6 +149,13 @@ impl Ink {
                     self.palette_op(op, usize::try_from(*index).unwrap_or(usize::MAX));
                 }
             }
+            PATH_OP => {
+                let named = |op: &&crate::pathops::PathOp| action.arg("op") == Some(&Value::Str(op.label().to_owned()));
+                match crate::pathops::PathOp::ROWS.iter().flat_map(|group| group.iter()).find(named) {
+                    Some(op) => self.path_op(*op),
+                    None => lntrn_core::log_error!("no such row of the Path menu"),
+                }
+            }
             NODE_OP => {
                 if let Some(Value::Str(op)) = action.arg("op") {
                     self.node_op_named(op);

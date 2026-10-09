@@ -156,7 +156,7 @@ impl Ink {
 
     /// Have `nodes` selected, the last of them in hand, and its row in
     /// sight.
-    fn select(&mut self, nodes: Vec<NodeId>) {
+    pub(crate) fn select(&mut self, nodes: Vec<NodeId>) {
         let Some(&last) = nodes.last() else { return };
         if let Some(sel) = self.selection() {
             (sel.active, sel.nodes) = (Some(last), nodes);
@@ -337,6 +337,13 @@ impl Ink {
                 items.push(row("Ungroup", menus::UNGROUP));
             }
             items.extend([Item::Separator, row("Bring to Front", menus::TO_FRONT), row("Bring Forward", menus::FORWARD), row("Send Backward", menus::BACKWARD), row("Send to Back", menus::TO_BACK), Item::Separator]);
+        }
+        // What the Path menu can do with it (a menu here can't grey a
+        // row, so the ones with nothing to do are left out).
+        let paths = self.path_can();
+        if paths.any() {
+            let rows = crate::pathops::PathOp::ROWS.iter().flat_map(|group| group.iter()).filter(|op| paths.does(**op));
+            items.extend([Item::Sub { label: "Path".to_owned(), items: rows.map(|op| Item::action(op.label(), menus::path_action(*op))).collect() }, Item::Separator]);
         }
         if picked.count > 0 {
             items.push(row(if picked.locked { "Unlock" } else { "Lock" }, menus::LOCK));
