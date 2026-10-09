@@ -9,6 +9,7 @@
 //! other round with it then (each keeping its own length), unless it
 //! goes alone (Alt), which makes the anchor a corner from there on.
 
+use ink_core::NodeId;
 use ink_doc::outline::{AnchorId, Outline};
 use ink_doc::pathedit::PathEdit;
 use ink_geom::Affine;
@@ -75,6 +76,24 @@ pub fn hit(outline: &Outline, to_window: &Affine, picked: &[AnchorId], p: Vec2, 
         (Hit::Segment { after, share }, off(piece.at(share)))
     });
     on.filter(|(_, d)| *d <= SEGMENT * scale / 2.0).min_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// A shape whose anchors show: its outline in its own coordinates, and
+/// where those are in the drawing and in the window.
+pub struct Shown {
+    pub node: NodeId,
+    pub outline: Outline,
+    pub to_doc: Affine,
+    pub to_window: Affine,
+}
+
+/// What's under `p` (window px) of the shapes `shown`, with the anchors
+/// `picked`: whose, and what of it. A handle before an anchor before a
+/// segment, and of two alike the nearer.
+pub fn under(shown: &[Shown], picked: &[(NodeId, AnchorId)], p: Vec2, scale: f64) -> Option<(NodeId, Hit)> {
+    let of = |node: NodeId| -> Vec<AnchorId> { picked.iter().filter(|(n, _)| *n == node).map(|(_, id)| *id).collect() };
+    let found = shown.iter().filter_map(|sh| hit(&sh.outline, &sh.to_window, &of(sh.node), p, scale).map(|(hit, off)| (sh.node, hit, off)));
+    found.min_by(|a, b| a.1.rank().cmp(&b.1.rank()).then(a.2.total_cmp(&b.2))).map(|(node, hit, _)| (node, hit))
 }
 
 /// The anchors of `outline` that show inside `marquee` (window px).

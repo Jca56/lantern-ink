@@ -53,6 +53,12 @@ pub enum PathEdit {
     Smooth { anchors: Vec<AnchorId> },
     /// Take anchors' handles off: the path turns a corner at each.
     Corner { anchors: Vec<AnchorId> },
+    /// Go on from the loose end `from` to a new anchor at `to`, which is
+    /// that run's end from then on: with a line, or, where either has a
+    /// handle on the new segment (`out`: the end's, `into`: the new
+    /// anchor's, each as an offset from its anchor), a cubic. What a pen
+    /// does.
+    Extend { from: AnchorId, to: Vec2, out: Option<Vec2>, into: Option<Vec2> },
     /// Close the run `anchor` is in.
     Close { anchor: AnchorId },
     /// Part the path at `at`: a closed run opens there, an open one
@@ -368,6 +374,25 @@ impl Outline {
                         self.set_out(r, i, None)?;
                     }
                 }
+            }
+            PathEdit::Extend { from, to, out, into } => {
+                let (r, i) = self.place(*from)?;
+                let run = &mut self.runs[r];
+                if !run.is_end(i) {
+                    return invalid(format!("{from} isn't an end of an open run: a path goes on from a loose end"));
+                }
+                let (end, id) = (run.anchors[i].at, fresh());
+                let (end_handle, new_handle) = (out.map_or(end, |h| end + h), into.map_or(*to, |h| *to + h));
+                // On from its last anchor; or, from its first, back
+                // before it: the new anchor is where the run starts.
+                if i + 1 == run.anchors.len() {
+                    run.links.push(cubic(end, end_handle, new_handle, *to));
+                    run.anchors.push(Anchor { id, at: *to });
+                } else {
+                    run.links.insert(0, cubic(*to, new_handle, end_handle, end));
+                    run.anchors.insert(0, Anchor { id, at: *to });
+                }
+                made.push(id);
             }
             PathEdit::Close { anchor } => {
                 let (r, _) = self.place(*anchor)?;

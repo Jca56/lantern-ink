@@ -18,7 +18,11 @@ use ink_core::{Command, DocId, Document, NodeId};
 use ink_doc::outline::{AnchorId, Outline};
 use ink_doc::pathedit::{Along, PathEdit};
 use ink_doc::{Kind, geometry};
+use ink_geom::Affine;
 use lntrn_math::Vec2;
+
+use crate::nodes::Shown;
+use crate::select;
 
 /// An anchor, by the shape it's in.
 pub type Picked = (NodeId, AnchorId);
@@ -74,6 +78,25 @@ impl WouldBe {
     pub fn get(&self, node: NodeId) -> Option<&Outline> {
         self.outlines.get(&node)
     }
+}
+
+/// The shapes of `chosen` whose anchors show: the ones that are drawn,
+/// aren't hidden (nor in anything that is), and may be changed.
+pub fn editable(drawing: &Document, chosen: &[NodeId]) -> Vec<NodeId> {
+    let hidden = |id: NodeId| std::iter::once(id).chain(drawing.ancestors(id).map(|n| n.id)).any(|n| select::is_hidden(drawing, n));
+    chosen.iter().copied().filter(|&id| drawing.get(id).is_some_and(|n| n.kind.is_shape()) && select::is_drawn(drawing, id) && !hidden(id) && drawing.lock_over(id).is_none()).collect()
+}
+
+/// Each of the shapes `nodes` as it shows: its outline as `looks` (the
+/// drawing as a drag under way has it) has it, or as the path it would
+/// be made; and where that is, in the drawing and through `to_window`.
+pub fn shown(drawing: &Document, looks: &Document, would_be: &WouldBe, nodes: &[NodeId], to_window: &Affine) -> Vec<Shown> {
+    let one = |&node: &NodeId| {
+        let outline = outline_of(looks, would_be, node)?;
+        let to_doc = geometry::to_doc(drawing, node)?;
+        Some(Shown { node, outline, to_window: to_doc.then(to_window), to_doc })
+    };
+    nodes.iter().filter_map(one).collect()
 }
 
 /// `node`'s outline in `drawing`: a path's own, or the one a shape

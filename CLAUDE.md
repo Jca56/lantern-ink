@@ -1041,8 +1041,51 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Not in d2:** keys for smooth, corner, break and join (none
     asked for); making a segment straight again (`Straighten` is in the
     core); X and Y for several anchors at once.
-  - **`noding.rs` is 472 lines:** nothing more goes into it without
-    its drags moving out first.
+  - (`noding.rs` was 472 lines; what shows and what's under the
+    pointer moved to `anchors.rs` and `nodes.rs` with d3: 446.)
+- **M4d's d3 is built** (2026-10-09, 507 tests, deployed; **not yet
+  looked at by Alva**).
+  - **One thing new in the core:** `PathEdit::Extend { from, to, out,
+    into }` (`ink-doc/src/pathedit.rs`): on from a loose end to a new
+    anchor, with a line or, where either has a handle on it, a cubic.
+    From a run's first anchor it goes on backwards. Not over MCP.
+  - **The Pen is `penning.rs`** (`Ink::pen_tool`, `Ink::penning`), and
+    **the Node tool runs under it** (`workspace.rs`): the Pen takes a
+    press on bare canvas (a point placed) and a press on the path's
+    other end (closing it); a press on an anchor, a handle or a segment
+    of what's selected is the Node tool's, as are double clicks, the
+    right-click menu and the Box. So with the Pen in hand everything
+    of the Node tool's works, but its marquee and its picking of
+    shapes.
+  - **Where the Pen goes on from is the one anchor picked**, when
+    that's a loose end of an open path (`Tip`): so a click on either
+    end of any selected open path, old or new, takes it up again. With
+    no such anchor picked, a press begins a new path.
+  - **A path begins with its second point.** The first is the Pen's
+    own till then (`Penning::start`): a path of one point draws
+    nothing, and a press and a change of mind would leave it in the
+    file. So the first press is no step. The handle pulled out of the
+    path's end is the Pen's too (`Penning::out`), till the next
+    segment has a place for it.
+  - **Handles are pulled by how far the pointer goes from the press**,
+    not from where the point landed: a point snaps to whole units, and
+    a click a little off one mustn't pull handles out of it.
+  - **A press on the path's other end closes it, at once** (LS3's
+    way), with the handle pulled out of this end and the other end's
+    own, turned round. So that end can't be dragged while this one is
+    picked: pick another anchor, or press Enter, first. **Told to Alva
+    at d3's handoff.**
+  - **Keys:** Enter lets go of the path (`menus::PEN_END`); Escape
+    gives up a point being placed, then lets go as Enter does; Delete
+    takes the end back off and picks the one before it (`pen_back`),
+    or forgets a first point.
+  - A new path is painted as the last shape was (`shapes::path`), on
+    top of the level the Pointer is in, and is what's selected.
+  - **Not in d3:** a line from the path's end to the pointer before a
+    press (LS3 has none either); Alt to break a handle's mirror while
+    placing; a setting to join onto another path's end.
+  - **`ink-doc/src/pathedit.rs` is 459 lines:** the next edit wants
+    `Outline::edit`'s arms in two files first.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

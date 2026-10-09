@@ -37,6 +37,8 @@ pub struct Scene {
     pub anchors: Vec<(Vec2, bool)>,
     /// A picked anchor's handles: from the anchor, to the handle.
     pub levers: Vec<(Vec2, Vec2)>,
+    /// The end of a path a press of the Pen would close it on.
+    pub ring: Option<Vec2>,
 }
 
 /// A closed line round `quad`, gold over a dark edge: seen on the tan
@@ -88,6 +90,9 @@ pub fn draw(ui: &mut Ui, area: Rect, scene: &Scene) {
     for (line, closed) in scene.paths.iter().filter(|(line, _)| line.len() >= 2) {
         ui.draw.polyline(line, w * 3.0, dark, *closed);
         ui.draw.polyline(line, w * 1.5, ACCENT, *closed);
+    }
+    if let Some(at) = scene.ring {
+        ui.draw.circle(at, crate::penning::CLOSE * s / 2.0, ACCENT.with_alpha(0.35));
     }
     let radius = (DRAWN * s).round();
     for (from, to) in &scene.levers {

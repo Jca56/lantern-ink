@@ -166,6 +166,12 @@ fn painted(kind: Kind, paints: &Paints) -> String {
     pairs.into_iter().filter_map(|(name, value)| Some(format!(" {name}=\"{}\"", value?))).collect()
 }
 
+/// A path drawn with the Pen, as markup: its data `d`, painted as
+/// `paints` says.
+pub fn path(d: &str, paints: &Paints) -> String {
+    format!("<path d=\"{d}\"{}/>", painted(Kind::Polygon, paints))
+}
+
 /// The element a shape of `kind` between `a` and `b` (see [`dragged`];
 /// in the coordinates it's put in) is, as markup. `regular`: a polygon
 /// keeps its own proportions inside the box (Shift), where otherwise

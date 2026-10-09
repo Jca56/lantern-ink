@@ -155,7 +155,7 @@ impl Ink {
     /// The canvas: the view moved as the pointer asks, the tool in
     /// hand, and the drawing as the camera shows it.
     fn canvas(&mut self, ui: &mut Ui, area: Rect, doc: DocId, viewport: &Viewport, click: Option<Click>, popup: bool) {
-        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy() || self.noding.busy() || self.shaping.is_some());
+        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy() || self.noding.busy() || self.penning.busy() || self.shaping.is_some());
         let Some(tab) = self.tabs.active_mut() else { return };
         // A tab first laid out is fitted.
         let cam = tab.camera.get_or_insert_with(|| Camera::fit(area, page));
@@ -193,8 +193,13 @@ impl Ink {
             None => self.drop_shape(),
         }
         let mut scene = self.pointer_tool(ui, &view, doc, &input, tool == Tool::Pointer && !popup);
-        // The Node tool: the selected shapes' anchors, in place of the box.
-        self.node_tool(ui, &view, doc, &input, tool == Tool::Node && !popup, &mut scene);
+        // The Pen places points on bare canvas; whatever else the pointer
+        // is on is the Node tool's, which runs under it. The Node tool:
+        // the selected shapes' anchors, in place of the box.
+        let pen = tool == Tool::Pen && !popup;
+        let penned = self.pen_tool(ui, &view, doc, &input, pen, &mut scene);
+        let rest = if penned { canvas::CanvasInput { clicked: false, pressed: false, held: false, released: false, double: false, ..input } } else { input };
+        self.node_tool(ui, &view, doc, &rest, (tool == Tool::Node && !popup) || pen, &mut scene);
         // As a gesture under way would leave it, else as it is.
         let Ok((drawing, look)) = self.core.shown(doc) else { return };
         self.tiles.want(doc, drawing, look, cam.zoom, Rect::from_min_size(Vec2::ZERO - cam.corner(), area.size()));

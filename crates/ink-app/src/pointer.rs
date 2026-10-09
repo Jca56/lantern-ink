@@ -434,8 +434,13 @@ impl Ink {
         if self.noding.busy() {
             return self.drop_nodes();
         }
-        // The Node tool lets go of its anchors before anything else.
-        if self.tools.active() == crate::tools::Tool::Node && self.noding.unpick() {
+        if self.penning.busy() {
+            return self.drop_pen();
+        }
+        // The Node tool and the Pen let go of their anchors (and the Pen
+        // of a first point not yet a path) before anything else.
+        let tool = self.tools.active();
+        if matches!(tool, crate::tools::Tool::Node | crate::tools::Tool::Pen) && (self.penning.forget() | self.noding.unpick()) {
             return;
         }
         let Some(tab) = self.tabs.active_mut() else { return };

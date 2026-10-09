@@ -173,6 +173,29 @@ fn a_segment_is_pulled_by_any_point_of_it() {
 }
 
 #[test]
+fn a_path_goes_on_from_a_loose_end() {
+    let on = |to: Vec2, out: Option<Vec2>, into: Option<Vec2>, from: u64| PathEdit::Extend { from: a(from), to, out, into };
+    // With a line; and the new anchor has an id of its own, and is the
+    // run's end now.
+    let (d, ids, made) = edited("M0 0 H8", vec![on(v(8.0, 6.0), None, None, 2)]);
+    assert_eq!((d.as_str(), ids, made), ("M0 0 H8 V6", vec![vec![1, 2, 3]], vec![3]));
+    // With a curve, where either end has a handle on it.
+    assert_eq!(data("M0 0 H8", vec![on(v(16.0, 8.0), Some(v(4.0, 0.0)), Some(v(0.0, -4.0)), 2)]), "M0 0 H8 C12 0 16 4 16 8");
+    assert_eq!(data("M0 0 H8", vec![on(v(16.0, 8.0), None, Some(v(0.0, -4.0)), 2)]), "M0 0 H8 C8 0 16 4 16 8");
+    // From its first anchor it goes on backwards: the new one is where
+    // the run starts, and each handle is still its own anchor's.
+    let (d, ids, _) = edited("M0 0 H8", vec![on(v(-6.0, 4.0), Some(v(-2.0, 0.0)), Some(v(0.0, -3.0)), 1)]);
+    assert_eq!((d.as_str(), ids), ("M-6 4 C-6 1 -2 0 0 0 H8", vec![vec![3, 1, 2]]));
+    // A point alone is both ends of its run; so one press after another
+    // draws a path.
+    let (d, ids, made) = edited("M4 4", vec![on(v(10.0, 4.0), None, None, 1), on(v(10.0, 10.0), None, None, 2)]);
+    assert_eq!((d.as_str(), ids, made), ("M4 4 H10 V10", vec![vec![1, 2, 3]], vec![2, 3]));
+    // Only from a loose end.
+    assert_eq!(refused("M0 0 H8 V8", vec![on(v(1.0, 1.0), None, None, 2)]), "A2 isn't an end of an open run: a path goes on from a loose end");
+    assert_eq!(refused(SQUARE, vec![on(v(1.0, 1.0), None, None, 1)]), "A1 isn't an end of an open run: a path goes on from a loose end");
+}
+
+#[test]
 fn an_anchor_says_where_its_handles_are() {
     let handles = |d: &str, n: u64| path(d).outline(N).unwrap().handles(a(n));
     // A cubic's two control points are its ends' handles; a line has

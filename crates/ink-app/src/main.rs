@@ -32,6 +32,7 @@ mod overlay;
 mod page;
 mod paint;
 mod painting;
+mod penning;
 mod picker;
 mod picking;
 mod pointer;

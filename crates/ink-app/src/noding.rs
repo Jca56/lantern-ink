@@ -18,9 +18,9 @@
 //! opens the menu of what's done to anchors (`nodeops.rs` does it).
 
 use ink_core::{Actor, Command, DocId, NodeId};
-use ink_doc::outline::{AnchorId, Outline};
+use ink_doc::outline::AnchorId;
 use ink_doc::pathedit::PathEdit;
-use ink_doc::{Kind, geometry};
+use ink_doc::Kind;
 use ink_geom::Affine;
 use lntrn_math::{Rect, Vec2};
 use lntrn_ui::{CursorIcon, Ui};
@@ -43,15 +43,6 @@ use crate::shapes;
 const SLOP: f64 = 4.0;
 const REACH: f64 = 3.0;
 const FINE: f64 = 0.25;
-
-/// A shape whose anchors show: its outline in its own coordinates, and
-/// where those are in the drawing and in the window.
-struct Shown {
-    node: NodeId,
-    outline: Outline,
-    to_doc: Affine,
-    to_window: Affine,
-}
 
 /// What the button went down on.
 #[derive(Clone, Copy)]
@@ -171,26 +162,13 @@ impl Ink {
         let Ok((looks, _)) = self.core.shown(doc) else { return };
         let stamp = self.core.history(doc).map_or(0, |h| h.stamp());
         let Some(tab) = self.tabs.iter_mut().find(|t| t.doc == doc) else { return };
-        // The shapes whose anchors show: what's selected of them, that
-        // shows and may be changed.
-        let chosen = tab.selection.nodes.clone();
-        let boxes = tab.boxes(drawing, stamp);
-        let editable: Vec<NodeId> = chosen.into_iter().filter(|id| boxes.contains_key(id) && drawing.get(*id).is_some_and(|n| n.kind.is_shape()) && drawing.lock_over(*id).is_none()).collect();
+        // The shapes whose anchors show: what's selected of them.
         let sel = &mut tab.selection;
+        let editable = anchors::editable(drawing, &sel.nodes);
         let noding = &mut self.noding;
         let to_be: Vec<NodeId> = editable.iter().copied().filter(|id| drawing.get(*id).is_some_and(|n| n.kind != Kind::Path)).collect();
         noding.would_be.refresh(doc, stamp, drawing, &to_be, &mut noding.picked);
-        let shown: Vec<Shown> = editable
-            .iter()
-            .filter_map(|&node| {
-                let outline = match looks.get(node)?.kind {
-                    Kind::Path => looks.outline(node),
-                    _ => noding.would_be.get(node).cloned(),
-                }?;
-                let to_doc = geometry::to_doc(drawing, node)?;
-                Some(Shown { node, outline, to_window: to_doc.then(&view.to_window), to_doc })
-            })
-            .collect();
+        let shown = anchors::shown(drawing, looks, &noding.would_be, &editable, &view.to_window);
         let find = |node: NodeId| shown.iter().find(|sh| sh.node == node);
         let dragging = matches!(noding.drag, Some((_, Drag::Anchors { .. } | Drag::Handle { .. } | Drag::Segment { .. })));
         let mut picked = std::mem::take(&mut noding.picked);
@@ -199,11 +177,7 @@ impl Ink {
         if !dragging {
             picked.retain(|(node, id)| find(*node).is_some_and(|sh| sh.outline.find(*id).is_some()));
         }
-        let of = |picked: &[Picked], node: NodeId| -> Vec<AnchorId> { picked.iter().filter(|(n, _)| *n == node).map(|(_, id)| *id).collect() };
-        let hover = (input.over && noding.drag.is_none())
-            .then(|| shown.iter().filter_map(|sh| nodes::hit(&sh.outline, &sh.to_window, &of(&picked, sh.node), pointer, s).map(|(hit, off)| (sh.node, hit, off))).min_by(|a, b| a.1.rank().cmp(&b.1.rank()).then(a.2.total_cmp(&b.2))))
-            .flatten()
-            .map(|(node, hit, _)| (node, hit));
+        let hover = (input.over && noding.drag.is_none()).then(|| nodes::under(&shown, &picked, pointer, s)).flatten();
         let grid = if mods.ctrl() {
             0.0
         } else {

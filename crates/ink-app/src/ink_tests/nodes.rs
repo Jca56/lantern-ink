@@ -33,29 +33,6 @@ fn a(n: u64) -> AnchorId {
 }
 
 impl Running {
-    /// The anchors the Node tool has picked.
-    fn anchors(&self) -> Vec<(NodeId, AnchorId)> {
-        self.ink.noding.picked().to_vec()
-    }
-
-    /// Press at `from`, go to `to`, and stay there with the button down.
-    fn drag_to(&mut self, from: Vec2, to: Vec2) {
-        self.h.advance(1.0);
-        self.h.move_to(from);
-        self.frames(1);
-        self.h.press();
-        self.frames(1);
-        self.h.move_to(from + (to - from) * 0.5);
-        self.frames(1);
-        self.h.move_to(to);
-        self.frames(2);
-    }
-
-    fn let_go(&mut self) {
-        self.h.release();
-        self.frames(2);
-    }
-
     /// The hill picked, by a click on its line.
     fn hill(&mut self) {
         self.click(self.spot(20.0, 25.0));
@@ -80,12 +57,6 @@ impl Running {
     fn press_in_box(&mut self, name: &str) {
         let at = self.ink.toolbox.laid.iter().find(|(n, _)| *n == name).map(|(_, r)| r.center()).unwrap_or_else(|| panic!("the Box has no {name}"));
         self.click(at);
-    }
-
-    fn undo(&mut self, steps: usize) {
-        for _ in 0..steps {
-            self.key(Key::Char('z'), Modifiers::CTRL);
-        }
     }
 }
 

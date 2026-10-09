@@ -25,6 +25,7 @@ mod handles;
 mod nodes;
 mod ops;
 mod paint;
+mod pen;
 mod pointer;
 mod shapes;
 mod tree;
@@ -198,6 +199,35 @@ impl Running {
     /// What `node` says its `name` is.
     fn says(&self, node: NodeId, name: &str) -> Option<String> {
         self.ink.core.doc(self.doc()).unwrap().node(node).unwrap().attr(name).map(str::to_owned)
+    }
+
+    /// The anchors the Node tool (or the Pen) has picked.
+    fn anchors(&self) -> Vec<(NodeId, ink_doc::outline::AnchorId)> {
+        self.ink.noding.picked().to_vec()
+    }
+
+    /// Press at `from`, go to `to`, and stay there with the button down.
+    fn drag_to(&mut self, from: Vec2, to: Vec2) {
+        self.h.advance(1.0);
+        self.h.move_to(from);
+        self.frames(1);
+        self.h.press();
+        self.frames(1);
+        self.h.move_to(from + (to - from) * 0.5);
+        self.frames(1);
+        self.h.move_to(to);
+        self.frames(2);
+    }
+
+    fn let_go(&mut self) {
+        self.h.release();
+        self.frames(2);
+    }
+
+    fn undo(&mut self, steps: usize) {
+        for _ in 0..steps {
+            self.key(Key::Char('z'), Modifiers::CTRL);
+        }
     }
 }
 

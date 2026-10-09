@@ -331,7 +331,8 @@ A path is read as an `Outline` (`outline.rs`): runs of anchors, each
 joined to the next by a line, a quadratic, a cubic or an arc, whichever
 the file had. `PathEdit` (`pathedit.rs`) is the edits: move, set
 handles, add (the path keeping its shape), delete, bend, pull (a
-segment taken by any point of it: what a drag does, M4d), straighten,
+segment taken by any point of it: what a drag does, M4d), extend (on
+from a loose end to a new anchor: what a pen does, M4d), straighten,
 smooth, corner, close, break, join, reverse; so §3.4's `Reverse`,
 `Join` and `Break` are edits, not Commands of their own. A shape that
 isn't a path is made one by its first edit. Anchors have ids (D18):
@@ -1091,6 +1092,23 @@ As LS3 §7, to the letter where it can be:
     double clicks: on a segment for a new anchor there, on an anchor
     to turn a corner smooth and back (LS3's pen's way). The Box also
     has the one picked anchor's X and Y, to type or drag along.
+  **The Pen, as built in M4d** (`penning.rs`; LS3's, D17):
+  - **A press on bare canvas places an anchor**, on whole units of the
+    drawing (Ctrl frees it); dragged on, it pulls the anchor's handles
+    out, one each way (Shift: at 45°). A click is a corner. The path
+    goes on from the one anchor picked when that's a loose end of an
+    open path, which is how the path being drawn is drawn, and how an
+    old one is taken up again from either end; otherwise the press is
+    a new path's first point.
+  - **A path begins with its second point**: the first is the Pen's
+    own until then, and so is the handle pulled out of a path's end,
+    which has no segment to be in till the next point is placed.
+  - **A press on the path's other end closes it.** Enter or Escape
+    lets go of the path; Delete takes its end back off.
+  - **The Node tool runs under the Pen**: whatever of the selected
+    shapes the pointer is on (an anchor, a handle, a segment) is
+    dragged as the Node tool drags it, so a path is bent without
+    putting the Pen down.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

@@ -64,6 +64,8 @@ pub const ACTUAL: &str = "view.actual";
 pub const TOOL_KEY: &str = "tool.key";
 /// Escape on the canvas, and the arrow keys.
 pub const ESCAPE: &str = "pointer.escape";
+/// Enter on the canvas: the Pen lets go of its path.
+pub const PEN_END: &str = "pen.end";
 pub const NUDGE: &str = "pointer.nudge";
 /// How far an arrow key moves the selection, in the drawing's units,
 /// and how many times that with Shift.
@@ -292,6 +294,7 @@ pub fn canvas_key(press: KeyPress) -> Option<Action> {
     let step = if m.shift() { NUDGE_BY * NUDGE_MORE } else { NUDGE_BY };
     let (dx, dy) = match press.key {
         Key::Escape => return Some(Action::new(ESCAPE)),
+        Key::Enter => return Some(Action::new(PEN_END)),
         Key::Delete | Key::Backspace => return Some(Action::new(DELETE)),
         Key::ArrowLeft => (-step, 0.0),
         Key::ArrowRight => (step, 0.0),

@@ -51,10 +51,10 @@ pub struct Can {
 }
 
 impl Ink {
-    /// Whether a key is the picked anchors' to take: the Node tool is
-    /// in hand, and has some of the drawing that shows.
+    /// Whether a key is the picked anchors' to take: the Node tool or
+    /// the Pen is in hand, and has some of the drawing that shows.
     pub(crate) fn anchors_in_hand(&self) -> bool {
-        self.tools.active() == Tool::Node && !self.noding.picked.is_empty() && self.noding.of == self.tabs.active_doc()
+        matches!(self.tools.active(), Tool::Node | Tool::Pen) && !self.noding.picked.is_empty() && self.noding.of == self.tabs.active_doc()
     }
 
     pub(crate) fn node_can(&self) -> Can {
@@ -148,7 +148,7 @@ impl Ink {
         ContextMenu::new(&title, at).tab("", items)
     }
 
-    /// The Box under the Node tool: where the one anchor picked is, to
+    /// The Box under the Node tool or the Pen: where the one anchor picked is, to
     /// type or drag along; and what's done to the anchors picked, each
     /// greyed while there's nothing for it to do.
     pub(crate) fn node_box(&mut self, ui: &mut Ui, canvas: Rect) {
@@ -165,7 +165,8 @@ impl Ink {
         });
         let (mut moved, mut op) = (false, None);
         let mut laid = Laid::new();
-        toolbox::draw_with(ui, canvas, &mut self.toolbox, Tool::Node.label(), |ui| {
+        let title = self.tools.active().label();
+        toolbox::draw_with(ui, canvas, &mut self.toolbox, title, |ui| {
             if let Some(place) = place.as_mut() {
                 // Where it is: across, and down.
                 let row = ui.alloc(Vec2::new(FILL, ui.m.widget_h));

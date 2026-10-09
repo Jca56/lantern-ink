@@ -108,7 +108,9 @@ impl Ink {
             COPY => self.op(Op::Copy, cx),
             PASTE => self.op(Op::Paste, cx),
             DUPLICATE => self.op(Op::Duplicate, cx),
-            // The Node tool's anchors, where it has some picked.
+            // The Pen's last point; the Node tool's anchors, where it has
+            // some picked.
+            DELETE if self.tools.active() == crate::tools::Tool::Pen => self.pen_back(),
             DELETE if self.anchors_in_hand() => self.node_op(crate::nodeops::NodeOp::Delete),
             DELETE => self.op(Op::Delete, cx),
             SELECT_ALL => self.op(Op::SelectAll, cx),
@@ -153,6 +155,7 @@ impl Ink {
                 }
             }
             ESCAPE => self.escape(),
+            PEN_END => self.pen_end(),
             NUDGE => {
                 if let (Some(Value::F64(dx)), Some(Value::F64(dy))) = (action.arg("dx"), action.arg("dy")) {
                     self.nudge(lntrn_math::Vec2::new(*dx, *dy));
