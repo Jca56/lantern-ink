@@ -1,20 +1,21 @@
 //! The paint section's face: a row each for Fill and Stroke (a swatch
 //! that opens the picker, the colour's hex beside it, and what kind of
-//! paint it is: none or a colour), the palette grid under them (a
-//! press takes a colour as the fill, with Shift as the stroke; a drag
-//! reorders; `+` adds the fill), and the button that opens the
-//! palettes. It draws what it's shown and changes nothing: a paint it
+//! paint it is: none, a colour or a gradient), the line's rows and the
+//! opacity (`line.rs`), the palette grid under them (a press takes a
+//! colour as the fill, with Shift as the stroke; a drag reorders; `+`
+//! adds the fill), and the button that opens the palettes. It draws what it's shown and changes nothing: a paint it
 //! wants set comes back for the window to set.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_ui::{CursorIcon, Sense, Ui, WidgetId};
 
 use super::drawer::{self, Drawer};
+use super::line::{self, Rows};
 use super::palettes::{Library, to_hex};
 use super::picker::{Picker, swatch_face};
 use crate::chrome::{Look, text_button};
 use crate::icons::Icons;
-use crate::paint::{Paint, Paints, Which};
+use crate::paint::{Paint, Paints, Set, Which};
 use crate::theme::{self, ACCENT, BORDER, FONT_BASE, FONT_LG, FONT_MD, FONT_SM, INPUT_BG, LAYER_ROW_BORDER, TEXT, TEXT_DIM, TOOL_BUTTON, TOOL_BUTTON_HOVER};
 
 /// The grid's columns, the least a swatch is, and the room between
@@ -41,7 +42,15 @@ pub struct Section {
     drag: Option<(usize, bool)>,
     /// The colour each paint last was: what "a colour" means for one
     /// that's none now.
-    last: [Color; 2],
+    pub(crate) last: [Color; 2],
+    /// The gradient each paint last was, by name: what "a gradient"
+    /// means while the drawing still has it.
+    pub(crate) last_gradient: [Option<String>; 2],
+    /// The line's rows.
+    pub(crate) rows: Rows,
+    /// How tall it last came out, window px: what it's given to scroll
+    /// in when the panel is too short for all of it.
+    pub(crate) tall: f64,
     /// Where its parts were last drawn, by name.
     #[cfg(test)]
     pub(crate) laid: Vec<(String, Rect)>,
@@ -53,6 +62,9 @@ impl Default for Section {
             drawer: Drawer::default(),
             drag: None,
             last: [Color::hex(0xF3B700), Color::BLACK],
+            last_gradient: [None, None],
+            rows: Rows::default(),
+            tall: 0.0,
             #[cfg(test)]
             laid: Vec::new(),
         }
@@ -68,8 +80,50 @@ pub struct Out {
     pub changed: bool,
     /// A right press on swatch `.0` of the grid, at `.1`.
     pub menu: Option<(usize, Vec2)>,
-    /// A paint to set.
-    pub set: Option<(Which, Paint)>,
+    /// Something to set.
+    pub set: Option<Set>,
+    /// Its heading was pressed: fold it away, or bring it back.
+    pub fold: bool,
+}
+
+/// What the section shows.
+pub struct Shown<'a> {
+    pub paints: &'a Paints,
+    /// Folded away to its heading.
+    pub folded: bool,
+    /// Each paint's colours along it, when it's a gradient.
+    pub stops: [Vec<(f64, Color)>; 2],
+    /// What a pixel along a number changes it by, in the drawing's
+    /// units.
+    pub step: f64,
+}
+
+/// A gradient's colours across `r`, as they run along it.
+fn gradient_face(ui: &mut Ui, r: Rect, stops: &[(f64, Color)]) {
+    let at = |t: f64| r.min.x + r.width() * t.clamp(0.0, 1.0);
+    match stops {
+        [] => ui.draw.rect_gradient_h(r, Color::hex(0xE8DCC8), Color::hex(0x4A4038)),
+        [(_, only)] => ui.draw.rect(r, *only),
+        _ => {
+            // Its first colour up to its first stop, its last from its
+            // last one on.
+            ui.draw.rect(Rect::new(r.min, Vec2::new(at(stops[0].0), r.max.y)), stops[0].1);
+            for pair in stops.windows(2) {
+                let seg = Rect::new(Vec2::new(at(pair[0].0), r.min.y), Vec2::new(at(pair[1].0), r.max.y));
+                if seg.width() > 0.0 {
+                    ui.draw.rect_gradient_h(seg, pair[0].1, pair[1].1);
+                }
+            }
+            let last = stops[stops.len() - 1];
+            ui.draw.rect(Rect::new(Vec2::new(at(last.0), r.min.y), r.max), last.1);
+        }
+    }
+}
+
+/// The two colours a new gradient is made of `from`: it, and it
+/// darker (down the shape, as light falls).
+pub fn gradient_of(from: Color) -> [Color; 2] {
+    [from, Color::rgba(from.r * 0.68, from.g * 0.68, from.b * 0.68, from.a)]
 }
 
 /// The grid's swatch size for `width` px of room, at `scale`: eight
@@ -81,9 +135,9 @@ pub fn swatch_size(width: f64, scale: f64) -> f64 {
 }
 
 /// A paint's swatch: a colour as a fill is, a stroke as a ring of it,
-/// nothing as a white square struck through in red, a gradient as two
-/// tones (its own colours come with the gradient's slice).
-fn face(ui: &mut Ui, r: Rect, which: Which, paint: &Paint, lit: bool, icons: &Icons) {
+/// nothing as a white square struck through in red, a gradient as its
+/// colours run (`stops`).
+fn face(ui: &mut Ui, r: Rect, which: Which, paint: &Paint, stops: &[(f64, Color)], lit: bool, icons: &Icons) {
     let s = ui.m.scale;
     let px = |v: f64| (v * s).round().max(1.0);
     let edge = if lit { ACCENT } else { LAYER_ROW_BORDER };
@@ -106,7 +160,11 @@ fn face(ui: &mut Ui, r: Rect, which: Which, paint: &Paint, lit: bool, icons: &Ic
             ui.draw.stroke_rect(r, px(2.0), 0.0, edge);
         }
         Paint::Server(_) => {
-            ui.draw.rect_gradient_h(r, Color::hex(0xE8DCC8), Color::hex(0x4A4038));
+            if let Some(checks) = icons.checker().filter(|_| stops.iter().any(|(_, c)| c.a < 1.0)) {
+                let uv = Rect::from_xywh(0.0, 0.0, (r.width() / checks.width as f64).min(1.0), (r.height() / checks.height as f64).min(1.0));
+                ui.draw.image_uv(r, checks, uv, 0.0, Color::WHITE);
+            }
+            gradient_face(ui, r, stops);
             ui.draw.stroke_rect(r, px(2.0), 0.0, edge);
         }
     }
@@ -122,7 +180,8 @@ fn said(paint: &Paint) -> String {
     }
 }
 
-pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, shown: &Paints, lib: &mut Library, picker: &mut Picker, icons: &Icons) -> Out {
+pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, showing: &Shown, lib: &mut Library, picker: &mut Picker, icons: &Icons) -> Out {
+    let shown = showing.paints;
     let s = ui.m.scale;
     let px = |v: f64| (v * s).round();
     let mut out = Out::default();
@@ -135,9 +194,29 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, shown: &Paints, lib: &mu
     #[cfg(test)]
     st.laid.clear();
     let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), px(HEAD)));
-    ui.text_in_rect("Paint", &theme::text(ui, FONT_MD), head, TEXT_DIM);
+    // The heading: a press folds the section away, or brings it back.
+    #[cfg(test)]
+    st.laid.push(("Paint".to_owned(), head));
+    let on_head = ui.interact(ui.id("head"), head, Sense::CLICK);
+    if on_head.hovered {
+        ui.state.cursor_icon = CursorIcon::Pointer;
+    }
+    out.fold = on_head.clicked;
+    let (c, a) = (Vec2::new(head.min.x + px(8.0), head.center().y), px(6.0));
+    let ink = if on_head.hovered { ACCENT } else { TEXT_DIM };
+    if showing.folded {
+        ui.draw.triangle(Vec2::new(c.x - a * 0.6, c.y - a), Vec2::new(c.x - a * 0.6, c.y + a), Vec2::new(c.x + a * 0.8, c.y), ink);
+    } else {
+        ui.draw.triangle(Vec2::new(c.x - a, c.y - a * 0.6), Vec2::new(c.x + a, c.y - a * 0.6), Vec2::new(c.x, c.y + a * 0.8), ink);
+    }
+    ui.text_in_rect("Paint", &theme::text(ui, FONT_MD), Rect::new(Vec2::new(head.min.x + px(22.0), head.min.y), head.max), ink);
     let rule = px(2.0).max(1.0);
     ui.draw.rect(Rect::from_min_size(Vec2::new(panel.min.x, head.max.y), Vec2::new(panel.width(), rule)), BORDER);
+    if showing.folded {
+        ui.pop_id();
+        out.height = head.max.y + rule - panel.min.y;
+        return out;
+    }
     let mut y = head.max.y + rule + px(8.0);
 
     // A row each: its name, its swatch and what it says, and its kind
@@ -147,49 +226,63 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, shown: &Paints, lib: &mu
         let row = Rect::from_xywh(inner.min.x, y, inner.width(), px(ROW));
         y += px(ROW) + px(4.0);
         let paint = shown.get(which);
-        if let Paint::Color(c) = paint {
-            st.last[k] = *c;
+        match paint {
+            Paint::Color(c) => st.last[k] = *c,
+            Paint::Server(id) => st.last_gradient[k] = Some(id.clone()),
+            Paint::None => {}
         }
+        let stops = showing.stops[k].as_slice();
         let id = anchors[k].0;
         ui.push_id(which.label());
         ui.text_in_rect(which.label(), &theme::text(ui, FONT_BASE), Rect::from_min_size(row.min, Vec2::new(px(LABEL), row.height())), TEXT);
 
-        // What kind of paint, from the right: a colour, then none.
+        // What kind of paint, from the right: a gradient, a colour,
+        // then none.
         let kind = |i: usize| Rect::from_xywh(row.max.x - px(KIND) * (i + 1) as f64 - px(4.0) * i as f64, (row.center().y - px(SWATCH.1) / 2.0).round(), px(KIND), px(SWATCH.1));
-        let kinds = [(kind(0), "colour", Paint::Color(st.last[k]), matches!(paint, Paint::Color(_))), (kind(1), "none", Paint::None, *paint == Paint::None)];
-        for (r, name, to, on) in kinds {
+        let is_gradient = matches!(paint, Paint::Server(_));
+        // A gradient not made yet is shown as the one that would be.
+        let would_be = gradient_of(st.last[k]);
+        let its_stops: Vec<(f64, Color)> = if is_gradient { stops.to_vec() } else { vec![(0.0, would_be[0]), (1.0, would_be[1])] };
+        let kinds = [
+            (kind(0), "gradient", Paint::Server(String::new()), is_gradient, Set::Gradient(which)),
+            (kind(1), "colour", Paint::Color(st.last[k]), matches!(paint, Paint::Color(_)), Set::Paint(which, Paint::Color(st.last[k]))),
+            (kind(2), "none", Paint::None, *paint == Paint::None, Set::Paint(which, Paint::None)),
+        ];
+        for (r, name, shows, on, to) in kinds {
             #[cfg(test)]
             st.laid.push((format!("{} {name}", which.label()), r));
             let resp = ui.interact(ui.id(name), r, Sense::CLICK);
             let inside = r.shrink(px(5.0));
-            face(ui, inside, which, &to, false, icons);
+            face(ui, inside, Which::Fill, &shows, &its_stops, false, icons);
             ui.draw.stroke_rect(r, px(if on { 3.0 } else { 2.0 }).max(1.0), px(4.0), if on || resp.hovered { ACCENT } else { BORDER });
             if resp.hovered {
                 ui.state.cursor_icon = CursorIcon::Pointer;
             }
             if resp.clicked && !on {
-                out.set = Some((which, to));
+                out.set = Some(to);
             }
         }
 
         // The swatch, and the colour in letters: a press on either
         // opens the picker for it.
         let swatch = Rect::from_xywh(row.min.x + px(LABEL), (row.center().y - px(SWATCH.1) / 2.0).round(), px(SWATCH.0), px(SWATCH.1));
-        let words = Rect::new(Vec2::new(swatch.max.x + px(10.0), row.min.y), Vec2::new(kind(1).min.x - px(8.0), row.max.y));
+        let words = Rect::new(Vec2::new(swatch.max.x + px(10.0), row.min.y), Vec2::new(kind(2).min.x - px(8.0), row.max.y));
         let target = if words.width() > px(40.0) { swatch.union(&words) } else { swatch };
         let resp = ui.interact(id, target, Sense::CLICK);
         if resp.hovered {
             ui.state.cursor_icon = CursorIcon::Pointer;
         }
-        if resp.clicked {
+        // (A gradient's colours are its stops': their picker comes
+        // with the Gradient tool.)
+        if resp.clicked && !is_gradient {
             picker.toggle(id);
             // A colour to pick needs there to be one.
             if picker.is_open_for(id) && !matches!(paint, Paint::Color(_)) {
-                out.set = Some((which, Paint::Color(st.last[k])));
+                out.set = Some(Set::Paint(which, Paint::Color(st.last[k])));
             }
             ui.state.request_rebuild = true;
         }
-        face(ui, swatch, which, paint, picker.is_open_for(id) || resp.hovered, icons);
+        face(ui, swatch, which, paint, stops, picker.is_open_for(id) || resp.hovered, icons);
         if words.width() > px(40.0) {
             ui.draw.push_clip(words);
             ui.text_in_rect(&said(paint), &theme::text(ui, FONT_BASE), words, if *paint == Paint::None { TEXT_DIM } else { TEXT });
@@ -200,7 +293,12 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, shown: &Paints, lib: &mu
         st.laid.push((which.label().to_owned(), swatch));
         ui.pop_id();
     }
-    y += px(6.0);
+    // The line's rows, and the opacity.
+    let (below, lined) = line::draw(ui, inner, y, px(LABEL), &mut st.rows, &shown.line, shown.stroke != Paint::None, shown.opacity, showing.step);
+    if lined.is_some() {
+        out.set = lined;
+    }
+    y = below;
 
     // The grid.
     let gap = px(SWATCH_GAP);
@@ -230,7 +328,7 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, shown: &Paints, lib: &mu
                 Paint::Color(c) => c.a,
                 _ => 1.0,
             };
-            out.set = Some((which, Paint::Color(color.with_alpha(alpha))));
+            out.set = Some(Set::Paint(which, Paint::Color(color.with_alpha(alpha))));
             st.drag = Some((i, false));
         }
         let state = &ui.state;
@@ -300,7 +398,7 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, shown: &Paints, lib: &mu
         if let Paint::Color(mut color) = shown.get(which).clone()
             && picker.popup(ui, id, anchor, which.label(), &mut color, icons)
         {
-            out.set = Some((which, Paint::Color(color)));
+            out.set = Some(Set::Paint(which, Paint::Color(color)));
         }
     }
     ui.pop_id();

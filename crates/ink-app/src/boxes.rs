@@ -76,7 +76,7 @@ pub struct Boxing {
 
 /// How far a pixel along a number field changes it: a tenth of a unit
 /// on an icon's grid, a whole one on a page of hundreds.
-fn step_for(page: f64) -> f64 {
+pub(crate) fn step_for(page: f64) -> f64 {
     10f64.powf((page.max(1e-6) / 240.0).log10().floor()).clamp(0.001, 100.0)
 }
 

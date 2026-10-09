@@ -129,3 +129,125 @@ fn the_picker_paints_as_it_is_dragged_and_lands_once() {
     // What was picked is what the next shape gets.
     assert!(matches!(r.ink.paints.get(Which::Fill), Paint::Color(c) if (c.a - 0.5).abs() < 0.01));
 }
+
+impl Running {
+    /// Where the line's rows drew what they call `name`.
+    fn line_at(&self, name: &str) -> Rect {
+        self.ink.paint_panel.rows.laid.iter().find(|(n, _)| *n == name).map(|(_, r)| *r).unwrap_or_else(|| panic!("the line's rows have no {name}"))
+    }
+}
+
+#[test]
+fn a_stroke_has_a_width_ends_corners_and_dashes() {
+    let mut r = painted("paint-line");
+    r.select(&[A]);
+    // Its width, dragged along: a tenth of a unit a pixel on this page.
+    let width = r.line_at("Width").center();
+    r.drag(width, width + Vec2::new(20.0, 0.0));
+    assert_eq!((r.said(A, "stroke-width"), r.steps()), (Some("3".into()), vec!["Stroke Width".to_owned()]));
+    // Typed.
+    r.click(width);
+    r.h.type_text("0.75");
+    r.frames(1);
+    r.key(Key::Enter, Modifiers::NONE);
+    assert_eq!(r.said(A, "stroke-width"), Some("0.75".into()));
+    // Round ends, cut corners.
+    r.click(r.line_at("Caps round").center());
+    r.click(r.line_at("Joins bevel").center());
+    assert_eq!((r.said(A, "stroke-linecap"), r.said(A, "stroke-linejoin")), (Some("round".into()), Some("bevel".into())));
+    assert_eq!(r.steps()[2..], ["Stroke Caps".to_owned(), "Stroke Joins".to_owned()]);
+    // Dashes, typed as lengths; and nothing typed is solid again.
+    r.click(r.line_at("Dashes").center());
+    r.h.type_text("4 2");
+    r.frames(1);
+    r.key(Key::Enter, Modifiers::NONE);
+    assert_eq!((r.said(A, "stroke-dasharray"), r.steps().last().cloned()), (Some("4 2".into()), Some("Dashes".to_owned())));
+    r.click(r.line_at("Dashes").center());
+    r.h.type_text("none");
+    r.frames(1);
+    r.key(Key::Enter, Modifiers::NONE);
+    assert_eq!(r.said(A, "stroke-dasharray"), Some("none".into()));
+    // All of it is what the next shape's line will be.
+    let next = &r.ink.paints.line;
+    assert_eq!((next.width, next.cap, next.join, next.dashes.len()), (0.75, ink_geom::Cap::Round, ink_geom::Join::Bevel, 0));
+    // With no stroke the line's rows wait: a press on them does nothing.
+    r.click(r.paint_at("Stroke none"));
+    let steps = r.steps().len();
+    r.click(r.line_at("Caps square").center());
+    r.click(r.line_at("Dashes").center());
+    r.frames(1);
+    assert_eq!((r.steps().len(), r.said(A, "stroke-linecap")), (steps, Some("round".into())));
+}
+
+#[test]
+fn the_whole_things_opacity_is_its_own() {
+    let mut r = painted("paint-opacity");
+    // A group: it fades as one, and what it holds says nothing new.
+    r.select(&[G]);
+    let rail = r.line_at("Opacity");
+    // A press some way along the rail (its value's box takes the
+    // right end): partly see-through.
+    let at = Vec2::new(rail.min.x + rail.width() * 0.2, rail.center().y);
+    r.click(at);
+    let opacity: f64 = r.said(G, "opacity").expect("the group's opacity").parse().unwrap();
+    assert!(opacity > 0.1 && opacity < 0.6, "{opacity}");
+    assert_eq!((r.said(B, "opacity"), r.said(C, "opacity"), r.steps()), (None, None, vec!["Opacity".to_owned()]));
+    // A right press puts it back to whole: nothing need say that.
+    r.h.advance(1.0);
+    r.h.move_to(at);
+    r.frames(1);
+    r.h.right_press();
+    r.frames(3);
+    assert_eq!((r.said(G, "opacity"), r.steps().len()), (None, 2));
+}
+
+#[test]
+fn a_gradient_is_a_kind_of_paint() {
+    let mut r = painted("paint-gradient");
+    r.select(&[A]);
+    r.click(r.paint_at("Fill gradient"));
+    // A new one, from the blue it was to that blue darker, down the
+    // shape; in the drawing's definitions.
+    assert_eq!((r.said(A, "fill"), r.steps()), (Some("url(#gradient-1)".into()), vec!["Fill".to_owned()]));
+    let svg = r.svg();
+    assert!(svg.contains("<linearGradient id=\"gradient-1\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">") && svg.contains("<stop offset=\"0\" stop-color=\"#0088ff\"/>") && svg.contains("<stop offset=\"1\" stop-color=\"#005cad\"/>"), "{svg}");
+    // A colour again; then a gradient again is the one it was, not
+    // another.
+    r.click(r.paint_at("Fill colour"));
+    assert_eq!(r.said(A, "fill"), Some("#0088ff".into()));
+    r.click(r.paint_at("Fill gradient"));
+    assert_eq!((r.said(A, "fill"), r.svg().matches("<linearGradient").count()), (Some("url(#gradient-1)".into()), 1));
+    // The stroke's is its own.
+    r.click(r.paint_at("Stroke gradient"));
+    assert_eq!(r.said(A, "stroke"), Some("url(#gradient-2)".into()));
+    // One Ctrl+Z takes a gradient's making and its use back together.
+    r.key(Key::Char('z'), Modifiers::CTRL);
+    assert!(!r.svg().contains("gradient-2") && r.said(A, "stroke") == Some("#000000".into()));
+}
+
+#[test]
+fn the_tree_keeps_its_room_under_the_paint_section() {
+    // A laptop's screen at 1.4: everything is bigger, and the panel no
+    // taller. The section scrolls in what the tree leaves it.
+    let path = scratch("paint-room").join("painted.svg");
+    std::fs::write(&path, PAINTED).unwrap();
+    let mut r = Running::start(1792.0, 1120.0, 1.4);
+    r.open(&path);
+    r.frames(3);
+    let panel = r.ink.layout.panel;
+    let rows = r.ink.tree.laid.clone();
+    assert_eq!(rows.len(), 4, "every row of the tree is laid out");
+    let first = rows[0].1;
+    assert!(first.min.y >= panel.min.y && first.max.y <= panel.max.y, "{first:?} in {panel:?}");
+    // At least 38 % of the panel is the tree's.
+    assert!(panel.max.y - first.min.y >= panel.height() * 0.3, "the tree has {} px of {}", panel.max.y - first.min.y, panel.height());
+    // Its heading folds it away: the tree has the panel.
+    r.click(r.paint_at("Paint"));
+    r.frames(2);
+    assert!(r.ink.settings.paint_folded);
+    let folded = r.ink.tree.laid[0].1;
+    assert!(folded.min.y < first.min.y && folded.min.y - panel.min.y < 160.0, "{folded:?}");
+    r.click(r.paint_at("Paint"));
+    r.frames(2);
+    assert!(!r.ink.settings.paint_folded && r.ink.tree.laid[0].1.min.y > folded.min.y);
+}

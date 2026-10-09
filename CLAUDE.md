@@ -840,6 +840,34 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Not in c1:** the gradient kind and the picker for its stops (c2
     makes one; e edits it), the stroke's width and the rest (c2), the
     node's opacity (c2), a swatch in a tree row.
+- **M4c's c2 is built** (2026-10-08, 467 tests, deployed; **not yet
+  looked at by Alva**).
+  - **Everything the section sets is a `paint::Set`** (a paint, a
+    gradient, the line's width, cap, join and dashes, the opacity):
+    `Set::properties` is what says it, `Set::label` what its step is
+    called, `Paints::take` makes it the next shape's too. `Paints` now
+    carries the `Line` and the opacity. `Ink::set_paint(Set, held)` is
+    the one way in: a paint and a line go on `paint::painted` (the
+    shapes and texts), an opacity on `paint::faded` (the selected
+    things themselves).
+  - **Held, it's a gesture; let go, it's an edit** (`Ink::painting`):
+    a colour, a width and an opacity are dragged to; a kind, a cap, a
+    join and dashes are done at once.
+  - **`colour/line.rs`** is the rows under Stroke and the opacity
+    (their glyphs are drawn with rects and circles: no icons). The
+    slider is LS3's, copied into `controls/slider.rs` as a row control
+    (`Slider::in_row`): Ink's panels are laid out by hand, and its name
+    is the caller's to draw.
+  - **A gradient made here** is `gradient-N`, box units, top to bottom
+    (`Ink::gradient_for`); `Section::last_gradient` remembers which one
+    each paint last was. Its swatch draws its real stops.
+  - **The section scrolls and folds** (`painting.rs`: `TREE_SHARE`,
+    `TREE_LEAST`; `Settings::paint_folded`): at a 1.4 scale the whole
+    of it is taller than the panel.
+  - **Not in c2:** editing a gradient's stops or its line across the
+    shape (slice e); miter limit, dash offset, `paint-order`,
+    `fill-rule` (none asked for); "mixed" where the selection's shapes
+    are painted differently (the one in hand is what shows).
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

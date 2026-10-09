@@ -1,7 +1,7 @@
 //! Ink's own controls (LS3's `controls/`, copied as D12 says: the look
-//! is LS3's): the number field you drag along or type into, and the
-//! toggle. More of LS3's come with the slices that need them (the
-//! slider and the dropdown with paint, in M4c). Only the text editing
+//! is LS3's): the number field you drag along or type into, the
+//! toggle, and the slider. More of LS3's come with the slices that
+//! need them (the dropdown, the button). Only the text editing
 //! itself is LUI2's (`Ui::text_edit_core`): carets, selections and the
 //! clipboard are one thing everywhere.
 //!
@@ -9,9 +9,11 @@
 //! text at LUI2's size (never under 18 px).
 
 mod field;
+mod slider;
 mod toggle;
 
 pub use field::number_in;
+pub use slider::Slider;
 pub use toggle::toggle;
 
 use lntrn_math::{Color, Rect};
@@ -47,6 +49,13 @@ pub(crate) fn well(ui: &mut Ui, r: Rect, edge: Color) {
     let radius = round(ui);
     ui.draw.rounded_rect(r, radius, INPUT_BG);
     frame(ui, r, edge);
+}
+
+/// A right press on `r` this frame that nothing floating over it took:
+/// what puts a slider back to rest.
+pub(crate) fn right_pressed(ui: &Ui, r: Rect) -> bool {
+    let st = &ui.state;
+    st.right_pressed && r.intersection(&ui.clip()).contains(st.right_press_pos) && !st.shielded(ui.layer(), st.right_press_pos)
 }
 
 /// A number as a person writes it: up to `decimals` places, no trailing

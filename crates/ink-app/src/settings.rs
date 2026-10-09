@@ -26,6 +26,8 @@ props! {
         /// Object > Align lines things up against the page, not the
         /// box round what's selected.
         pub align_to_page: bool = false => { id: 3 },
+        /// The paint section is folded away to its heading.
+        pub paint_folded: bool = false => { id: 4 },
     }
 }
 

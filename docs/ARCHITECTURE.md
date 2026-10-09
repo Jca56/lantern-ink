@@ -867,6 +867,23 @@ As LS3 §7, to the letter where it can be:
   - A palette swatch pressed is the fill; with Shift, the stroke.
     Ink's palettes are its own file; the first time, Lantern Studio's
     are read in its place (Alva's choice).
+  - **The line's rows** (`colour/line.rs`) are the stroke's width
+    (dragged along or typed), its ends and corners (three ways each),
+    and its dashes (typed as lengths, on then off); they wait, dim,
+    while there's no stroke. Each is said outright (`butt`, `none`), so
+    a group above saying otherwise doesn't decide it.
+  - **The opacity is the selected thing's own** (`opacity`, on a group
+    as on a shape: a group fades as one), where a paint and a line go
+    on every shape inside.
+  - **A gradient is a kind of paint:** making a paint one defines a
+    linear gradient across the shape's box, top to bottom, from the
+    colour it was to that colour darker, and paints with it, as one
+    step; making it one again uses the gradient it last was, while the
+    drawing still has it. Its stops are the Gradient tool's to edit
+    (slice e).
+  - **The tree keeps its room:** at least 38 % of the panel (220 px).
+    Where the panel is too short for all of the section, the section
+    scrolls in the rest; its heading folds it away.
 - **The canvas:** the CPU renderer draws 256 px tiles on the job pool at
   the current zoom, and the window shows them as LUI2 images. While
   zooming, the old tiles stretch until sharp ones land; a frame never

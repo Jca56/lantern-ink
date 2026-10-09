@@ -6,6 +6,7 @@
 //! background.
 
 pub mod drawer;
+pub mod line;
 pub mod palettes;
 pub mod picker;
 pub mod section;

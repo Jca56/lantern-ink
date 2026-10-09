@@ -15,24 +15,26 @@ const KEPT: f64 = 0.5;
 
 /// Whether a value is being typed, and whether that changed it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct Typing {
+pub(crate) struct Typing {
     /// The editor is open in the box: there's nothing else to draw there.
-    open: bool,
-    changed: bool,
+    pub open: bool,
+    pub changed: bool,
 }
 
 /// The typing of a number into `rect`, for the widget `id`. While `id`
 /// has the keyboard the editor is open, starting from the value with all
 /// of it selected; Enter takes what's typed (within `bounds`), Escape
 /// drops it, and so does nothing: taking the keyboard elsewhere enters
-/// it.
-fn typing(ui: &mut Ui, id: WidgetId, rect: Rect, value: &mut f64, bounds: (f64, f64), step: f64) -> Typing {
+/// it. `shown` is what the box says at rest, whose unit a typed number
+/// may carry.
+pub(crate) fn typing(ui: &mut Ui, id: WidgetId, rect: Rect, value: &mut f64, bounds: (f64, f64), step: f64, shown: &str) -> Typing {
     let now = ui.now();
     let seen = id.with("seen");
     let last = ui.state.floats(seen, [now; 4])[0];
     ui.state.floats(seen, [now; 4])[0] = now;
+    let unit = shown.trim_start_matches(|c: char| c.is_ascii_digit() || matches!(c, '+' | '-' | '.' | ',')).trim().to_owned();
     let read = |text: &str| -> Option<f64> {
-        let t = text.trim().trim_start_matches('+').replace(',', ".");
+        let t = text.trim().trim_end_matches(unit.as_str()).trim().trim_start_matches('+').replace(',', ".");
         t.parse::<f64>().ok().filter(|v| v.is_finite()).map(|v| snapped(v, bounds.0, bounds.1, step))
     };
     let mut out = Typing::default();
@@ -89,7 +91,8 @@ fn typing(ui: &mut Ui, id: WidgetId, rect: Rect, value: &mut f64, bounds: (f64, 
 pub fn number_in(ui: &mut Ui, id: WidgetId, rect: Rect, label: &str, value: &mut f64, step: f64, range: Option<(f64, f64)>, decimals: usize) -> bool {
     let (min, max) = range.unwrap_or((f64::NEG_INFINITY, f64::INFINITY));
     let whole = if decimals == 0 { 1.0 } else { 0.0 };
-    let typed = typing(ui, id.with("typed"), rect, value, (min, max), whole);
+    let shown = written(*value, decimals);
+    let typed = typing(ui, id.with("typed"), rect, value, (min, max), whole, &shown);
     if typed.open {
         return typed.changed;
     }
