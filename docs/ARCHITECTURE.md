@@ -1143,6 +1143,23 @@ As LS3 §7, to the letter where it can be:
     dragged along, recoloured, and taken off.
   - **A gradient is changed where it is while it's that shape's
     alone**; a shared one is left, and the shape gets its own.
+  **The Text tool, as built in M4e** (`typing.rs`, `texting.rs`,
+  `textbox.rs`):
+  - **A click and typing make a text**; a click on a text takes it up,
+    the caret where the click is. Enter starts a line; the arrows, Home
+    and End move about; Backspace and Delete take characters out.
+  - **Typing is tried on the canvas as it goes and is one step once it
+    pauses** for half a second, or when anything else is done (LS3's
+    rule). A text begins with its first character, and goes with its
+    last.
+  - **A text is read as lines of stretches** (`text::written`) and
+    written back the same (`SetText`), so the spans a file has are
+    kept through typing. The caret is placed by each character's own
+    cell in the text as it's set (`Laid::chars`).
+  - **The Box letters it**: the font (every family installed, each in
+    its own face), size, bold, italic, alignment, line height; and
+    says so when the font a text asks for isn't on this machine, with
+    what drew instead.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

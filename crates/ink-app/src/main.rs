@@ -49,6 +49,7 @@ mod shadows;
 mod shapebox;
 mod shapes;
 mod shaping;
+mod textbox;
 mod texting;
 mod theme;
 mod tiles;

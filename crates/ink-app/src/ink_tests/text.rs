@@ -132,3 +132,53 @@ fn a_click_on_a_text_takes_it_up_where_the_click_is() {
     r.key(Key::Char('v'), Modifiers::NONE);
     assert_eq!((r.svg(), r.steps().len(), r.ink.tools.active()), (before, 3, Tool::Pointer));
 }
+
+#[test]
+fn the_box_letters_the_text_typed_into_and_the_next_one() {
+    let mut r = blank("text-box");
+    let doc = r.doc();
+    r.click(r.ink.toolbox.rect().expect("the Text tool's Box").center());
+    assert_eq!(r.box_rows(), ["Font", "Size", "Bold", "Italic", "Align", "Line Height"]);
+    // Before anything is typed, its rows are the next text's: set
+    // there, a text is typed that way.
+    r.type_in_box("Size", "6");
+    let bold = r.in_box("Bold");
+    r.click(Vec2::new(bold.min.x + 27.0, bold.center().y));
+    assert_eq!((r.ink.texting.letters.size, r.ink.texting.letters.bold, r.steps().len()), (6.0, true, 0));
+    r.click(r.spot(10.0, 20.0));
+    r.type_in("Hi");
+    r.pause();
+    assert_eq!(r.text(), "<text x=\"10\" y=\"20\" font-family=\"Ink Test\" font-size=\"6\" font-weight=\"bold\" fill=\"#f3b700\">Hi</text>");
+    // With a text typed into, they're that text's: each a step of its
+    // own, after what was typed.
+    r.type_in("!");
+    r.type_in_box("Size", "8");
+    assert!(r.text().contains("font-size=\"8\"") && r.text().ends_with(">Hi!</text>"), "{}", r.text());
+    assert_eq!(r.steps(), ["Type", "Type", "Font Size"]);
+    let italic = r.in_box("Italic");
+    r.click(Vec2::new(italic.min.x + 27.0, italic.center().y));
+    let bold = r.in_box("Bold");
+    r.click(Vec2::new(bold.min.x + 27.0, bold.center().y));
+    assert!(r.text().contains("font-style=\"italic\"") && !r.text().contains("font-weight"), "{}", r.text());
+    // A number dragged along is shown as it goes, and one step.
+    let size = r.in_box("Size").center();
+    r.drag_to(size, size + Vec2::new(20.0, 0.0));
+    assert!(r.ink.core.gesturing(doc) && r.ink.core.shown(doc).unwrap().0.to_svg().contains("font-size=\"10\""));
+    r.let_go();
+    assert_eq!((r.steps().len(), r.text().contains("font-size=\"10\"")), (6, true));
+    // Its lines' distance is written into its lines.
+    r.click(r.spot(12.0, 19.0));
+    r.key(Key::End, Modifiers::NONE);
+    r.key(Key::Enter, Modifiers::NONE);
+    r.type_in("yo");
+    r.type_in_box("Line Height", "2");
+    assert!(r.text().ends_with(">Hi!<tspan x=\"10\" dy=\"2em\">yo</tspan></text>"), "{}", r.text());
+    assert_eq!(r.steps()[6..], ["Type", "Line Height"]);
+    // A font that isn't installed says so, and what drew instead.
+    r.key(Key::Escape, Modifiers::NONE);
+    r.ink.edit(doc, &ink_core::Command::SetStyle { nodes: vec![NEW], set: vec![("font-family".to_owned(), Some("No Such Font, Ink Test".to_owned()))] }, "Font");
+    r.frames(2);
+    assert_eq!(r.box_rows(), ["Font", "Note", "Size", "Bold", "Italic", "Align", "Line Height"]);
+    r.undo(9);
+    assert_eq!(r.svg(), BLANK);
+}

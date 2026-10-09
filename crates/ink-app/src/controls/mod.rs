@@ -1,7 +1,6 @@
 //! Ink's own controls (LS3's `controls/`, copied as D12 says: the look
 //! is LS3's): the number field you drag along or type into, the
-//! toggle, the slider and the button. More of LS3's come with the
-//! slices that need them (the dropdown). Only the text editing
+//! toggle, the slider, the button and the dropdown. Only the text editing
 //! itself is LUI2's (`Ui::text_edit_core`): carets, selections and the
 //! clipboard are one thing everywhere.
 //!
@@ -9,11 +8,13 @@
 //! text at LUI2's size (never under 18 px).
 
 mod button;
+mod dropdown;
 mod field;
 mod slider;
 mod toggle;
 
 pub use button::button_if;
+pub use dropdown::dropdown;
 pub use field::number_in;
 pub use slider::Slider;
 pub use toggle::toggle;
@@ -58,6 +59,22 @@ pub(crate) fn well(ui: &mut Ui, r: Rect, edge: Color) {
     let radius = round(ui);
     ui.draw.rounded_rect(r, radius, INPUT_BG);
     frame(ui, r, edge);
+}
+
+fn window_slot() -> lntrn_ui::WidgetId {
+    lntrn_ui::WidgetId::ROOT.with("ink-controls-window")
+}
+
+/// Tell the controls where the window is this frame: a list that opens
+/// stays inside it. (LUI2 knows, and keeps it to itself.)
+pub fn set_window(ui: &mut Ui, window: Rect) {
+    *ui.state.floats(window_slot(), [0.0; 4]) = [window.min.x, window.min.y, window.max.x, window.max.y];
+}
+
+/// The window, as last told; before that, everywhere.
+pub(crate) fn window(ui: &mut Ui) -> Rect {
+    let [x0, y0, x1, y1] = *ui.state.floats(window_slot(), [0.0; 4]);
+    if x1 > x0 && y1 > y0 { Rect::new(lntrn_math::Vec2::new(x0, y0), lntrn_math::Vec2::new(x1, y1)) } else { Rect::new(lntrn_math::Vec2::new(-1.0e9, -1.0e9), lntrn_math::Vec2::new(1.0e9, 1.0e9)) }
 }
 
 /// A right press on `r` this frame that nothing floating over it took:

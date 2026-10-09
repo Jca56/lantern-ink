@@ -30,6 +30,8 @@ impl Ink {
         if popup && ui.state.pressed {
             ui.state.press_claimed = true;
         }
+        // (A list a control opens stays inside the window.)
+        crate::controls::set_window(ui, ui.clip());
         // The keys that are a text's, while one is typed into: before
         // anything else sees them.
         self.text_keys_in(ui, popup);

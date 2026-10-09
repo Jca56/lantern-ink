@@ -134,6 +134,8 @@ pub struct Texting {
     field: bool,
     /// How the next text is lettered.
     pub letters: Lettering,
+    /// The fonts the Box offers, once they've been asked for.
+    pub(crate) families: Option<Vec<String>>,
 }
 
 impl Texting {

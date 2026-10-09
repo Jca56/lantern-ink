@@ -1217,6 +1217,71 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     dragged on the bar).
   - **`grading.rs` is 451 lines:** its Box wants a file of its own
     before anything is added.
+- **M4e's e4 is built** (2026-10-09, 532 tests).
+  - **Two things new in `ink-doc`'s text:** `Laid::chars` (each
+    character's own cell, in the order `said` says them: a caret stands
+    at one's left side, or its right) and `text::written` (a text read
+    back as the lines `SetText` would be given to write it again: a new
+    line wherever a row starts one, the empty lines counted from how
+    far down it starts, each stretch a span with what its `<tspan>`s
+    set). What `SetText` writes, `written` reads back, and written
+    again changes nothing. A span's `id` or `class` isn't kept.
+    (`text.rs` passed 500 lines: its tests are `text/tests.rs` now.)
+  - **Typing is `typing.rs`** (no window): `Words` (lines of spans),
+    `Caret` (a line and a place in it), and what each key does.
+    Typing goes into the stretch the caret is in, or on the end of the
+    one before it, so stretches a file has are kept; nothing in the
+    window makes a new kind of stretch yet.
+  - **The tool is `texting.rs`** (`Ink::text_tool`, `Ink::texting`):
+    a click on a text takes it up with the caret where the click is
+    (`caret_at`, by `Laid::chars`); a click anywhere else begins a new
+    one there, on whole units (Ctrl frees it), on top of the level the
+    Pointer is in.
+  - **Typing is a gesture, landed as "Type" once it pauses half a
+    second** (LS3's rule), or when anything else is done:
+    `Ink::type_settled` is the first thing `Ink::act` does, so an undo
+    takes back what was just typed. After an undo the words are read
+    from the drawing again (`Editing::stamp`); the caret stays put.
+  - **A text begins with its first character** (till then the click is
+    the tool's own, as the Pen's first point is), and **one whose last
+    character is taken out goes** (`Command::Delete`): typed into
+    again there, it's a new one.
+  - **The keyboard is the text's while one is typed into:**
+    `Ink::text_keys_in` takes its keys at the frame's start (letters,
+    Enter, Backspace, Delete, the arrows, Home, End), before the
+    window's own see them. A field being typed into (LUI2's
+    `ime_rect`, read the frame before), a menu and a dialog keep the
+    keyboard. Escape lets go of the text.
+  - A new text is lettered as `Texting::letters` says and filled as the
+    last shape was (a gradient isn't carried: Lantern's gold). Its size
+    unless set is forty of the Box's dragging steps: 4 on an icon's
+    page.
+  - **Not in e4:** selecting within a text (so no copy, cut or paste
+    of words, and no styling a stretch); Ctrl+A in a text (it's the
+    drawing's); a text's own transform when a new one is typed where
+    one was deleted; text on a path and the rest `text::Unset` names.
+- **M4e's e5 is built** (2026-10-09, 535 tests, deployed; **not yet
+  looked at by Alva**), and with it **all of M4e**. Next: M4f (the
+  icon aids, and not losing work), once she has looked at slice e.
+  - **The Text tool's Box is `textbox.rs`** (`read`, `set`,
+    `Ink::text_box`): the font, the size, bold, italic, how lines hang
+    (`text-anchor`), and how far apart they are. It letters the text
+    typed into, or with none, the texts selected; and always the next
+    one typed. Only what changed is set (`SetStyle`, so written where
+    the text has it; off is the property taken off); line height is
+    written into the lines (`SetText` with what `written` reads).
+  - **The font list is every family installed, each row lettered in
+    its own** (`controls::dropdown` with `faces`: LS3's dropdown,
+    copied, D12), after the three generic names, which are Lantern's
+    fonts. Asked for once a run (`Texting::families`).
+  - **A font that isn't installed says so**, in a line under the list:
+    which, and what this machine drew instead (`text::lettered`). The
+    text keeps asking for the one it names.
+  - What's been typed lands before a row of the Box is set, so each is
+    a step of its own.
+  - **Not in e5:** letter spacing, underline, a weight between regular
+    and bold (`lntrn-text` has two); the Box's rows under the Pointer
+    (take the Text tool).
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

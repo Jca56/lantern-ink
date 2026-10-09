@@ -117,6 +117,9 @@ impl Ink {
         if self.tools.active() == Tool::Gradient {
             return self.grade_box(ui, canvas);
         }
+        if self.tools.active() == Tool::Text {
+            return self.text_box(ui, canvas);
+        }
         let chosen = if self.tools.active() == Tool::Pointer { self.chosen() } else { None };
         let Some(Chosen { doc, tops, boxed }) = chosen else {
             // No settings to show (yet) for the other tools.
