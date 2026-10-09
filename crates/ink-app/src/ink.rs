@@ -54,6 +54,8 @@ pub struct Ink {
     pub(crate) tree: Tree,
     /// The Pointer tool, and what it's in the middle of.
     pub(crate) pointing: Pointer,
+    /// The Node tool: the anchors picked, and what it's in the middle of.
+    pub(crate) noding: crate::noding::Noding,
     /// The desktop's resize and turn cursors.
     pub(crate) cursor_theme: crate::cursors::Themed,
     /// The Box over the canvas, and a number of it being dragged along.
@@ -114,6 +116,7 @@ impl Ink {
             grip: Grip::default(),
             tree: Tree::default(),
             pointing: Pointer::default(),
+            noding: crate::noding::Noding::default(),
             cursor_theme: if cfg!(test) { Default::default() } else { crate::cursors::themed() },
             toolbox: crate::toolbox::ToolBox::default(),
             boxing: None,

@@ -108,6 +108,8 @@ impl Ink {
             COPY => self.op(Op::Copy, cx),
             PASTE => self.op(Op::Paste, cx),
             DUPLICATE => self.op(Op::Duplicate, cx),
+            // The Node tool's anchors, where it has some picked.
+            DELETE if self.anchors_in_hand() => self.delete_anchors(),
             DELETE => self.op(Op::Delete, cx),
             SELECT_ALL => self.op(Op::SelectAll, cx),
             DESELECT => self.op(Op::Deselect, cx),

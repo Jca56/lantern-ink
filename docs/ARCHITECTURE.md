@@ -330,7 +330,8 @@ one model: `EditPath { node, edits }` and `SetPath { node, runs }`.
 A path is read as an `Outline` (`outline.rs`): runs of anchors, each
 joined to the next by a line, a quadratic, a cubic or an arc, whichever
 the file had. `PathEdit` (`pathedit.rs`) is the edits: move, set
-handles, add (the path keeping its shape), delete, bend, straighten,
+handles, add (the path keeping its shape), delete, bend, pull (a
+segment taken by any point of it: what a drag does, M4d), straighten,
 smooth, corner, close, break, join, reverse; so §3.4's `Reverse`,
 `Join` and `Break` are edits, not Commands of their own. A shape that
 isn't a path is made one by its first edit. Anchors have ids (D18):
@@ -1061,6 +1062,27 @@ As LS3 §7, to the letter where it can be:
     size: set on the one in hand, they're set on every selected shape
     of its kind (LS3's rule). Dragged, a gesture; typed or ticked, a
     step at once.
+  **The Node tool, as built in M4d** (`nodes.rs`, `anchors.rs`,
+  `noding.rs`):
+  - **Every selected shape shows its anchors** (white squares on the
+    shape's line in gold; LS3's look for its pen's), in place of the
+    selection's box. A press takes a handle of a picked anchor, else
+    the nearest anchor, else a segment; else it's on a shape, which is
+    picked itself, whatever group it's in, or on nothing, where a drag
+    is a marquee over anchors.
+  - **Each drag is a gesture of path edits**: the picked anchors moved
+    (onto whole units, led by the one pressed; Ctrl frees it, Shift
+    keeps to one axis), a handle moved, or a segment pulled by the
+    point taken. They land as "Move Anchor(s)", "Handle" and "Bend".
+  - **A shape that isn't a path yet shows the anchors it would have,
+    and becomes a path with the first change to them.** Looking and
+    picking change nothing. Its anchors are called what they'd be
+    called were it made a path now, by itself; a change that makes
+    several shapes paths at once begins with one `ToPath` of them all,
+    whose order says what each anchor is then called.
+  - **Smooth is how the handles lie**, not something kept: in line
+    through their anchor, one dragged takes the other round (each its
+    own length); Alt, or a corner, and each goes alone.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**
@@ -1093,8 +1115,9 @@ As LS3 §7, to the letter where it can be:
     about** (a dialog, "Ungroup anyway?") instead of refused: §3.4's
     refusal is for a caller who can say `drop`.
 - **Tools, first set:** Pointer (select, move, scale, rotate), Node
-  (anchors and handles; drag a segment to bend it), Pen (click points,
-  bend after: Alva's May preference, D17), Rectangle, Ellipse, Line,
+  (anchors and handles; drag a segment to bend it), Pen (LS3's: a
+  click places a corner, a press dragged on pulls its handles out;
+  D17 as Alva changed it), Rectangle, Ellipse, Line,
   Polygon, Text, Gradient, Eyedropper, Hand and Zoom.
 - **For icons:** a pixel grid when zoomed in, snapping to whole and half
   units, and the preview strip always in view.
@@ -1211,7 +1234,7 @@ the foundation; the rest wait for their milestone.
 | D14 | Where a style is written | ✅ **Decided 2026-10-06, as recommended:** where that node already has it (`style=""` or the attribute); a new property goes in as a presentation attribute | M3 |
 | D15 | Numbers Ink writes | ✅ **Decided 2026-10-06, as recommended:** three decimals, trailing zeros dropped, settable per document | M3 |
 | D16 | Coordinates Claude and the GUI speak | ✅ **Decided 2026-10-06, revising my first recommendation:** attributes are as the file writes them (the node's own coordinates, as in any SVG), which is also what `node_add_svg`'s raw markup means; what's reported back is where things show in the document's coordinates (§3.3) | M2 |
-| D17 | Pen tool | Click points, bend the segments after (Alva's May preference); no click-drag handles while placing. Written into `docs/M4.md` as the plan; hers to change when slice d comes | M4 |
+| D17 | Pen tool | ✅ **Decided 2026-10-09, changed from the plan:** LS3's Pen. A click places a corner; a press dragged on pulls the new anchor's handles out; segments bend after, as ever. (The plan was her May preference, click only with no handles while placing: a plain click is still that.) New points and dragged anchors land on whole units, Ctrl frees them | M4 |
 | D18 | Path anchors' addresses | ✅ **Decided 2026-10-07, as recommended:** stable ids kept beside the path in memory (`A3`), so a selection survives a point being added; not written to the file. The alternative was a place in the path (run 1, anchor 3), which every add and delete renumbers | M3 |
 | D19 | Ink's own attributes | ✅ **Decided 2026-10-07 (Alva): `ink:label` and `ink:locked` now** (built in M3e, §3.3), under `xmlns:ink="urn:lantern:ink"`; **guides wait for the window (M4)**, the first thing that can show or snap to them. Nothing else until something needs it | M3 |
 | D20 | What "done" means for the window | ✅ **Decided 2026-10-07, as recommended: Ink replaces Boxy SVG for Lantern's icons.** All twelve tools of §8, the object tree, fill and stroke, the icon aids, and a menu row for every operation the MCP server has. The checklist is `docs/M4.md`. The first deploy takes the `lantern-ink` name from the May prototype | M4 |

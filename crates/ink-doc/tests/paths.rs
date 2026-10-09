@@ -139,6 +139,57 @@ fn a_segment_bends_through_a_point_and_straightens_again() {
 }
 
 #[test]
+fn a_segment_is_pulled_by_any_point_of_it() {
+    // A line taken by its middle: the cubic whose middle is there, its
+    // two control points pulled alike.
+    assert_eq!(data("M0 0 H12", vec![PathEdit::Pull { after: a(1), share: 0.5, to: v(6.0, 3.0) }]), "M0 0 C0 4 12 4 12 0");
+    // Taken nearer one end, the point taken is what goes there, and the
+    // nearer control point goes further.
+    for (d, share, to) in [("M0 0 H12", 0.25, v(3.0, 2.0)), ("M0 0 C0 8 8 8 8 0", 0.8, v(9.0, 1.0)), ("M0 0 Q5 10 10 0", 0.3, v(2.0, 6.0)), ("M0 0 A5 5 0 0 1 10 0", 0.5, v(4.0, -3.0))] {
+        let mut doc = path(d);
+        doc.apply(&Command::EditPath { node: N, edits: vec![PathEdit::Pull { after: a(1), share, to }] }).unwrap();
+        let piece = doc.outline(N).unwrap().runs[0].piece(0).unwrap();
+        let nearest = piece.at(piece.nearest(to));
+        assert!(nearest.distance(to) < 0.002, "{d}: {nearest:?}");
+        // (A curve's own count along it is the one it was taken by.)
+        if d.contains('C') || d.contains('Q') {
+            assert!(piece.at(share).distance(to) < 0.002, "{d}: the point taken");
+        }
+    }
+    let (near, _) = state(&{
+        let mut doc = path("M0 0 H12");
+        doc.apply(&Command::EditPath { node: N, edits: vec![PathEdit::Pull { after: a(1), share: 0.25, to: v(3.0, 2.0) }] }).unwrap();
+        doc
+    });
+    assert_eq!(near, "M0 0 C0 3.646 12 1.766 12 0");
+    // Each kind stays what it can: a quadratic moves its one control
+    // point, an arc is the arc of a circle through the point.
+    assert_eq!(data("M0 0 Q5 10 10 0", vec![PathEdit::Pull { after: a(1), share: 0.5, to: v(5.0, -1.0) }]), "M0 0 Q5 -2 10 0");
+    assert_eq!(data("M0 0 A5 5 0 0 1 10 0", vec![PathEdit::Pull { after: a(1), share: 0.2, to: v(5.0, -2.0) }]), "M0 0 A7.25 7.25 0 0 1 10 0");
+    // Pulled nowhere, a line is a line still.
+    assert_eq!(data("M0 0 H12 V4", vec![PathEdit::Pull { after: a(1), share: 0.3, to: v(3.6, 0.0) }, PathEdit::Pull { after: a(2), share: 0.5, to: v(13.0, 2.0) }]), "M0 0 H12 C13.333 0 13.333 4 12 4");
+    assert_eq!(refused("M0 0 H10", vec![PathEdit::Pull { after: a(1), share: 1.0, to: v(1.0, 1.0) }]), "a segment is pulled by a point between its ends: 1 of the way along isn't (give more than 0 and less than 1)");
+    assert_eq!(refused("M0 0 H10", vec![PathEdit::Pull { after: a(2), share: 0.5, to: v(1.0, 1.0) }]), "A2 is the last anchor of an open run: no segment comes after it to pull");
+}
+
+#[test]
+fn an_anchor_says_where_its_handles_are() {
+    let handles = |d: &str, n: u64| path(d).outline(N).unwrap().handles(a(n));
+    // A cubic's two control points are its ends' handles; a line has
+    // none, nor has the end of an open run.
+    let d = "M0 0 C0 4 12 4 12 0 L20 0";
+    assert_eq!((handles(d, 1), handles(d, 2), handles(d, 3)), ((None, Some(v(0.0, 4.0))), (Some(v(12.0, 4.0)), None), (None, None)));
+    // A quadratic's one control point stands for both ends.
+    assert_eq!((handles("M0 0 Q6 9 12 0", 1), handles("M0 0 Q6 9 12 0", 2)), ((None, Some(v(4.0, 6.0))), (Some(v(8.0, 6.0)), None)));
+    // Round a closed run, the first anchor has what comes home to it.
+    let d = "M0 0 C3 -2 7 -2 10 0 L5 8 C3 8 0 3 0 0 Z";
+    assert_eq!(handles(d, 1), (Some(v(0.0, 3.0)), Some(v(3.0, -2.0))));
+    // An arc has radii, not handles; a handle on its anchor is none;
+    // and no such anchor has none.
+    assert_eq!((handles("M0 0 A5 5 0 0 1 10 0", 1), handles("M0 0 C0 0 8 4 10 0", 1), handles("M0 0 H4", 9)), ((None, None), (None, None), (None, None)));
+}
+
+#[test]
 fn anchors_are_made_smooth_and_made_corners() {
     // Handles in line with the anchors either side, a third of the way
     // to each.

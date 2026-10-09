@@ -8,26 +8,28 @@ use ink_core::{Document, NodeId};
 use ink_doc::hit;
 use lntrn_math::{Rect, Vec2};
 
-/// What a click at `point` (the drawing's coordinates) picks, with the
-/// Pointer inside `context`: the thing on top there, as the child of
-/// `context` it is or is in. And whether it's outside `context`
-/// altogether: then it's picked at the drawing's top level, and the
-/// Pointer comes out. Nothing locked is picked: a click goes through
-/// it to what's behind. `reach`: how far from the point still counts.
-pub fn pick(doc: &Document, context: NodeId, point: Vec2, reach: f64) -> Option<(NodeId, bool)> {
+/// The shape or text on top at `point` (the drawing's coordinates),
+/// itself and not the group it's in: what the Node tool picks. Nothing
+/// locked: a click goes through it to what's behind. `reach`: how far
+/// from the point still counts.
+pub fn top_at(doc: &Document, point: Vec2, reach: f64) -> Option<NodeId> {
     // The point itself; then, for a thin line just missed, round it.
     let ring = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0), (0.7, 0.7), (-0.7, 0.7), (-0.7, -0.7), (0.7, -0.7)];
+    ring.into_iter().find_map(|(dx, dy)| hit::at(doc, point + Vec2::new(dx, dy) * reach).into_iter().find(|h| doc.lock_over(h.node).is_none())).map(|found| found.node)
+}
+
+/// What a click at `point` picks, with the Pointer inside `context`:
+/// the thing on top there ([`top_at`]), as the child of `context` it is
+/// or is in. And whether it's outside `context` altogether: then it's
+/// picked at the drawing's top level, and the Pointer comes out.
+pub fn pick(doc: &Document, context: NodeId, point: Vec2, reach: f64) -> Option<(NodeId, bool)> {
     let root = doc.root();
     let child_of = |holder: NodeId, node: NodeId| std::iter::once(node).chain(doc.ancestors(node).map(|n| n.id)).find(|&n| doc.get(n).and_then(|n| n.parent) == Some(holder));
-    for (dx, dy) in ring {
-        let found = hit::at(doc, point + Vec2::new(dx, dy) * reach).into_iter().find(|h| doc.lock_over(h.node).is_none());
-        let Some(found) = found else { continue };
-        return match child_of(context, found.node) {
-            Some(inside) => Some((inside, false)),
-            None => child_of(root, found.node).map(|top| (top, true)),
-        };
+    let found = top_at(doc, point, reach)?;
+    match child_of(context, found) {
+        Some(inside) => Some((inside, false)),
+        None => child_of(root, found).map(|top| (top, true)),
     }
-    None
 }
 
 /// The children of `context` that `marquee` touches, back to front: a
@@ -80,6 +82,9 @@ mod tests {
         // empty middle.
         assert_eq!((at(42.0, 12.0, root), at(42.5, 12.0, root), at(36.0, 12.0, root)), (Some((RING, false)), Some((RING, false)), None));
         assert_eq!(at(46.0, 46.0, root), None);
+        // The Node tool's pick is the shape itself, whatever group it's
+        // in; and never what's locked.
+        assert_eq!((top_at(&d, Vec2::new(12.0, 12.0), 0.3), top_at(&d, Vec2::new(4.0, 4.0), 0.3), top_at(&d, Vec2::new(30.0, 29.0), 0.3)), (Some(DOT), Some(A), None));
     }
 
     #[test]

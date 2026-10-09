@@ -945,6 +945,68 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     an ellipse or a line (their numbers are the box's); the dot under a
     shape tool (handles are the Pointer's).
 
+- **M4d (the Node tool and the Pen) is under way**, in four pieces:
+  **d1** the Node tool sees and drags, **d2** its edits (a new anchor
+  on a segment, smooth, corner, break, join; the Box), **d3** the Pen,
+  **d4** the Path menu. Alva's calls, 2026-10-09: **the Pen is LS3's**
+  (a click places a corner, a press dragged on pulls its handles out:
+  **D17 changed**, which said click only); **Pen points and dragged
+  anchors land on whole units, Ctrl frees them** (handles and bends
+  are always free); and **each piece is committed and pushed once it's
+  tested and deployed, without asking first** ("M4d node tool", "M4d
+  node edits", "M4d pen", "M4d path menu"), **stopping with a
+  checklist after each**.
+- **M4d's d1 is built** (2026-10-09, 500 tests, deployed; **not yet
+  looked at by Alva**).
+  - **Two things new in the core** (`ink-doc/src/pathedit.rs`):
+    `PathEdit::Pull { after, share, to }` (the point `share` along a
+    segment taken to `to`: what dragging a segment does; a line or a
+    cubic by its two control points, a quadratic by its one, an arc as
+    the circle's arc through it) and `Outline::handles(id)` (where an
+    anchor's two handles are, if it has them). Neither is over MCP.
+    (A line counts its points as the cubic with no handles does, which
+    isn't evenly: `Pull` makes up for it.)
+  - **The Node tool is three files:** `nodes.rs` (what a press takes:
+    a handle of a picked anchor, then an anchor, then a segment; what
+    a handle dragged comes to; LS3's sizes), `anchors.rs` (which
+    anchors of which shapes, and the Commands that change them),
+    `noding.rs` (the tool's frame, `Ink::node_tool`; its state is
+    `Ink::noding`). `overlay.rs` draws a path's line, its anchors and
+    the picked ones' handles in LS3's look, in place of the selection's
+    box.
+  - **A click with the Node tool picks the shape itself**, whatever
+    group it's in (`picking::top_at`), and puts the Pointer at that
+    shape's level. Anchors show for every selected shape that shows and
+    isn't locked; a group selected shows none.
+  - **A shape that isn't a path yet becomes one with the first change
+    to its anchors, not when they're looked at or picked** (my reading
+    of the checklist's "first touched": a click shouldn't cost a
+    rectangle its corners' dot). So its anchors need names before they
+    have any: `anchors::WouldBe` keeps each such shape as the path it
+    would be made, alone, and `firsts` says what the anchors are
+    called when one change makes several shapes paths (the document
+    hands ids out from one counter). An anchor picked on a shape that's
+    still no path is called anew whenever the drawing changes
+    (`WouldBe::refresh`, by its place in the outline).
+  - **Smooth is read, not kept:** SVG has no word for it, so an
+    anchor's handles are smooth while they lie in line through it
+    (within two degrees). One dragged takes the other round then, each
+    keeping its own length; Alt sends it alone, and Shift holds it to
+    45°.
+  - **The Node tool's keys:** Delete takes the picked anchors out (a
+    shape left with none goes altogether), the arrows move them, and
+    Escape lets go of them before it lets go of the shape
+    (`Ink::anchors_in_hand`, in `actions.rs` and `pointer.rs`).
+  - Anchors are drawn from the drawing as a drag has it (`Core::shown`),
+    so they're a frame behind the pointer; nothing is pruned from the
+    pick mid-drag for that reason.
+  - **Not in d1:** a new anchor on a segment, smooth and corner, break
+    and join, and the Box's rows for an anchor (all d2); snapping to
+    other anchors (slice f). Every frame reads and flattens each shown
+    path afresh: fine for icons, to be kept per `Look` if a big path
+    drags slowly.
+  - **`noding.rs` is 459 lines:** d2's edits go in a file of their own.
+
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a
   machine whose LUI2 is behind won't even load the workspace (it was

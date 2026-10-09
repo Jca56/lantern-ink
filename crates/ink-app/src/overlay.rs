@@ -1,13 +1,15 @@
 //! What's drawn over the canvas in screen px, with LUI2's own lines, so
 //! it's the same size at every zoom (ARCHITECTURE §8): the selection's
 //! box and its handles, a box round each selected thing, the marquee,
-//! the edge of the group the Pointer has gone into, and a rectangle's
-//! corner dot.
+//! the edge of the group the Pointer has gone into, a rectangle's
+//! corner dot, and with the Node tool a path's line, its anchors and
+//! their handles (LS3's look for its pen's).
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_ui::Ui;
 
 use crate::handles::{self, HIT, SIZE};
+use crate::nodes::DRAWN;
 use crate::rounding::DOT;
 use crate::theme::ACCENT;
 
@@ -28,6 +30,13 @@ pub struct Scene {
     /// A rectangle's corner dot: where its middle is, and whether the
     /// pointer has it.
     pub dot: Option<(Vec2, bool)>,
+    /// The lines of the shapes whose anchors show: each run, and
+    /// whether it's closed.
+    pub paths: Vec<(Vec<Vec2>, bool)>,
+    /// Their anchors, and whether each is picked.
+    pub anchors: Vec<(Vec2, bool)>,
+    /// A picked anchor's handles: from the anchor, to the handle.
+    pub levers: Vec<(Vec2, Vec2)>,
 }
 
 /// A closed line round `quad`, gold over a dark edge: seen on the tan
@@ -72,6 +81,25 @@ pub fn draw(ui: &mut Ui, area: Rect, scene: &Scene) {
                 ui.draw.rect(r, Color::WHITE);
             }
         }
+    }
+    // A path's line, gold over a dark edge; a white line out to each
+    // handle's dot; a square at each anchor, gold where it's picked.
+    let dark = Color::rgba(0.0, 0.0, 0.0, 0.75);
+    for (line, closed) in scene.paths.iter().filter(|(line, _)| line.len() >= 2) {
+        ui.draw.polyline(line, w * 3.0, dark, *closed);
+        ui.draw.polyline(line, w * 1.5, ACCENT, *closed);
+    }
+    let radius = (DRAWN * s).round();
+    for (from, to) in &scene.levers {
+        ui.draw.line(*from, *to, w * 3.0, dark);
+        ui.draw.line(*from, *to, w * 1.5, Color::WHITE);
+        ui.draw.circle(*to, radius + w, dark);
+        ui.draw.circle(*to, radius, Color::WHITE);
+    }
+    for (at, picked) in &scene.anchors {
+        let r = Rect::from_xywh((at.x - radius).round(), (at.y - radius).round(), radius * 2.0, radius * 2.0);
+        ui.draw.rect(r.expand(w * 2.0), dark);
+        ui.draw.rect(r, if *picked { ACCENT } else { Color::WHITE });
     }
     // Round, and gold in a white ring: a handle of the shape's own, not
     // one of its box's squares.

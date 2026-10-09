@@ -22,6 +22,7 @@ use crate::tools::Tool;
 
 mod canvas;
 mod handles;
+mod nodes;
 mod ops;
 mod paint;
 mod pointer;
@@ -181,6 +182,22 @@ impl Running {
     /// The drawing as it would be saved.
     fn svg(&self) -> String {
         self.ink.core.doc(self.doc()).unwrap().to_svg()
+    }
+
+    /// Where the drawing's point (`x`, `y`) shows in the window.
+    fn spot(&self, x: f64, y: f64) -> Vec2 {
+        let page = self.ink.viewport().unwrap().to_page.apply(Vec2::new(x, y));
+        self.camera().window_at(self.ink.layout.canvas, page)
+    }
+
+    /// How many window px a unit of the drawing is.
+    fn unit(&self) -> f64 {
+        (self.spot(1.0, 0.0) - self.spot(0.0, 0.0)).x
+    }
+
+    /// What `node` says its `name` is.
+    fn says(&self, node: NodeId, name: &str) -> Option<String> {
+        self.ink.core.doc(self.doc()).unwrap().node(node).unwrap().attr(name).map(str::to_owned)
     }
 }
 

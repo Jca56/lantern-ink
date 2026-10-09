@@ -3,6 +3,7 @@
 //! What it has to do to be done is `docs/M4.md`.
 
 mod actions;
+mod anchors;
 mod boxes;
 mod camera;
 mod canvas;
@@ -23,6 +24,8 @@ mod layout;
 mod lifecycle;
 mod log;
 mod menus;
+mod nodes;
+mod noding;
 mod ops;
 mod overlay;
 mod page;
