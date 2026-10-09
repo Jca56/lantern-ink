@@ -123,6 +123,14 @@ impl Ink {
                     self.op(Op::Ungroup(true), cx);
                 }
             }
+            CLIP => self.effect(crate::effects::Effect::Clip, cx),
+            RELEASE_CLIP => self.effect(crate::effects::Effect::Release, cx),
+            TEXT_TO_PATH => self.effect(crate::effects::Effect::TextToPath(false), cx),
+            TEXT_TO_PATH_ANYWAY => {
+                if doc_arg(action) == active {
+                    self.effect(crate::effects::Effect::TextToPath(true), cx);
+                }
+            }
             TO_FRONT => self.op(Op::Order(Order::Front), cx),
             FORWARD => self.op(Op::Order(Order::Forward), cx),
             BACKWARD => self.op(Op::Order(Order::Backward), cx),

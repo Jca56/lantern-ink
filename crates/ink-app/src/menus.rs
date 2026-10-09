@@ -51,6 +51,11 @@ pub const FLIP_V: &str = "object.flip_v";
 pub const ROTATE_CW: &str = "object.rotate_cw";
 pub const ROTATE_CCW: &str = "object.rotate_ccw";
 pub const LOCK: &str = "object.lock";
+pub const CLIP: &str = "object.clip";
+pub const RELEASE_CLIP: &str = "object.release_clip";
+pub const TEXT_TO_PATH: &str = "text.to_path";
+/// "Make paths of it anyway?" answered yes: in the font that drew it.
+pub const TEXT_TO_PATH_ANYWAY: &str = "text.to_path_anyway";
 /// A row of the Path menu: `op` says which.
 pub const PATH_OP: &str = "path.op";
 /// A row of a palette swatch's menu: `op`, on swatch `index`.
@@ -96,6 +101,8 @@ pub struct MenuState<'a> {
     pub picked: Picked,
     /// What the Path menu can do with it.
     pub paths: crate::pathops::Can,
+    /// What Object's and Text's effects can.
+    pub effects: crate::effects::Can,
     /// Align is against the page.
     pub align_to_page: bool,
 }
@@ -198,8 +205,8 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
                 row("Rotate 90\u{b0} CW", ROTATE_CW).enabled(drawn),
                 row("Rotate 90\u{b0} CCW", ROTATE_CCW).enabled(drawn),
                 sep(),
-                later("Clip"),
-                later("Release Clip"),
+                row("Clip", CLIP).enabled(st.effects.clip),
+                row("Release Clip", RELEASE_CLIP).enabled(st.effects.release),
                 later("Drop Shadow\u{2026}"),
                 later("Blur\u{2026}"),
                 sep(),
@@ -217,7 +224,7 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
             }
             Menu::new("Path", items)
         }
-        "text" => Menu::new("Text", vec![later("Text to Path")]),
+        "text" => Menu::new("Text", vec![row("Text to Path", TEXT_TO_PATH).enabled(st.effects.text)]),
         "view" => Menu::new(
             "View",
             vec![
@@ -331,7 +338,7 @@ mod tests {
     #[test]
     fn every_title_menu_is_there() {
         let recent = Recent::default();
-        let st = MenuState { has_doc: true, undo: None, redo: None, recent: &recent, picked: Picked::default(), paths: crate::pathops::Can::default(), align_to_page: false };
+        let st = MenuState { has_doc: true, undo: None, redo: None, recent: &recent, picked: Picked::default(), paths: crate::pathops::Can::default(), effects: crate::effects::Can::default(), align_to_page: false };
         for (_, name) in TITLE_MENUS {
             assert!(menu(name, &st).is_some(), "{name}");
         }

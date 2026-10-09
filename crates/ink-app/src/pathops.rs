@@ -141,19 +141,11 @@ impl Ink {
             return;
         };
         let Some(command) = command(drawing, &tops, op) else { return };
-        let Some(applied) = self.edit(doc, &command, op.label()) else { return };
-        let Ok(drawing) = self.core.doc(doc) else { return };
-        // What's left of the selection that isn't inside something this
-        // made (a shape and its outline put in a group together), then
-        // what it made.
-        let inside = |id: NodeId| drawing.ancestors(id).any(|n| applied.created.contains(&n.id));
-        let mut now: Vec<NodeId> = tops.into_iter().filter(|&id| drawing.get(id).is_some() && !inside(id)).collect();
-        for made in &applied.created {
-            if !now.contains(made) {
-                now.push(*made);
-            }
+        // (A shape and its outline may have been put in a group
+        // together: then it's the group that's selected.)
+        if let Some(applied) = self.edit(doc, &command, op.label()) {
+            self.selected_after(doc, &tops, &applied.created);
         }
-        self.select(now);
     }
 }
 

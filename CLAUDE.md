@@ -1117,6 +1117,41 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     (select them themselves); a text made a path (Text to Path is
     slice e's).
 
+- **M4e (text, gradients, the eyedropper) is under way**, in five
+  pieces, the quick ones first (Alva's order, 2026-10-09): **e1** the
+  Eyedropper, Object > Clip and Release Clip, Text > Text to Path;
+  **e2** Drop Shadow and Blur, with their settings in the Box; **e3**
+  the Gradient tool and the stops bar; **e4** the Text tool; **e5**
+  the text's Box. Her calls the same day: **the Eyedropper takes the
+  colour you see there** (not the shape's paint as set); and **straight
+  through**: each piece is committed and pushed once it's tested and
+  deployed ("M4e eyedropper and clip", "M4e shadow and blur", "M4e
+  gradient tool", "M4e text tool", "M4e text box"), **stopping only at
+  the end of M4e, with one checklist for all of it**.
+- **M4e's e1 is built** (2026-10-09, 516 tests, deployed).
+  - **The Eyedropper is `eyedrop.rs`** (`colour_at`,
+    `Ink::eyedrop_tool`): one pixel of the drawing itself, drawn by
+    `ink-render` eight times finer than the screen shows it, with the
+    point in its middle. So it's the colour through gradients, opacity
+    and shadows, and a blend only within a sixteenth of a screen pixel
+    of an edge. Not finer: a blur costs by how finely it's drawn. It
+    goes through `set_paint` (held: a gesture the paint section lands),
+    so it's the selection's fill and the next shape's; Shift, the
+    stroke. See-through is taken see-through; nothing, not at all.
+  - **Object > Clip, Release Clip and Text > Text to Path are
+    `effects.rs`** (`Effect`, `can`, `command`, `Ink::effect`): the
+    thing on top of the selection, a shape, cuts the rest; one thing
+    under it is cut itself, several are grouped and the group is cut
+    (the group's id learnt on a copy). A text set in another font than
+    it asks for is asked about ("Make paths of it anyway?"), as Ungroup
+    asks.
+  - `Ink::selected_after` is what's selected after a step that makes
+    things: what's left of the selection, then what was made. The Path
+    menu uses it too.
+  - **Not in e1:** a cursor for the Eyedropper (the desktop's theme has
+    none; LS3's is a PNG of its own); a swatch of what's under it
+    before a press.
+
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a
   machine whose LUI2 is behind won't even load the workspace (it was

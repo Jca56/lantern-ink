@@ -13,6 +13,8 @@ mod controls;
 mod cursors;
 mod docs;
 mod edits;
+mod effects;
+mod eyedrop;
 mod files;
 mod handles;
 mod host;

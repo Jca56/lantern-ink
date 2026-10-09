@@ -96,3 +96,55 @@ fn the_path_menu_works_on_outlines() {
     r.undo(3);
     assert_eq!(r.svg(), SQUARES);
 }
+
+#[test]
+fn the_eyedropper_takes_the_colour_under_it() {
+    let mut r = squares("paths-eyedrop");
+    let doc = r.doc();
+    // Into the fill of what's selected, and of the next shape drawn.
+    r.take(&[C]);
+    r.key(Key::Char('i'), Modifiers::NONE);
+    assert_eq!(r.ink.tools.active(), Tool::Eyedrop);
+    r.click(r.spot(6.0, 6.0));
+    assert_eq!((r.says(C, "fill").as_deref(), r.steps(), r.selected()), (Some("#0088ff"), vec!["Fill".to_owned()], vec![C]));
+    assert_eq!(r.ink.paints.fill, crate::paint::Paint::Color(lntrn_math::Color::hex(0x0088FF)));
+    // With Shift, into the stroke.
+    r.click_with(r.spot(24.0, 24.0), Modifiers::SHIFT);
+    assert_eq!((r.says(C, "stroke").as_deref(), r.steps().last().map(String::as_str)), (Some("#ffcc00"), Some("Stroke")));
+    // Held and dragged it goes on taking, and lands as one step; where
+    // nothing is drawn, nothing is taken.
+    r.drag_to(r.spot(24.0, 24.0), r.spot(6.0, 6.0));
+    assert!(r.ink.core.gesturing(doc) && r.steps().len() == 2);
+    r.h.move_to(r.spot(2.0, 40.0));
+    r.frames(2);
+    r.let_go();
+    assert_eq!((r.says(C, "fill").as_deref(), r.steps().len(), r.ink.core.gesturing(doc)), (Some("#0088ff"), 2, false));
+    r.click(r.spot(2.0, 40.0));
+    assert_eq!(r.steps().len(), 2);
+    r.undo(2);
+    assert_eq!(r.svg(), SQUARES);
+}
+
+#[test]
+fn clip_and_release_are_on_the_object_menu() {
+    use crate::effects::Effect;
+    let mut r = squares("paths-clip");
+    let effect = |r: &mut Running, effect: Effect| {
+        let mut requests = Vec::new();
+        r.ink.effect(effect, &mut HostCx { pointer: Vec2::ZERO, requests: &mut requests });
+        r.frames(2);
+    };
+    // Lit with two things picked and a shape on top; the top one cuts
+    // the other, which is what's left selected.
+    r.take(&[A]);
+    assert!(!r.ink.menu_state().effects.clip);
+    r.take(&[B, A]);
+    assert!(r.ink.menu_state().effects.clip && !r.ink.menu_state().effects.release);
+    effect(&mut r, Effect::Clip);
+    assert_eq!((r.says(A, "clip-path").as_deref(), r.steps(), r.selected(), r.ink.menu_state().effects.release), (Some("url(#clip-1)"), vec!["Clip".to_owned()], vec![A], true));
+    // Released: the shape is back over it, and both are selected.
+    effect(&mut r, Effect::Release);
+    assert_eq!((r.says(A, "clip-path"), r.steps().last().map(String::as_str), r.selected().len()), (None, Some("Release Clip"), 2));
+    r.undo(2);
+    assert_eq!(r.svg(), SQUARES);
+}

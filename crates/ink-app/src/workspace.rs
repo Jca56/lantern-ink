@@ -192,6 +192,9 @@ impl Ink {
             Some(kind) => self.shape_tool(ui, &view, doc, &input, kind),
             None => self.drop_shape(),
         }
+        if tool == Tool::Eyedrop && !popup {
+            self.eyedrop_tool(ui, &view, doc, &input);
+        }
         let mut scene = self.pointer_tool(ui, &view, doc, &input, tool == Tool::Pointer && !popup);
         // The Pen places points on bare canvas; whatever else the pointer
         // is on is the Node tool's, which runs under it. The Node tool:

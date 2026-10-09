@@ -183,6 +183,6 @@ impl Ink {
 
     pub(crate) fn menu_state(&self) -> MenuState<'_> {
         let history = self.tabs.active_doc().and_then(|d| self.core.history(d).ok());
-        MenuState { has_doc: self.tabs.active_doc().is_some(), undo: history.and_then(|h| h.undoable().next_back()), redo: history.and_then(|h| h.redoable().next()), recent: &self.recent, picked: self.picked(), paths: self.path_can(), align_to_page: self.settings.align_to_page }
+        MenuState { has_doc: self.tabs.active_doc().is_some(), undo: history.and_then(|h| h.undoable().next_back()), redo: history.and_then(|h| h.redoable().next()), recent: &self.recent, picked: self.picked(), paths: self.path_can(), effects: self.effect_can(), align_to_page: self.settings.align_to_page }
     }
 }
