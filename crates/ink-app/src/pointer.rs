@@ -410,6 +410,9 @@ impl Ink {
     /// Escape: out of a drag; else out of the group the Pointer is in,
     /// one level, with that group picked; else nothing picked.
     pub(crate) fn escape(&mut self) {
+        if self.shaping.is_some() {
+            return self.drop_shape();
+        }
         if self.pointing.busy() {
             return self.drop_drag();
         }

@@ -71,6 +71,9 @@ pub struct Ink {
     pub(crate) palettes: crate::colour::palettes::Library,
     pub(crate) paints: crate::paint::Paints,
     pub(crate) painting: Option<crate::painting::Painting>,
+    /// The shape tools' own settings, and a shape being dragged out.
+    pub(crate) shape_settings: crate::shapes::Settings,
+    pub(crate) shaping: Option<crate::shaping::Shaping>,
     /// The panel's width while its grip is dragged, logical px.
     pub(crate) panel_drag: Option<f64>,
     /// Last frame's regions.
@@ -118,6 +121,8 @@ impl Ink {
             palettes: crate::colour::palettes::Library::load(crate::settings::dir().as_deref(), crate::settings::studio_palettes().as_deref()),
             paints: crate::paint::Paints::default(),
             painting: None,
+            shape_settings: crate::shapes::Settings::default(),
+            shaping: None,
             panel_drag: None,
             layout: Layout::default(),
             toast: None,

@@ -17,7 +17,7 @@ use crate::layout::Layout;
 use crate::ops::Pasting;
 use crate::pointer::View;
 use crate::tools::Tool;
-use crate::{chrome, overlay, page, tree};
+use crate::{chrome, overlay, page, shapes, tree};
 
 impl Ink {
     pub(crate) fn draw_workspace(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>) {
@@ -153,7 +153,7 @@ impl Ink {
     /// The canvas: the view moved as the pointer asks, the tool in
     /// hand, and the drawing as the camera shows it.
     fn canvas(&mut self, ui: &mut Ui, area: Rect, doc: DocId, viewport: &Viewport, click: Option<Click>, popup: bool) {
-        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy());
+        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy() || self.shaping.is_some());
         let Some(tab) = self.tabs.active_mut() else { return };
         // A tab first laid out is fitted.
         let cam = tab.camera.get_or_insert_with(|| Camera::fit(area, page));
@@ -184,6 +184,12 @@ impl Ink {
         let to_window = viewport.to_page.then(&Affine::new(unit.x, 0.0, 0.0, unit.y, origin.x, origin.y));
         let Some(to_doc) = to_window.inverse() else { return };
         let view = View { to_window, to_doc, scale: ui.m.scale };
+        // A shape tool draws; the selection's box shows under it, to be
+        // taken hold of with the Pointer.
+        match shapes::kind_of(tool).filter(|_| !popup) {
+            Some(kind) => self.shape_tool(ui, &view, doc, &input, kind),
+            None => self.drop_shape(),
+        }
         let scene = self.pointer_tool(ui, &view, doc, &input, tool == Tool::Pointer && !popup);
         // As a gesture under way would leave it, else as it is.
         let Ok((drawing, look)) = self.core.shown(doc) else { return };

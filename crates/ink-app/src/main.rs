@@ -32,6 +32,8 @@ mod picker;
 mod pointer;
 mod select;
 mod settings;
+mod shapes;
+mod shaping;
 mod theme;
 mod tiles;
 mod toolbox;

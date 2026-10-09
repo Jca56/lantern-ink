@@ -24,6 +24,7 @@ mod canvas;
 mod ops;
 mod paint;
 mod pointer;
+mod shapes;
 mod tree;
 
 /// Where the tiles' pictures are kept in a test.

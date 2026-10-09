@@ -1003,6 +1003,29 @@ As LS3 §7, to the letter where it can be:
   - The arrow keys nudge by a unit of the drawing (ten with Shift),
     each press a step. In the middle of a drag no key does anything but
     Escape, which gives the drag up.
+  **The shape tools, as built in M4c** (`ink-app/src/shapes.rs`,
+  `shaping.rs`):
+  - **A drag draws one new shape, always** (LS3's rule), on top of the
+    level the Pointer is in, in that level's own coordinates: a
+    `<rect>`, an `<ellipse>` (a `<circle>` when it's round), a `<line>`
+    or a `<polygon>`. It's a gesture (§4.3): `Command::Insert`, said
+    again each frame with the shape as dragged so far, landing as one
+    step. The shape just drawn is selected; the tool stays in hand.
+  - Shift draws a square, a circle, a regular polygon, or a line at a
+    multiple of 45°; Alt draws out from the middle (Alva's choices in
+    LS3). A polygon fills the box dragged (stretched, unless Shift
+    keeps it regular); a star is a polygon with as many corners again
+    between, part of the way in.
+  - **A new shape lands on whole units of the drawing**, as LS3's land
+    on whole pixels (finer only on a page of a few units); Ctrl draws
+    free of it. Slice f's snapping takes this over, with half units,
+    other shapes' edges, and a switch.
+  - **A new shape is painted as the last one was** (`Ink::paints`: the
+    fill, the stroke, its line and the opacity last set in the paint
+    section). A line is all stroke: its own, or the fill's colour.
+  - The Box holds a tool's own settings where it has any: a
+    rectangle's corners; a polygon's sides, whether it's a star, and
+    how deep its points go.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

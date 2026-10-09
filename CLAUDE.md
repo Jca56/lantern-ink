@@ -868,6 +868,26 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     shape (slice e); miter limit, dash offset, `paint-order`,
     `fill-rule` (none asked for); "mixed" where the selection's shapes
     are painted differently (the one in hand is what shows).
+- **M4c's c3 is built** (2026-10-09, 475 tests, deployed; **not yet
+  looked at by Alva**). The first time something new can be made in
+  the window by hand.
+  - **`shapes.rs`** is what a drag makes (no window in it): `dragged`
+    (the two ends, once Shift and Alt have shaped them), `markup` (the
+    element, painted as `Paints` says), `ring` (a polygon's or a star's
+    corners), and the tools' own `Settings`. **`shaping.rs`** is the
+    gesture (`Ink::shape_tool`, `Ink::shaping`): `Command::Insert` at
+    `Place::LastIn` of the Pointer's level, previewed each frame.
+  - **As LS3's shape tools** (Alva's choices there, kept): a drag
+    always draws, the tool stays in hand, the new shape is selected,
+    Shift squares and Alt draws from the middle.
+  - **New shapes land on whole units** (`shapes::grid_for`, `on_grid`;
+    Ctrl frees them): my reading of LS3's "taken to the whole pixel".
+    **Alva was told at c3's handoff, and hasn't said**; slice f's
+    snapping (half units, a switch) is to replace it.
+  - A polygon is a plain `<polygon>`: nothing in the file says how many
+    sides it was drawn with. c4 reads that back off its points.
+  - The shape tools' settings and `Ink::paints` aren't kept between
+    runs yet.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

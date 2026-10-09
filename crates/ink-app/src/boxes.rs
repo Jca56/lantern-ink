@@ -17,6 +17,7 @@ use crate::controls;
 use crate::ink::Ink;
 use crate::ops::Chosen;
 use crate::select;
+use crate::shapes::{self, Kind};
 use crate::toolbox;
 use crate::tools::Tool;
 
@@ -80,10 +81,69 @@ pub(crate) fn step_for(page: f64) -> f64 {
     10f64.powf((page.max(1e-6) / 240.0).log10().floor()).clamp(0.001, 100.0)
 }
 
+/// A number on a row of its own in the Box. Where it was put.
+fn number_row(ui: &mut Ui, name: &str, value: &mut f64, step: f64, range: (f64, f64), decimals: usize) -> Rect {
+    let row = ui.alloc(Vec2::new(FILL, ui.m.widget_h));
+    controls::number_in(ui, ui.id(name), row, name, value, step, Some(range), decimals);
+    row
+}
+
 impl Ink {
+    /// The Box under a shape tool: a rectangle's corners; a polygon's
+    /// sides, and whether it's a star and how deep its points go.
+    fn shape_box(&mut self, ui: &mut Ui, canvas: Rect, kind: Kind) {
+        let step = self.tabs.active().and_then(|tab| self.core.doc(tab.doc).ok()).map_or(1.0, |drawing| {
+            let page = arrange::page_box(drawing);
+            step_for(page.width().max(page.height()))
+        });
+        let s = &mut self.shape_settings;
+        #[cfg(test)]
+        let mut laid = Vec::new();
+        toolbox::draw_with(ui, canvas, &mut self.toolbox, kind.label(), |ui| {
+            match kind {
+                Kind::Rect => {
+                    let _row = number_row(ui, "Corners", &mut s.radius, step, (0.0, f64::INFINITY), 3);
+                    #[cfg(test)]
+                    laid.push(("Corners", _row));
+                }
+                _ => {
+                    // A side for every twenty pixels along.
+                    let _row = number_row(ui, if s.star { "Points" } else { "Sides" }, &mut s.sides, 0.05, shapes::SIDES, 0);
+                    #[cfg(test)]
+                    laid.push(("Sides", _row));
+                    #[cfg(test)]
+                    laid.push(("Star", Rect::from_min_size(ui.cursor(), Vec2::new(ui.avail_width(), ui.m.widget_h))));
+                    controls::toggle(ui, "Star", &mut s.star);
+                    if s.star {
+                        let row = ui.alloc(Vec2::new(FILL, ui.m.widget_h));
+                        let style = ui.text_style();
+                        let name_w = ui.measure("Depth", &style).ceil() + ui.m.gap * 2.0;
+                        ui.text_in_rect("Depth", &style, row, crate::theme::TEXT);
+                        let mut percent = (s.depth * 100.0).round();
+                        let rail = Rect::new(Vec2::new(row.min.x + name_w, row.min.y), row.max);
+                        #[cfg(test)]
+                        laid.push(("Depth", rail));
+                        if controls::Slider::new(5.0, 95.0, 1.0).unit("%").rest(50.0).in_row(ui, ui.id("Depth"), rail, &mut percent) {
+                            s.depth = percent / 100.0;
+                        }
+                    }
+                }
+            }
+        });
+        #[cfg(test)]
+        {
+            self.toolbox.laid = laid;
+        }
+    }
+
     /// The Box, over `canvas`: before the canvas takes the pointer, so
     /// a press on it is its own.
     pub(crate) fn the_box(&mut self, ui: &mut Ui, canvas: Rect) {
+        // Under a shape tool with settings of its own, those: for the
+        // shape it draws next.
+        if let Some(kind) = shapes::kind_of(self.tools.active()).filter(|k| matches!(k, Kind::Rect | Kind::Polygon)) {
+            return self.shape_box(ui, canvas, kind);
+        }
         let chosen = if self.tools.active() == Tool::Pointer { self.chosen() } else { None };
         let Some(Chosen { doc, tops, boxed }) = chosen else {
             // No settings to show (yet) for the other tools.
