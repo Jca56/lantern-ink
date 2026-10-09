@@ -2,17 +2,18 @@
 //! list of them with New, Duplicate, Rename and Delete above it. A
 //! press on a row shows that palette in the grid. The built-in Default
 //! is first and takes no rename and no delete. A new or duplicated one
-//! is named at once, in its row.
+//! is named at once, in its row. (Its text is at Ink's panel's size,
+//! bigger than LS3's.)
 
 use lntrn_math::{Rect, Vec2};
 use lntrn_ui::{CursorIcon, Sense, Ui};
 
 use super::palettes::Library;
 use crate::chrome::{Look, text_button};
-use crate::theme::{self, ACCENT, BORDER, FONT_BASE, FONT_MD, FONT_SM, INPUT_BG, LAYER_ROW, LAYER_ROW_BORDER, LAYER_ROW_HOVER, TAB_ACTIVE, TEXT, TEXT_DIM};
+use crate::theme::{self, ACCENT, BORDER, FONT_MD, FONT_PANEL, FONT_PANEL_SM, INPUT_BG, LAYER_ROW, LAYER_ROW_BORDER, LAYER_ROW_HOVER, TAB_ACTIVE, TEXT, TEXT_DIM};
 
 /// A palette's row, and its preview's cells, logical px (LS3's).
-const ROW: f64 = 44.0;
+const ROW: f64 = 50.0;
 const CELL: (f64, f64) = (12.0, 26.0);
 const CELLS: usize = 14;
 
@@ -55,8 +56,8 @@ pub fn draw(ui: &mut Ui, r: Rect, st: &mut Drawer, lib: &mut Library) -> Out {
 
     // New, Duplicate, Rename, Delete: the last two not for the built-in.
     let locked = lib.is_locked(lib.active);
-    let style = theme::text(ui, FONT_SM);
-    let (button_h, mut x) = (px(34.0), r.min.x);
+    let style = theme::text(ui, FONT_PANEL_SM);
+    let (button_h, mut x) = (px(38.0), r.min.x);
     for (id, label, on) in [("new", "New", true), ("duplicate", "Duplicate", true), ("rename", "Rename", !locked), ("delete", "Delete", !locked)] {
         let w = ui.measure(label, &style).ceil() + px(18.0);
         let b = Rect::from_xywh(x, y, w, button_h);
@@ -66,7 +67,7 @@ pub fn draw(ui: &mut Ui, r: Rect, st: &mut Drawer, lib: &mut Library) -> Out {
             ui.text_centered(label, &style, b, TEXT_DIM.with_alpha(0.5));
             continue;
         }
-        let look = Look { size: FONT_SM, ink: TEXT, hover_ink: TEXT, hover: theme::BUTTON_HOVER, radius: 4.0 };
+        let look = Look { size: FONT_PANEL_SM, ink: TEXT, hover_ink: TEXT, hover: theme::BUTTON_HOVER, radius: 4.0 };
         if !text_button(ui, id, b, label, &look).clicked {
             continue;
         }
@@ -91,7 +92,7 @@ pub fn draw(ui: &mut Ui, r: Rect, st: &mut Drawer, lib: &mut Library) -> Out {
     y += button_h + px(8.0);
 
     // The list.
-    let name_style = theme::text(ui, FONT_BASE);
+    let name_style = theme::text(ui, FONT_PANEL);
     for i in 0..lib.palettes.len() {
         let row = Rect::from_xywh(r.min.x, y, r.width(), px(ROW));
         y += px(ROW) + px(6.0);

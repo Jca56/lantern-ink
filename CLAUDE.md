@@ -868,9 +868,9 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     shape (slice e); miter limit, dash offset, `paint-order`,
     `fill-rule` (none asked for); "mixed" where the selection's shapes
     are painted differently (the one in hand is what shows).
-- **M4c's c3 is built** (2026-10-09, 475 tests, deployed; **not yet
-  looked at by Alva**). The first time something new can be made in
-  the window by hand.
+- **M4c's c3 is built** (2026-10-09, 475 tests, deployed; Alva drew
+  her first picture with it the same day). The first time something
+  new can be made in the window by hand.
   - **`shapes.rs`** is what a drag makes (no window in it): `dragged`
     (the two ends, once Shift and Alt have shaped them), `markup` (the
     element, painted as `Paints` says), `ring` (a polygon's or a star's
@@ -888,6 +888,16 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     sides it was drawn with. c4 reads that back off its points.
   - The shape tools' settings and `Ink::paints` aren't kept between
     runs yet.
+- **The right panel's text is 24 px** (`theme::FONT_PANEL`; its small
+  buttons `FONT_PANEL_SM`, 20), up from 20: Alva's call, 2026-10-09,
+  after it read small beside LUI2's 25 px menus. Rows are 50 px (the
+  tree's 52). **Palette swatches fill the panel's width**, eight
+  across, up to 56 px each (they stopped at 36). The section is taller
+  for it: in a 1080-px window the tree is at its least share and the
+  section scrolls.
+- **Next: c4** (a rectangle's corners rounded by a handle on the
+  canvas; a selected polygon's sides and star points in the Box).
+  `pointer.rs` is about 480 lines: `pick` and `caught` move out first.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

@@ -11,11 +11,11 @@ use lntrn_ui::{CursorIcon, Sense, Ui};
 use super::Intent;
 use crate::icons::{Glyph, Icons};
 use crate::select::{self, Click, Row, Selection};
-use crate::theme::{self, ACCENT, FONT_BASE, INPUT_BG, LAYER_ROW, LAYER_ROW_BORDER, LAYER_ROW_HOVER, TAB_ACTIVE, TEXT, TEXT_DIM};
+use crate::theme::{self, ACCENT, FONT_PANEL, INPUT_BG, LAYER_ROW, LAYER_ROW_BORDER, LAYER_ROW_HOVER, TAB_ACTIVE, TEXT, TEXT_DIM};
 
 /// A row's height, how far what a row holds stands in from it, and
 /// its buttons, logical px.
-pub const HEIGHT: f64 = 46.0;
+pub const HEIGHT: f64 = 52.0;
 pub const INDENT: f64 = 16.0;
 const DISCLOSURE: f64 = 28.0;
 const BUTTON: f64 = 40.0;
@@ -175,7 +175,7 @@ pub fn draw(ui: &mut Ui, r: Rect, row: Row, cx: &mut Cx) {
         rename(ui, words, row, &name, cx);
     } else {
         ui.draw.push_clip(words);
-        ui.text_in_rect(&name, &theme::text(ui, FONT_BASE), words, if hidden { TEXT_DIM } else { TEXT });
+        ui.text_in_rect(&name, &theme::text(ui, FONT_PANEL), words, if hidden { TEXT_DIM } else { TEXT });
         ui.draw.pop_clip();
     }
 

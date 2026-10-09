@@ -16,20 +16,20 @@ use super::picker::{Picker, swatch_face};
 use crate::chrome::{Look, text_button};
 use crate::icons::Icons;
 use crate::paint::{Paint, Paints, Set, Which};
-use crate::theme::{self, ACCENT, BORDER, FONT_BASE, FONT_LG, FONT_MD, FONT_SM, INPUT_BG, LAYER_ROW_BORDER, TEXT, TEXT_DIM, TOOL_BUTTON, TOOL_BUTTON_HOVER};
+use crate::theme::{self, ACCENT, BORDER, FONT_LG, FONT_PANEL, FONT_PANEL_SM, INPUT_BG, LAYER_ROW_BORDER, TEXT, TEXT_DIM, TOOL_BUTTON, TOOL_BUTTON_HOVER};
 
 /// The grid's columns, the least a swatch is, and the room between
 /// them, logical px (LS3's).
 pub const COLUMNS: usize = 8;
 const SWATCH_MIN: f64 = 14.0;
-const SWATCH_MAX: f64 = 36.0;
+const SWATCH_MAX: f64 = 56.0;
 const SWATCH_GAP: f64 = 4.0;
 /// The heading, a paint's row, its name's room, its swatch and one of
 /// its kind buttons.
-const HEAD: f64 = 40.0;
-const ROW: f64 = 44.0;
-const LABEL: f64 = 76.0;
-const SWATCH: (f64, f64) = (58.0, 34.0);
+const HEAD: f64 = 44.0;
+const ROW: f64 = 50.0;
+const LABEL: f64 = 80.0;
+const SWATCH: (f64, f64) = (52.0, 38.0);
 const KIND: f64 = 38.0;
 const PAD: f64 = 10.0;
 /// How far a pressed swatch goes before it's being dragged.
@@ -127,8 +127,8 @@ pub fn gradient_of(from: Color) -> [Color; 2] {
 }
 
 /// The grid's swatch size for `width` px of room, at `scale`: eight
-/// across, no bigger than leaves the object tree its room under a full
-/// palette.
+/// across the width of the panel, as big as that makes them (the
+/// section scrolls where that's taller than the tree leaves it).
 pub fn swatch_size(width: f64, scale: f64) -> f64 {
     let gap = (SWATCH_GAP * scale).round();
     ((width - gap * (COLUMNS - 1) as f64) / COLUMNS as f64).floor().clamp((SWATCH_MIN * scale).round(), (SWATCH_MAX * scale).round())
@@ -209,7 +209,7 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, showing: &Shown, lib: &m
     } else {
         ui.draw.triangle(Vec2::new(c.x - a, c.y - a * 0.6), Vec2::new(c.x + a, c.y - a * 0.6), Vec2::new(c.x, c.y + a * 0.8), ink);
     }
-    ui.text_in_rect("Paint", &theme::text(ui, FONT_MD), Rect::new(Vec2::new(head.min.x + px(22.0), head.min.y), head.max), ink);
+    ui.text_in_rect("Paint", &theme::text(ui, FONT_PANEL), Rect::new(Vec2::new(head.min.x + px(22.0), head.min.y), head.max), ink);
     let rule = px(2.0).max(1.0);
     ui.draw.rect(Rect::from_min_size(Vec2::new(panel.min.x, head.max.y), Vec2::new(panel.width(), rule)), BORDER);
     if showing.folded {
@@ -234,7 +234,7 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, showing: &Shown, lib: &m
         let stops = showing.stops[k].as_slice();
         let id = anchors[k].0;
         ui.push_id(which.label());
-        ui.text_in_rect(which.label(), &theme::text(ui, FONT_BASE), Rect::from_min_size(row.min, Vec2::new(px(LABEL), row.height())), TEXT);
+        ui.text_in_rect(which.label(), &theme::text(ui, FONT_PANEL), Rect::from_min_size(row.min, Vec2::new(px(LABEL), row.height())), TEXT);
 
         // What kind of paint, from the right: a gradient, a colour,
         // then none.
@@ -285,7 +285,7 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, showing: &Shown, lib: &m
         face(ui, swatch, which, paint, stops, picker.is_open_for(id) || resp.hovered, icons);
         if words.width() > px(40.0) {
             ui.draw.push_clip(words);
-            ui.text_in_rect(&said(paint), &theme::text(ui, FONT_BASE), words, if *paint == Paint::None { TEXT_DIM } else { TEXT });
+            ui.text_in_rect(&said(paint), &theme::text(ui, FONT_PANEL), words, if *paint == Paint::None { TEXT_DIM } else { TEXT });
             ui.draw.pop_clip();
         }
         anchors[k].1 = swatch;
@@ -294,7 +294,7 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, showing: &Shown, lib: &m
         ui.pop_id();
     }
     // The line's rows, and the opacity.
-    let (below, lined) = line::draw(ui, inner, y, px(LABEL), &mut st.rows, &shown.line, shown.stroke != Paint::None, shown.opacity, showing.step);
+    let (below, lined) = line::draw(ui, inner, y, &mut st.rows, &shown.line, shown.stroke != Paint::None, shown.opacity, showing.step);
     if lined.is_some() {
         out.set = lined;
     }
@@ -375,10 +375,10 @@ pub fn draw(ui: &mut Ui, panel: Rect, st: &mut Section, showing: &Shown, lib: &m
 
     // The palettes: their button, and under it the list when it's open.
     let label = if st.drawer.open { "Palettes \u{25b4}" } else { "Palettes \u{25be}" };
-    let style = theme::text(ui, FONT_SM);
-    let toggle = Rect::from_xywh(inner.min.x, grid_bottom + px(8.0), ui.measure(label, &style).ceil() + px(20.0), px(34.0));
+    let style = theme::text(ui, FONT_PANEL_SM);
+    let toggle = Rect::from_xywh(inner.min.x, grid_bottom + px(8.0), ui.measure(label, &style).ceil() + px(22.0), px(38.0));
     ui.draw.rounded_rect(toggle, px(4.0), theme::BUTTON);
-    let look = Look { size: FONT_SM, ink: if st.drawer.open { ACCENT } else { TEXT }, hover_ink: ACCENT, hover: theme::BUTTON_HOVER, radius: 4.0 };
+    let look = Look { size: FONT_PANEL_SM, ink: if st.drawer.open { ACCENT } else { TEXT }, hover_ink: ACCENT, hover: theme::BUTTON_HOVER, radius: 4.0 };
     if text_button(ui, "palettes", toggle, label, &look).clicked {
         st.drawer.open = !st.drawer.open;
         st.drawer.renaming = None;
@@ -413,10 +413,10 @@ mod tests {
     #[test]
     fn swatches_fill_the_width_eight_across() {
         // 240 px of a narrow panel at scale 1: eight of 26 with seven
-        // gaps of 4.
-        assert_eq!(swatch_size(240.0, 1.0), 26.0);
-        assert_eq!((swatch_size(100.0, 1.0), swatch_size(380.0, 1.0)), (14.0, 36.0), "never under 14, nor over 36");
-        assert_eq!(swatch_size(380.0 * 1.25, 1.25), 45.0);
+        // gaps of 4. 380 px of the panel as it starts out: eight of 44.
+        assert_eq!((swatch_size(240.0, 1.0), swatch_size(380.0, 1.0)), (26.0, 44.0));
+        assert_eq!((swatch_size(100.0, 1.0), swatch_size(600.0, 1.0)), (14.0, 56.0), "never under 14, nor over 56");
+        assert_eq!(swatch_size(380.0 * 1.25, 1.25), 55.0);
     }
 
     #[test]

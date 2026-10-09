@@ -9,13 +9,13 @@ use lntrn_ui::{CursorIcon, Sense, Ui};
 
 use crate::controls::{self, Slider, written};
 use crate::paint::{Line, Set};
-use crate::theme::{self, ACCENT, BORDER, FONT_BASE, INPUT_BG, LAYER_ROW_BORDER, TEXT, TEXT_DIM};
+use crate::theme::{self, ACCENT, BORDER, FONT_PANEL, INPUT_BG, LAYER_ROW_BORDER, TEXT, TEXT_DIM};
 
 /// A row, a button of a three-way choice, and the least the section is
 /// wide for two things to share a row: logical px.
-const ROW: f64 = 44.0;
-const BUTTON: (f64, f64) = (38.0, 34.0);
-const PAIR_FROM: f64 = 330.0;
+const ROW: f64 = 50.0;
+const BUTTON: (f64, f64) = (42.0, 38.0);
+const PAIR_FROM: f64 = 376.0;
 
 /// What these rows keep between frames.
 #[derive(Default)]
@@ -99,11 +99,11 @@ fn choice(ui: &mut Ui, id: &str, r: Rect, on: bool, live: bool, glyph: impl FnOn
 /// `opacity` see-through. `step`: what a pixel along Width changes it
 /// by. Where they end, and what was set.
 #[allow(clippy::too_many_arguments)]
-pub fn draw(ui: &mut Ui, inner: Rect, mut y: f64, label_w: f64, st: &mut Rows, line: &Line, stroked: bool, opacity: f64, step: f64) -> (f64, Option<Set>) {
+pub fn draw(ui: &mut Ui, inner: Rect, mut y: f64, st: &mut Rows, line: &Line, stroked: bool, opacity: f64, step: f64) -> (f64, Option<Set>) {
     let s = ui.m.scale;
     let px = |v: f64| (v * s).round();
     let mut set = None;
-    let style = theme::text(ui, FONT_BASE);
+    let style = theme::text(ui, FONT_PANEL);
     let dim = if stroked { 1.0 } else { 0.35 };
     #[cfg(test)]
     st.laid.clear();
@@ -224,6 +224,7 @@ pub fn draw(ui: &mut Ui, inner: Rect, mut y: f64, label_w: f64, st: &mut Rows, l
     // Opacity: of the whole thing, line and fill and what it holds.
     y += px(4.0);
     let row = Rect::from_xywh(inner.min.x, y, inner.width(), px(ROW));
+    let label_w = ui.measure("Opacity", &style).ceil() + px(4.0);
     ui.text_in_rect("Opacity", &style, Rect::from_min_size(row.min, Vec2::new(label_w, row.height())), TEXT);
     let rail = Rect::new(Vec2::new(row.min.x + label_w + px(8.0), row.min.y + px(4.0)), Vec2::new(row.max.x, row.max.y - px(4.0)));
     #[cfg(test)]

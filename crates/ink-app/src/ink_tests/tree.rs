@@ -95,8 +95,12 @@ fn rows_are_picked_alone_added_to_and_taken_in_runs() {
     // A plain click on one of several makes it the only one.
     r.click(r.name(B2));
     assert_eq!(r.selected(), [B2]);
-    // The list's empty space lets go of everything.
+    // The list's empty space lets go of everything (the paint section
+    // folded away, so that a window this short has some under six rows).
+    r.ink.settings.paint_folded = true;
+    r.frames(2);
     let below = Vec2::new(r.row(DEFS).center().x, r.row(DEFS).max.y + 60.0);
+    assert!(r.ink.layout.panel.contains(below), "{below:?}");
     r.click(below);
     assert!(r.selected().is_empty() && r.steps().is_empty());
 }

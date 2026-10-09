@@ -15,11 +15,11 @@ use lntrn_ui::{CursorIcon, FILL, Sense, Ui};
 
 use crate::icons::Icons;
 use crate::select::Selection;
-use crate::theme::{self, ACCENT, BORDER, FONT_MD, TEXT_DIM};
+use crate::theme::{self, ACCENT, BORDER, FONT_PANEL, TEXT_DIM};
 use drag::Drag;
 
 /// The panel's heading, logical px.
-const HEAD: f64 = 40.0;
+const HEAD: f64 = 44.0;
 
 /// What the tree asks of the window.
 #[derive(Clone, Debug, PartialEq)]
@@ -69,7 +69,7 @@ pub fn draw(ui: &mut Ui, r: Rect, st: &mut Tree, shown: Option<(&Document, &mut 
     }
     ui.push_id("tree");
     let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), px(HEAD).min(inner.height())));
-    ui.text_in_rect("Objects", &theme::text(ui, FONT_MD), head, TEXT_DIM);
+    ui.text_in_rect("Objects", &theme::text(ui, FONT_PANEL), head, TEXT_DIM);
     let rule = px(2.0).max(1.0);
     ui.draw.rect(Rect::from_min_size(Vec2::new(r.min.x, head.max.y), Vec2::new(r.width(), rule)), BORDER);
     let list = Rect::new(Vec2::new(inner.min.x, head.max.y + rule + px(6.0)), inner.max);

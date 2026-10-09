@@ -53,6 +53,11 @@ pub const FONT_BASE: f64 = 20.0;
 pub const FONT_MD: f64 = 22.0;
 pub const FONT_LG: f64 = 24.0;
 pub const FONT_2XL: f64 = 30.0;
+/// The right panel's own text: its rows' names and what they say, and
+/// the smaller words on its buttons. (LS3's panels are at 20; Alva had
+/// Ink's made bigger, 2026-10-09: beside LUI2's 25 px they read small.)
+pub const FONT_PANEL: f64 = 24.0;
+pub const FONT_PANEL_SM: f64 = 20.0;
 pub const FONT_3XL: f64 = 34.0;
 
 // Chrome sizes (LS3's).
