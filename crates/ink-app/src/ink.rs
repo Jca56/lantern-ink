@@ -59,6 +59,9 @@ pub struct Ink {
     /// The Box over the canvas, and a number of it being dragged along.
     pub(crate) toolbox: crate::toolbox::ToolBox,
     pub(crate) boxing: Option<crate::boxes::Boxing>,
+    /// A row of the selected shape's own (its corners, its sides) being
+    /// dragged along in the Box.
+    pub(crate) tuning: Option<crate::shapebox::Tuning>,
     /// What was copied, on its way to the clipboard with the next
     /// frame; and a paste waiting for the clipboard's text.
     pub(crate) clip_out: Option<String>,
@@ -114,6 +117,7 @@ impl Ink {
             cursor_theme: if cfg!(test) { Default::default() } else { crate::cursors::themed() },
             toolbox: crate::toolbox::ToolBox::default(),
             boxing: None,
+            tuning: None,
             clip_out: None,
             pasting: None,
             paint_panel: crate::colour::section::Section::default(),

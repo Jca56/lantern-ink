@@ -1,12 +1,14 @@
 //! What's drawn over the canvas in screen px, with LUI2's own lines, so
 //! it's the same size at every zoom (ARCHITECTURE §8): the selection's
 //! box and its handles, a box round each selected thing, the marquee,
-//! and the edge of the group the Pointer has gone into.
+//! the edge of the group the Pointer has gone into, and a rectangle's
+//! corner dot.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_ui::Ui;
 
 use crate::handles::{self, HIT, SIZE};
+use crate::rounding::DOT;
 use crate::theme::ACCENT;
 
 /// What to draw over the canvas this frame, in window px.
@@ -23,6 +25,9 @@ pub struct Scene {
     pub marquee: Option<Rect>,
     /// The group gone into.
     pub entered: Option<[Vec2; 4]>,
+    /// A rectangle's corner dot: where its middle is, and whether the
+    /// pointer has it.
+    pub dot: Option<(Vec2, bool)>,
 }
 
 /// A closed line round `quad`, gold over a dark edge: seen on the tan
@@ -67,6 +72,15 @@ pub fn draw(ui: &mut Ui, area: Rect, scene: &Scene) {
                 ui.draw.rect(r, Color::WHITE);
             }
         }
+    }
+    // Round, and gold in a white ring: a handle of the shape's own, not
+    // one of its box's squares.
+    if let Some((at, lit)) = scene.dot {
+        let half = ((DOT / 2.0 + if lit { 2.0 } else { 0.0 }) * s).round();
+        let disc = |ui: &mut Ui, r: f64, color: Color| ui.draw.rounded_rect(Rect::from_xywh(at.x.round() - r, at.y.round() - r, r * 2.0, r * 2.0), r, color);
+        disc(ui, half + w * 2.0, Color::rgba(0.0, 0.0, 0.0, 0.75));
+        disc(ui, half, Color::WHITE);
+        disc(ui, half - w * 3.0, ACCENT);
     }
     if let Some(m) = scene.marquee {
         let r = Rect::new(Vec2::new(m.min.x.round(), m.min.y.round()), Vec2::new(m.max.x.round(), m.max.y.round()));

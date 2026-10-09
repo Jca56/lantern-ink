@@ -1,7 +1,8 @@
 //! What the Box holds (ARCHITECTURE §8; LS3's `boxes.rs`): with the
 //! Pointer in hand, the selection's place and size to type into or
-//! drag along, and the Pointer's own setting, "Scale strokes". Other
-//! tools' settings come with their tools.
+//! drag along, the selected shape's own rows (`shapebox.rs`), and the
+//! Pointer's own setting, "Scale strokes". Under a shape tool, that
+//! tool's settings. Other tools' settings come with their tools.
 //!
 //! A number dragged along is a gesture in the core, like a drag on the
 //! canvas: the drawing shows it as it goes, and it lands as one step.
@@ -17,6 +18,7 @@ use crate::controls;
 use crate::ink::Ink;
 use crate::ops::Chosen;
 use crate::select;
+use crate::shapebox;
 use crate::shapes::{self, Kind};
 use crate::toolbox;
 use crate::tools::Tool;
@@ -81,13 +83,6 @@ pub(crate) fn step_for(page: f64) -> f64 {
     10f64.powf((page.max(1e-6) / 240.0).log10().floor()).clamp(0.001, 100.0)
 }
 
-/// A number on a row of its own in the Box. Where it was put.
-fn number_row(ui: &mut Ui, name: &str, value: &mut f64, step: f64, range: (f64, f64), decimals: usize) -> Rect {
-    let row = ui.alloc(Vec2::new(FILL, ui.m.widget_h));
-    controls::number_in(ui, ui.id(name), row, name, value, step, Some(range), decimals);
-    row
-}
-
 impl Ink {
     /// The Box under a shape tool: a rectangle's corners; a polygon's
     /// sides, and whether it's a star and how deep its points go.
@@ -97,39 +92,8 @@ impl Ink {
             step_for(page.width().max(page.height()))
         });
         let s = &mut self.shape_settings;
-        #[cfg(test)]
-        let mut laid = Vec::new();
-        toolbox::draw_with(ui, canvas, &mut self.toolbox, kind.label(), |ui| {
-            match kind {
-                Kind::Rect => {
-                    let _row = number_row(ui, "Corners", &mut s.radius, step, (0.0, f64::INFINITY), 3);
-                    #[cfg(test)]
-                    laid.push(("Corners", _row));
-                }
-                _ => {
-                    // A side for every twenty pixels along.
-                    let _row = number_row(ui, if s.star { "Points" } else { "Sides" }, &mut s.sides, 0.05, shapes::SIDES, 0);
-                    #[cfg(test)]
-                    laid.push(("Sides", _row));
-                    #[cfg(test)]
-                    laid.push(("Star", Rect::from_min_size(ui.cursor(), Vec2::new(ui.avail_width(), ui.m.widget_h))));
-                    controls::toggle(ui, "Star", &mut s.star);
-                    if s.star {
-                        let row = ui.alloc(Vec2::new(FILL, ui.m.widget_h));
-                        let style = ui.text_style();
-                        let name_w = ui.measure("Depth", &style).ceil() + ui.m.gap * 2.0;
-                        ui.text_in_rect("Depth", &style, row, crate::theme::TEXT);
-                        let mut percent = (s.depth * 100.0).round();
-                        let rail = Rect::new(Vec2::new(row.min.x + name_w, row.min.y), row.max);
-                        #[cfg(test)]
-                        laid.push(("Depth", rail));
-                        if controls::Slider::new(5.0, 95.0, 1.0).unit("%").rest(50.0).in_row(ui, ui.id("Depth"), rail, &mut percent) {
-                            s.depth = percent / 100.0;
-                        }
-                    }
-                }
-            }
-        });
+        let mut laid = shapebox::Laid::new();
+        toolbox::draw_with(ui, canvas, &mut self.toolbox, kind.label(), |ui| shapebox::rows(ui, kind, s, step, f64::INFINITY, &mut laid));
         #[cfg(test)]
         {
             self.toolbox.laid = laid;
@@ -166,6 +130,9 @@ impl Ink {
         let mut changed: Option<Field> = None;
         let mut scale_strokes = self.settings.scale_strokes;
         let dragging = self.boxing.as_ref().map(|b| b.field);
+        // The selected shape's own rows, and what one was set to.
+        let own = self.own_shown(doc, &tops);
+        let (mut tuned, mut own_laid) = (None, shapebox::Laid::new());
         #[cfg(test)]
         let mut laid = Vec::new();
         toolbox::draw_with(ui, canvas, &mut self.toolbox, &title, |ui| {
@@ -186,6 +153,11 @@ impl Ink {
                     }
                 }
             }
+            if let Some(own) = &own {
+                tuned = Ink::own_rows(ui, own, step, &mut own_laid);
+            }
+            #[cfg(test)]
+            laid.append(&mut own_laid);
             #[cfg(test)]
             laid.push(("Scale strokes", Rect::from_min_size(ui.cursor(), Vec2::new(ui.avail_width(), ui.m.widget_h))));
             controls::toggle(ui, "Scale strokes", &mut scale_strokes);
@@ -201,6 +173,12 @@ impl Ink {
 
         // A number let go of: its drag lands.
         let held = ui.state.down;
+        if let Some(tune) = tuned {
+            self.tune(doc, &tops, tune, held);
+        }
+        if !held {
+            self.tune_settled();
+        }
         if let Some(boxing) = self.boxing.take_if(|_| !held) {
             if let Err(e) = self.core.commit(boxing.doc, if matches!(boxing.field, Field::X | Field::Y) { "Move" } else { "Scale" }) {
                 let why = e.to_string();

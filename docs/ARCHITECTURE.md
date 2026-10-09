@@ -254,7 +254,7 @@ all-or-nothing before anything changes. Families:
 | | Commands |
 |---|---|
 | Structure | `Insert`, `Delete`, `Move` (reorder or re-parent, keeping the look), `Duplicate`, `Group`, `Ungroup`, `Paste` (a drawing off the clipboard put into this one, M4b) |
-| Geometry | `SetGeometry` (a shape's own numbers), `SetPath`, `Transform` (any affine on any nodes, D13), `Resize` (the same, lines left as they are: what a handle does, M4b), `ToPath` |
+| Geometry | `SetGeometry` (a shape's own numbers: what a shape's own handle does, M4c), `SetPath`, `Transform` (any affine on any nodes, D13), `Resize` (the same, lines left as they are: what a handle does, M4b), `ToPath` |
 | Style | `SetStyle` (fill, stroke, width, caps, joins, dashes, opacity, rule), `SetGradient`, `SetClip`, `SetFilter` |
 | Path work | `Boolean` (union, subtract, intersect, exclude), `OutlineStroke`, `Simplify`, `Reverse`, `Join`, `Break` |
 | Text | `SetText`, `TextToPath` |
@@ -1026,6 +1026,41 @@ As LS3 §7, to the letter where it can be:
   - The Box holds a tool's own settings where it has any: a
     rectangle's corners; a polygon's sides, whether it's a star, and
     how deep its points go.
+  **A drawn shape's own handles, as built in M4c** (`rounding.rs`,
+  `polygons.rs`, `shapebox.rs`):
+  - **Both come to one Command, `SetGeometry`**: the shape's own
+    numbers (`ink-doc`'s `Geometry`), written only where they changed.
+    A rectangle stays a `<rect>` with an `rx`; a polygon a `<polygon>`
+    with other `points`.
+  - **A rectangle picked alone has a round dot** inside its first
+    corner (one, Alva's choice): dragged toward the middle it rounds
+    all four corners, back toward the corner it squares them. It
+    stands a little in from the middle of the corner's arc, so with no
+    rounding at all it's clear of the box's handle on that corner, and
+    it follows the pointer along its own line from wherever it was
+    taken hold of. It's the rectangle's own (it turns and leans with
+    it), where the box round it is always upright. Too small on the
+    screen for the dot to be clear of the box's handles, a rectangle
+    has none: the Box's number still rounds it.
+  - **A polygon's sides are read off its corners.** The file says
+    nothing of how it was drawn, so `Regular::read` finds the circle
+    its corners best fit (a middle, and where the circle's one unit
+    across and one down have gone: any stretch, turn or lean since is
+    in those) and holds every corner to it, as a regular polygon and
+    then as a star. Other sides go on the same circle (Alva's choice:
+    its middle and reach stay, not its box), so a regular one stays
+    regular.
+  - **What the file's rounding costs:** the circle is read off rounded
+    numbers, so it's the drawn one to the file's last decimal, and
+    other sides and back again is the same polygon to that decimal,
+    not always to the byte. The circle isn't moved onto rounder numbers
+    to hide that: a polygon drawn to fill a box of whole units has a
+    circle of awkward ones.
+  - **The Box holds the selected shape's rows under the Pointer**, the
+    same rows its tool shows for the next shape, after the place and
+    size: set on the one in hand, they're set on every selected shape
+    of its kind (LS3's rule). Dragged, a gesture; typed or ticked, a
+    step at once.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

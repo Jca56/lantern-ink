@@ -112,6 +112,11 @@ impl Document {
                 let changed = self.make(&settle::plan(self, nodes, by, true)?)?;
                 applied.note(changed);
             }
+            Command::SetGeometry { node, geometry } => {
+                if self.set_geometry(*node, geometry)? {
+                    applied.note(vec![*node]);
+                }
+            }
             Command::Define { elements } => {
                 let made = self.define(elements)?;
                 applied.created.extend(made);

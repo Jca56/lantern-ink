@@ -226,7 +226,7 @@ impl Document {
             Command::SetStyle { nodes, .. } | Command::ToPath { nodes } | Command::Simplify { nodes, .. } | Command::TextToPath { nodes, .. } => each(nodes, Reach::Own),
             // The outline may be a new path beside its shape.
             Command::OutlineStroke { nodes, .. } => each(nodes, Reach::Own).and_then(|()| beside(nodes)),
-            Command::EditPath { node, .. } | Command::SetPath { node, .. } | Command::SetText { node, .. } | Command::SetLabel { node, .. } => reach(*node, Reach::Own),
+            Command::EditPath { node, .. } | Command::SetPath { node, .. } | Command::SetText { node, .. } | Command::SetLabel { node, .. } | Command::SetGeometry { node, .. } => reach(*node, Reach::Own),
             Command::SetLocked { nodes, .. } => each(nodes, Reach::Lock),
             Command::Tidy { .. } | Command::Batch(_) => Ok(()),
         }

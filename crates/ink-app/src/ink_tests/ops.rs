@@ -193,7 +193,8 @@ fn the_box_holds_the_selections_place_and_size() {
     assert_eq!(r.ink.toolbox.laid.iter().map(|(name, _)| *name).collect::<Vec<_>>(), ["Scale strokes"]);
     r.pick(&[A]);
     r.frames(1);
-    assert_eq!(r.ink.toolbox.laid.iter().map(|(name, _)| *name).collect::<Vec<_>>(), ["X", "Y", "W", "H", "Scale strokes"]);
+    // (A rectangle: its corners are the Box's too.)
+    assert_eq!(r.ink.toolbox.laid.iter().map(|(name, _)| *name).collect::<Vec<_>>(), ["X", "Y", "W", "H", "Corners", "Scale strokes"]);
     // A press on the Box is the Box's: the canvas under it lets go of
     // nothing, and starts no marquee.
     let open = r.ink.toolbox.rect().unwrap();

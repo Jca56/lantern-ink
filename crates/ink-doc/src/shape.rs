@@ -6,6 +6,9 @@
 use ink_geom::number::parse_list;
 use ink_geom::{Affine, Path, Rect, Vec2};
 
+use crate::document::Document;
+use crate::error::{DocError, invalid};
+use crate::id::NodeId;
 use crate::kind::Kind;
 use crate::length::number;
 use crate::node::Node;
@@ -61,6 +64,52 @@ impl Geometry {
             }
             _ => return None,
         })
+    }
+
+    /// The kind of element these are the numbers of (a `Poly`: by
+    /// whether it's closed), and its name.
+    pub fn kind(&self) -> (Kind, &'static str) {
+        match self {
+            Geometry::Rect { .. } => (Kind::Rect, "rect"),
+            Geometry::Circle { .. } => (Kind::Circle, "circle"),
+            Geometry::Ellipse { .. } => (Kind::Ellipse, "ellipse"),
+            Geometry::Line { .. } => (Kind::Line, "line"),
+            Geometry::Poly { closed: true, .. } => (Kind::Polygon, "polygon"),
+            Geometry::Poly { closed: false, .. } => (Kind::Polyline, "polyline"),
+            Geometry::Path(_) => (Kind::Path, "path"),
+        }
+    }
+
+    /// Why these can't be a shape's numbers, if they can't: one isn't a
+    /// number at all, or a size or a radius is less than nothing.
+    fn wrong(&self) -> Option<&'static str> {
+        let (mut all, mut sizes): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
+        match self {
+            Geometry::Rect { x, y, width, height, rx, ry } => {
+                all.extend([*x, *y]);
+                sizes.extend([*width, *height, *rx, *ry]);
+            }
+            Geometry::Circle { c, r } => {
+                all.extend([c.x, c.y]);
+                sizes.push(*r);
+            }
+            Geometry::Ellipse { c, rx, ry } => {
+                all.extend([c.x, c.y]);
+                sizes.extend([*rx, *ry]);
+            }
+            Geometry::Line { from, to } => all.extend([from.x, from.y, to.x, to.y]),
+            Geometry::Poly { points, .. } => all.extend(points.iter().flat_map(|p| [p.x, p.y])),
+            // A path's numbers are its segments': read from path data,
+            // they're numbers already.
+            Geometry::Path(_) => {}
+        }
+        if all.iter().chain(&sizes).any(|v| !v.is_finite()) {
+            Some("one of its numbers isn't a number")
+        } else if sizes.iter().any(|v| *v < 0.0) {
+            Some("a size or a radius can't be less than nothing")
+        } else {
+            None
+        }
     }
 
     /// The outline it draws.
@@ -220,9 +269,33 @@ impl Geometry {
     }
 }
 
+impl Document {
+    /// See [`crate::Command::SetGeometry`]. Whether anything changed.
+    pub(crate) fn set_geometry(&mut self, id: NodeId, geometry: &Geometry) -> Result<bool, DocError> {
+        let node = self.node(id)?;
+        let (kind, name) = geometry.kind();
+        if !node.kind.is_shape() {
+            return invalid(format!("{id} is a <{}>: only a shape (a rect, a circle, an ellipse, a line, a polyline, a polygon, a path) has numbers of its own to set", node.name));
+        }
+        if node.kind != kind {
+            return invalid(format!("{id} is a <{}>, and stays one: it can't be given a {name}'s numbers", node.name));
+        }
+        if let Some(why) = geometry.wrong() {
+            return invalid(format!("{id} can't be given those numbers: {why}"));
+        }
+        let edits = geometry.write(node, &Precision::of(self));
+        let mut changed = false;
+        for (name, value) in edits {
+            changed |= self.set_attr(id, name, value.as_deref())?;
+        }
+        Ok(changed)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::Command;
     use crate::document::Document;
     use crate::id::{DocId, NodeId};
 
@@ -285,6 +358,36 @@ mod tests {
         assert_eq!(through(r#"<line x1="0" y1="0" x2="0" y2="4"/>"#, &skew).as_deref(), Some("x2=4"));
         assert_eq!(through(r#"<polygon points="0,0 4,0 4,4"/>"#, &skew).as_deref(), Some("points=0,0 4,0 8,4"));
         assert_eq!(through(r#"<path d="m0 0h4v4z"/>"#, &skew).as_deref(), Some("d=M0 0 H4 L8 4 Z"));
+    }
+
+    #[test]
+    fn a_shape_is_given_its_own_numbers_and_nothing_else_changes() {
+        let mut d = Document::parse(DocId(1), r##"<svg viewBox="0 0 24 24"><rect id="r" x="2.0" y="4" width="10" height="6" fill="#f3b700"/><polygon points="0,0 4,0 4,4"/><g/></svg>"##).unwrap();
+        let (rect, poly, group) = (NodeId(2), NodeId(3), NodeId(4));
+        let set = |d: &mut Document, node: NodeId, geometry: Geometry| d.apply(&Command::SetGeometry { node, geometry }).map(|applied| applied.changed);
+        // Its corners rounded: one radius says both, and what wasn't
+        // changed is said as the file said it.
+        let round = |rx: f64, ry: f64| Geometry::Rect { x: 2.0, y: 4.0, width: 10.0, height: 6.0, rx, ry };
+        assert_eq!(set(&mut d, rect, round(1.5, 1.5)).unwrap(), [rect]);
+        assert!(d.to_svg().contains(r##"<rect id="r" x="2.0" y="4" width="10" height="6" fill="#f3b700" rx="1.5"/>"##), "{}", d.to_svg());
+        assert_eq!(set(&mut d, rect, round(1.5, 3.0)).unwrap(), [rect]);
+        assert!(d.to_svg().contains(r#"rx="1.5" ry="3"/>"#), "{}", d.to_svg());
+        // The same again is nothing to undo.
+        assert!(set(&mut d, rect, round(1.5, 3.0)).unwrap().is_empty());
+        // A polygon's corners, to the drawing's decimals.
+        let star = Geometry::Poly { points: vec![Vec2::new(0.0, 0.0), Vec2::new(4.0, 0.0), Vec2::new(4.00049, 4.0), Vec2::new(1.0 / 3.0, 4.0)], closed: true };
+        assert_eq!(set(&mut d, poly, star.clone()).unwrap(), [poly]);
+        assert!(d.to_svg().contains(r#"<polygon points="0,0 4,0 4,4 0.333,4"/>"#), "{}", d.to_svg());
+        // A shape stays the kind it is, and only a shape has numbers.
+        let said = |r: Result<Vec<NodeId>, DocError>| r.unwrap_err().to_string();
+        assert!(said(set(&mut d, rect, star.clone())).contains("N2 is a <rect>, and stays one: it can't be given a polygon's numbers"));
+        assert!(said(set(&mut d, poly, Geometry::Poly { points: Vec::new(), closed: false })).contains("can't be given a polyline's numbers"));
+        assert!(said(set(&mut d, group, star)).contains("N4 is a <g>: only a shape"));
+        // No size is less than nothing, and every number is one.
+        assert!(said(set(&mut d, rect, round(-1.0, 0.0))).contains("a size or a radius can't be less than nothing"));
+        assert!(said(set(&mut d, rect, round(f64::NAN, 0.0))).contains("isn't a number"));
+        // A refusal changed nothing.
+        assert!(d.to_svg().contains(r#"rx="1.5" ry="3"/>"#) && d.to_svg().contains(r#"points="0,0 4,0 4,4 0.333,4""#));
     }
 
     #[test]

@@ -21,6 +21,7 @@ use crate::tiles::Store;
 use crate::tools::Tool;
 
 mod canvas;
+mod handles;
 mod ops;
 mod paint;
 mod pointer;

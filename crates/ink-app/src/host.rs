@@ -51,7 +51,7 @@ impl Host for Ink {
         // In the middle of a drag no key does anything (it would end
         // under another tool, or another state of the drawing) but
         // Escape, which gives the drag up.
-        if self.pointing.busy() || self.boxing.is_some() || self.painting.is_some() || self.shaping.is_some() {
+        if self.pointing.busy() || self.boxing.is_some() || self.tuning.is_some() || self.painting.is_some() || self.shaping.is_some() {
             return (press.key == lntrn_ui::Key::Escape).then(|| Action::new(menus::ESCAPE));
         }
         self.keys.resolve(&[CTX_WINDOW], &press.to_event(), |_| true).map(KeyItem::action).or_else(|| menus::tool_key(press)).or_else(|| menus::canvas_key(press))

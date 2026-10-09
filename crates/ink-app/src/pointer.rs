@@ -2,17 +2,17 @@
 //! there (Shift adds or takes away), a drag on nothing draws a marquee,
 //! a double-click goes into a group. The selection's box has handles:
 //! drag inside it to move, a corner or a side to scale, just outside a
-//! corner to turn (`handles.rs` has what each drag comes to).
+//! corner to turn (`handles.rs` has what each drag comes to). A
+//! rectangle picked alone has a handle of its own besides: the dot that
+//! rounds its corners (`rounding.rs`).
 //!
 //! A drag of the box is a gesture in the core (§4.3): the real drawing
 //! shows as it goes, and it lands as one step. The box itself is the
 //! window's, worked out from where the drag began, so it keeps up with
 //! the pointer whatever the drawing's tiles are doing.
 
-use std::collections::HashMap;
-
-use ink_core::{Actor, Command, DocId, Document, NodeId};
-use ink_doc::hit;
+use ink_core::{Actor, Command, DocId, NodeId};
+use ink_doc::geometry;
 use ink_geom::Affine;
 use lntrn_math::{Rect, Vec2};
 use lntrn_ui::{CursorIcon, Ui};
@@ -22,7 +22,10 @@ use crate::cursors::Cursor;
 use crate::handles::{self, HIT, Handle, Keys, TURN};
 use crate::ink::Ink;
 use crate::overlay::Scene;
+use crate::picking::{caught, pick};
+use crate::rounding::{self, Rounded};
 use crate::select::Click;
+use crate::shapes;
 
 /// How far the pointer may stray from a press and still have clicked,
 /// and how far from the pointer a click still finds something, logical
@@ -61,6 +64,8 @@ struct Press {
     /// go).
     pick: Option<(NodeId, bool)>,
     shift: bool,
+    /// On this rectangle's corner dot: a drag from here rounds it.
+    dot: Option<NodeId>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -79,6 +84,9 @@ enum Drag {
         /// What's dragged, back to front, and each one's box then.
         nodes: Vec<(NodeId, Rect)>,
     },
+    /// A rectangle's corner dot, dragged: a gesture too. The rectangle
+    /// as it was, and where the drag began in its own coordinates.
+    Rounding { node: NodeId, was: Rounded, from: Vec2 },
 }
 
 /// What the Pointer keeps between frames.
@@ -106,45 +114,6 @@ impl Pointer {
     pub fn busy(&self) -> bool {
         self.drag.is_some()
     }
-}
-
-/// What a click at `point` (the drawing's coordinates) picks, with the
-/// Pointer inside `context`: the thing on top there, as the child of
-/// `context` it is or is in. And whether it's outside `context`
-/// altogether: then it's picked at the drawing's top level, and the
-/// Pointer comes out. Nothing locked is picked: a click goes through
-/// it to what's behind. `reach`: how far from the point still counts.
-pub fn pick(doc: &Document, context: NodeId, point: Vec2, reach: f64) -> Option<(NodeId, bool)> {
-    // The point itself; then, for a thin line just missed, round it.
-    let ring = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0), (0.7, 0.7), (-0.7, 0.7), (-0.7, -0.7), (0.7, -0.7)];
-    let root = doc.root();
-    let child_of = |holder: NodeId, node: NodeId| std::iter::once(node).chain(doc.ancestors(node).map(|n| n.id)).find(|&n| doc.get(n).and_then(|n| n.parent) == Some(holder));
-    for (dx, dy) in ring {
-        let found = hit::at(doc, point + Vec2::new(dx, dy) * reach).into_iter().find(|h| doc.lock_over(h.node).is_none());
-        let Some(found) = found else { continue };
-        return match child_of(context, found.node) {
-            Some(inside) => Some((inside, false)),
-            None => child_of(root, found.node).map(|top| (top, true)),
-        };
-    }
-    None
-}
-
-/// The children of `context` that `marquee` touches, back to front: a
-/// shape by its box, a group by anything it holds (not by the empty
-/// room between them). Nothing locked, and nothing by way of
-/// something locked.
-fn caught(doc: &Document, context: NodeId, boxes: &HashMap<NodeId, Rect>, marquee: Rect) -> Vec<NodeId> {
-    fn touched(doc: &Document, id: NodeId, boxes: &HashMap<NodeId, Rect>, marquee: &Rect) -> bool {
-        let Some((node, b)) = doc.get(id).zip(boxes.get(&id)) else { return false };
-        let reaches = b.min.x <= marquee.max.x && b.max.x >= marquee.min.x && b.min.y <= marquee.max.y && b.max.y >= marquee.min.y;
-        if !reaches || doc.is_locked(id) {
-            return false;
-        }
-        !node.kind.is_group() || node.elements().any(|child| touched(doc, child, boxes, marquee))
-    }
-    let Some(holder) = doc.get(context) else { return Vec::new() };
-    holder.elements().filter(|&id| doc.lock_over(id).is_none() && touched(doc, id, boxes, &marquee)).collect()
 }
 
 /// The pointer's picture over a part of the box.
@@ -175,7 +144,7 @@ impl Ink {
         let Some((doc, drag)) = self.pointing.drag.take() else { return };
         self.pointing.said = None;
         match drag {
-            Drag::Shaping { .. } => self.core.cancel(doc),
+            Drag::Shaping { .. } | Drag::Rounding { .. } => self.core.cancel(doc),
             Drag::Marquee { keep, .. } => {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.doc == doc) {
                     tab.selection.active = keep.last().copied();
@@ -212,6 +181,18 @@ impl Ink {
         let tops: Vec<(NodeId, Rect)> = sel.tops(drawing).into_iter().filter_map(|id| Some((id, *boxes.get(&id)?))).collect();
         let joint = tops.iter().map(|(_, b)| *b).reduce(|a, b| a.union(&b));
         let zone = joint.filter(|_| active && input.over).and_then(|j| handles::hit(view.to_window.bounds(&j), pointer, HIT * s, TURN * s));
+        // A rectangle picked alone, that may be changed and that
+        // nothing else has hold of: its corner dot, through to the
+        // window from its own coordinates.
+        let free = !self.core.gesturing(doc) || matches!(self.pointing.drag, Some((_, Drag::Rounding { .. })));
+        let own = |id: NodeId| geometry::to_doc(drawing, id).map(|to_doc| to_doc.then(&view.to_window));
+        let round = match tops.as_slice() {
+            [(id, _)] if active && free && drawing.lock_over(*id).is_none() => Rounded::of(drawing, *id).zip(own(*id)).map(|(rect, own)| (*id, rect, own)),
+            _ => None,
+        };
+        let dot = round.and_then(|(_, rect, own)| rect.dot(&own, s));
+        // Its box's corners and sides come first, where they meet.
+        let on_dot = input.over && zone.is_none_or(|z| z == Handle::Body) && dot.is_some_and(|d| (pointer - d).length() <= rounding::REACH * s);
 
         let (mut ask, mut show, mut say) = (Vec::new(), None, None);
         let mut scene = Scene { handles: active, ..Scene::default() };
@@ -237,9 +218,10 @@ impl Ink {
         let drag = match self.pointing.drag.take().map(|(_, drag)| drag) {
             None if active && input.pressed => {
                 let on_box = zone.filter(|z| *z != Handle::Body);
-                let found = if on_box.is_some() { None } else { pick(drawing, context, at, REACH * s / per_unit) };
-                let press = |handle, pick| Press { at: pointer, handle, pick, shift: keys.shift };
+                let found = if on_box.is_some() || on_dot { None } else { pick(drawing, context, at, REACH * s / per_unit) };
+                let press = |handle, pick| Press { at: pointer, handle, pick, shift: keys.shift, dot: None };
                 match found {
+                    _ if on_dot => Some(Drag::Pressed(Press { dot: round.map(|(id, ..)| id), ..press(None, None) })),
                     _ if on_box.is_some() => Some(Drag::Pressed(press(on_box, None))),
                     Some((node, out)) => {
                         if out {
@@ -271,6 +253,8 @@ impl Ink {
             Some(Drag::Pressed(press)) if released => {
                 // A click.
                 match press.pick {
+                    // On the dot: nothing's picked or let go.
+                    _ if press.dot.is_some() => {}
                     Some((node, true)) if press.shift => sel.click(drawing, node, Click::Toggle),
                     Some((node, true)) => sel.select_only(node),
                     // Picked as the button went down.
@@ -286,6 +270,11 @@ impl Ink {
             Some(Drag::Pressed(press)) if (pointer - press.at).length() > SLOP * s => {
                 let from = view.to_doc.apply(press.at);
                 match (press.handle, joint) {
+                    _ if press.dot.is_some() => round.filter(|(id, ..)| press.dot == Some(*id)).and_then(|(node, was, _)| {
+                        let from = rounding::to_own(drawing, node)?.apply(from);
+                        ask.push(Ask::Begin);
+                        Some(Drag::Rounding { node, was, from })
+                    }),
                     (Some(handle), Some(was)) if !tops.is_empty() => {
                         ask.push(Ask::Begin);
                         Some(Drag::Shaping { handle, from, was, nodes: tops.clone() })
@@ -330,6 +319,23 @@ impl Ink {
                     Some(Drag::Shaping { handle, from, was, nodes })
                 }
             }
+            Some(Drag::Rounding { node, was, from }) => {
+                // On whole units, as new shapes land; freely with Ctrl.
+                let page = ink_doc::arrange::page_box(drawing);
+                let grid = if ui.state.mods.ctrl() { 0.0 } else { shapes::grid_for(page.width().max(page.height())) };
+                let now = rounding::to_own(drawing, node).map_or(was, |to_own| was.dragged(from, to_own.apply(at), grid));
+                let command = Command::SetGeometry { node, geometry: now.geometry() };
+                ui.state.cursor_icon = CursorIcon::Pointer;
+                // Where the dot is now, on the rectangle as it was put.
+                scene.dot = round.and_then(|(_, _, own)| now.dot(&own, s)).map(|d| (d, true));
+                if released {
+                    ask.push(Ask::Commit(command, "Corners"));
+                    None
+                } else {
+                    ask.push(Ask::Update(command));
+                    Some(Drag::Rounding { node, was, from })
+                }
+            }
         };
 
         // The box: where the drag has it, or where the selection is.
@@ -349,7 +355,11 @@ impl Ink {
                 if drag.is_none()
                     && let Some(zone) = zone
                 {
-                    ui.state.cursor_icon = cursor(zone);
+                    ui.state.cursor_icon = if on_dot { CursorIcon::Pointer } else { cursor(zone) };
+                }
+                // The dot, where nothing is being dragged past it.
+                if scene.dot.is_none() && carried.is_none() && !matches!(drag, Some(Drag::Marquee { .. })) {
+                    scene.dot = dot.map(|d| (d, on_dot || matches!(drag, Some(Drag::Pressed(Press { dot: Some(_), .. })))));
                 }
             }
         }
@@ -427,60 +437,5 @@ impl Ink {
             sel.within = drawing.get(context).and_then(|n| n.parent).filter(|&up| up != drawing.root());
             sel.select_only(context);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use ink_doc::DocId;
-
-    use super::*;
-
-    /// Back to front: a square, a group of (a dot over a locked bar),
-    /// a ring with no fill.
-    fn doc() -> Document {
-        Document::parse(DocId(1), r##"<svg xmlns:ink="urn:lantern:ink" viewBox="0 0 48 48"><rect id="a" x="2" y="2" width="20" height="20"/><g id="g"><rect id="bar" x="10" y="26" width="30" height="6" ink:locked="true"/><circle id="dot" cx="12" cy="12" r="4"/></g><circle id="ring" cx="36" cy="12" r="6" fill="none" stroke="#000" stroke-width="0.5"/></svg>"##).unwrap()
-    }
-
-    const A: NodeId = NodeId(2);
-    const G: NodeId = NodeId(3);
-    const DOT: NodeId = NodeId(5);
-    const RING: NodeId = NodeId(6);
-
-    #[test]
-    fn a_click_picks_the_top_thing_at_the_level_the_pointer_is_in() {
-        let d = doc();
-        let at = |x: f64, y: f64, context: NodeId| pick(&d, context, Vec2::new(x, y), 0.3);
-        let root = d.root();
-        // The dot is over the square: at the top level, its group.
-        assert_eq!((at(12.0, 12.0, root), at(4.0, 4.0, root)), (Some((G, false)), Some((A, false))));
-        // Inside the group, the dot itself; the square is outside it,
-        // and picking it comes back out.
-        assert_eq!((at(12.0, 12.0, G), at(4.0, 4.0, G)), (Some((DOT, false)), Some((A, true))));
-        // What's locked isn't picked: the click goes through.
-        assert_eq!(at(30.0, 29.0, root), None);
-        // A thin ring: on its line, or within reach of it; not in its
-        // empty middle.
-        assert_eq!((at(42.0, 12.0, root), at(42.5, 12.0, root), at(36.0, 12.0, root)), (Some((RING, false)), Some((RING, false)), None));
-        assert_eq!(at(46.0, 46.0, root), None);
-    }
-
-    #[test]
-    fn a_marquee_catches_what_it_touches_at_that_level() {
-        let d = doc();
-        let boxes = ink_doc::geometry::page_bounds(&d);
-        let over = |x0: f64, y0: f64, x1: f64, y1: f64, context: NodeId| caught(&d, context, &boxes, Rect::new(Vec2::new(x0, y0), Vec2::new(x1, y1)));
-        // Across the whole page: everything at the top level, back to
-        // front. (The group isn't locked; the bar in it is.)
-        assert_eq!(over(0.0, 0.0, 48.0, 48.0, d.root()), [A, G, RING]);
-        // A shape by its box (not its line); a group by what it holds
-        // (not the room between them).
-        assert_eq!(over(30.0, 5.0, 31.0, 8.0, d.root()), [RING]);
-        assert_eq!(over(24.0, 19.0, 28.0, 24.0, d.root()), Vec::<NodeId>::new());
-        // Only its locked bar touched: the group isn't caught by that.
-        assert_eq!(over(30.0, 27.0, 34.0, 30.0, d.root()), Vec::<NodeId>::new());
-        assert_eq!(over(44.0, 40.0, 48.0, 48.0, d.root()), Vec::<NodeId>::new());
-        // Inside the group: the dot, and never the locked bar.
-        assert_eq!(over(0.0, 0.0, 48.0, 48.0, G), [DOT]);
     }
 }

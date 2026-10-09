@@ -138,8 +138,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - `doc_set` with `content: "fit"` puts the root through the transform
     from the old viewBox to the new: how a 500-unit Boxy icon becomes a
     24-unit one in one step.
-  - **Not yet:** `SetGeometry` has no Command: nothing needs it before
-    M4's handles. (`ToPath` came with M3c.)
+  - (`SetGeometry` came with M4c's c4, for a shape's own handles;
+    `ToPath` with M3c.)
 
 - **M3b (paint) is under way**, in four pieces, the renderer first
   (Alva's order, 2026-10-06): **b1** the renderer, **b2** styles
@@ -802,8 +802,8 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     rules are dropped; the clipboard is plain text (no `image/svg+xml`
     without a LUI2 change); `node_transform` has no way to keep strokes
     yet (`Command::Resize` is the window's only).
-  - **`pointer.rs` is 480 lines:** the next thing the Pointer learns
-    wants its picking (`pick`, `caught`) moved out first.
+  - (`pointer.rs` was 480 lines: its picking, `pick` and `caught`, is
+    `picking.rs` since c4.)
 
 - **M4c (paint and the shape tools) is under way**, in four pieces:
   **c1** fill, stroke and the picker, **c2** stroke settings, opacity
@@ -895,9 +895,55 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   across, up to 56 px each (they stopped at 36). The section is taller
   for it: in a 1080-px window the tree is at its least share and the
   section scrolls.
-- **Next: c4** (a rectangle's corners rounded by a handle on the
-  canvas; a selected polygon's sides and star points in the Box).
-  `pointer.rs` is about 480 lines: `pick` and `caught` move out first.
+- **M4c's c4 is built** (2026-10-09, 488 tests, deployed; **not yet
+  looked at by Alva**), and with it **all of M4c**. Next: M4d (the
+  Node tool and the Pen), once she has looked at c4. Alva's calls,
+  2026-10-09: **one corner dot** on a rectangle (not one a corner),
+  and **a polygon given other sides keeps its circle** (its middle and
+  its reach; not its box).
+  - **`Command::SetGeometry { node, geometry }`** (`ink-doc/src/shape.rs`,
+    `set_geometry`): a shape's own numbers, through `Geometry::write`,
+    so only what changed is written and the rest stays as the file says
+    it. A shape stays the kind it is; no size or radius is less than
+    nothing. **Not over MCP:** `node_set` says the same there.
+  - **The corner dot** is `rounding.rs` (the geometry, by itself:
+    `Rounded`, `dot`, `dragged`) and a `Drag::Rounding` in `pointer.rs`:
+    a gesture, landing as "Corners". It stands 28 px inside the
+    rectangle's first corner, on from the middle of the corner's arc,
+    and follows the pointer along its own line. A rectangle picked
+    alone, not locked, and at least 56 px on its shorter side has one;
+    the box's own corners and sides win where they meet it.
+  - **The dot rounds to whole units** (`shapes::grid_for`), as new
+    shapes land; Ctrl frees it. **Alva hasn't been asked:** it goes
+    with c3's whole units, and slice f's snapping replaces both.
+  - Corners rounder one way than the other (`rx` ≠ `ry`, from another
+    program) keep that shape under the dot and the Box.
+  - **A polygon is read back off its corners** (`polygons.rs`,
+    `Regular::read`): the best-fitting circle (its middle, and where
+    its one unit across and down have gone, so stretched, turned and
+    leant ones read too), a regular polygon's corners first, then a
+    star's. **Any triangle reads as 3 sides and any slanted box as 4.**
+    What isn't one (a corner moved, an arrow) has no rows.
+  - **Other sides and back is the same polygon to the file's last
+    decimal, not always to the byte** (the circle is read off rounded
+    numbers; a pentagon 10 across read 10.0005). Undo is to the byte,
+    and a polygon set to what it is already isn't touched. **I told
+    Alva "exactly" when I asked her; she was told the truth at c4's
+    handoff.** Exact would take remembering each circle beside what was
+    written from it: not built.
+  - **The selected shape's rows are `shapebox.rs`** (`read`, `command`,
+    `rows`; `Ink::own_shown`, `tune`, `tune_settled`, `Ink::tuning`):
+    the same rows the shape tools show for the next shape, on a
+    `shapes::Settings` read off the one in hand; what changed between
+    before and after the rows is the `Tune`. As in LS3, it's set on
+    every selected shape of that kind (each rectangle as round as it
+    can go). A polygon made a star is as deep as the tool's setting.
+  - `Host::key` counts `Ink::tuning` among the drags that let only
+    Escape through.
+  - **Not in c4:** a handle on the canvas for a polygon or a star
+    (the Box is where their sides are, as `docs/M4.md` says); rows for
+    an ellipse or a line (their numbers are the box's); the dot under a
+    shape tool (handles are the Pointer's).
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

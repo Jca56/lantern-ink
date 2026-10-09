@@ -13,6 +13,7 @@ use crate::node::{Content, Element};
 use crate::outline::AnchorId;
 use crate::pathedit::PathEdit;
 use crate::paths::NewRun;
+use crate::shape::Geometry;
 use crate::tidy::Extra;
 use crate::xml::parse::parse_fragment;
 
@@ -58,6 +59,13 @@ pub enum Command {
     /// across the way it's turned; anything under a shadow) it's
     /// Transform's way after all, stroke and all.
     Resize { nodes: Vec<NodeId>, by: Affine },
+    /// Make the shape `node` what `geometry` says ([`crate::shape`]):
+    /// its own numbers, a rect's corner, size and rounding, a circle's
+    /// middle and radius, a polygon's corners. Each is written only
+    /// where what it means changes; the rest stays as the file says it.
+    /// The shape stays the kind it is: a rect is given a rect's
+    /// numbers. What a handle of a shape's own does (M4c).
+    SetGeometry { node: NodeId, geometry: Geometry },
     /// Put `elements` (gradients, clip paths, filters: each with an `id`
     /// nothing else has) into the drawing's `<defs>`, which is made if
     /// there isn't one.
