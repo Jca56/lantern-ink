@@ -43,6 +43,7 @@ mod polygons;
 mod rounding;
 mod select;
 mod settings;
+mod shadows;
 mod shapebox;
 mod shapes;
 mod shaping;

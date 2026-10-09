@@ -42,19 +42,6 @@ impl Running {
         self.ink.toolbox.laid.iter().map(|(name, _)| *name).collect()
     }
 
-    /// Where the Box drew its `name`.
-    fn in_box(&self, name: &str) -> Rect {
-        self.ink.toolbox.laid.iter().find(|(n, _)| *n == name).map(|(_, r)| *r).unwrap_or_else(|| panic!("the Box has no {name}"))
-    }
-
-    /// Type `text` into the Box's `name`, and enter it.
-    fn type_in_box(&mut self, name: &str, text: &str) {
-        self.click(self.in_box(name).center());
-        self.h.type_text(text);
-        self.frames(1);
-        self.key(Key::Enter, Modifiers::NONE);
-    }
-
     /// The pentagon, as the Box reads it: its sides, and a star's depth
     /// in percent.
     fn five(&self) -> (f64, Option<f64>) {

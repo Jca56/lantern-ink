@@ -1,7 +1,8 @@
 //! What the Box holds (ARCHITECTURE §8; LS3's `boxes.rs`): with the
 //! Pointer in hand, the selection's place and size to type into or
-//! drag along, the selected shape's own rows (`shapebox.rs`), and the
-//! Pointer's own setting, "Scale strokes". Under a shape tool, that
+//! drag along, the selected shape's own rows (`shapebox.rs`), its
+//! shadow's or its blur's (`shadows.rs`), and the Pointer's own
+//! setting, "Scale strokes". Under a shape tool, that
 //! tool's settings. Other tools' settings come with their tools.
 //!
 //! A number dragged along is a gesture in the core, like a drag on the
@@ -138,6 +139,11 @@ impl Ink {
         // The selected shape's own rows, and what one was set to.
         let own = self.own_shown(doc, &tops);
         let (mut tuned, mut own_laid) = (None, shapebox::Laid::new());
+        // Its shadow or its blur, and what its rows asked for.
+        let soft = self.soft_shown(doc, &tops);
+        let (mut softer, mut asked) = (soft, crate::shadows::Asked::default());
+        let colour = ui.id("shadow-colour");
+        let (icons, picking) = (&self.icons, self.picker.is_open_for(colour));
         #[cfg(test)]
         let mut laid = Vec::new();
         toolbox::draw_with(ui, canvas, &mut self.toolbox, &title, |ui| {
@@ -161,6 +167,9 @@ impl Ink {
             if let Some(own) = &own {
                 tuned = Ink::own_rows(ui, own, step, &mut own_laid);
             }
+            if let Some(softer) = softer.as_mut() {
+                asked = crate::shadows::rows(ui, softer, step, icons, picking, &mut own_laid);
+            }
             #[cfg(test)]
             laid.append(&mut own_laid);
             #[cfg(test)]
@@ -180,6 +189,20 @@ impl Ink {
         let held = ui.state.down;
         if let Some(tune) = tuned {
             self.tune(doc, &tops, tune, held);
+        }
+        // A shadow's colour, in the picker its swatch opens.
+        if let (Some((well, pressed)), Some(crate::shadows::Soft::Shadow { color, .. })) = (asked.swatch, softer.as_mut()) {
+            if pressed {
+                self.picker.toggle(colour);
+            }
+            if self.picker.is_open_for(colour) {
+                self.picker.popup(ui, colour, well, "Shadow", color, &self.icons);
+            }
+        }
+        if asked.remove {
+            self.unsoften(doc, &tops);
+        } else if let Some(softer) = softer.filter(|now| Some(*now) != soft) {
+            self.soften(doc, &tops, softer, held);
         }
         if !held {
             self.tune_settled();

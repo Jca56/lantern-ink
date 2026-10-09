@@ -225,6 +225,30 @@ impl Running {
         self.frames(2);
     }
 
+    /// The names of what the Box holds, top to bottom.
+    fn box_rows(&self) -> Vec<&'static str> {
+        self.ink.toolbox.laid.iter().map(|(name, _)| *name).collect()
+    }
+
+    /// A click on the Box's `name`.
+    fn press_in_box(&mut self, name: &str) {
+        let at = self.ink.toolbox.laid.iter().find(|(n, _)| *n == name).map(|(_, r)| r.center()).unwrap_or_else(|| panic!("the Box has no {name}"));
+        self.click(at);
+    }
+
+    /// Where the Box drew its `name`.
+    fn in_box(&self, name: &str) -> Rect {
+        self.ink.toolbox.laid.iter().find(|(n, _)| *n == name).map(|(_, r)| *r).unwrap_or_else(|| panic!("the Box has no {name}"))
+    }
+
+    /// Type `text` into the Box's `name`, and enter it.
+    fn type_in_box(&mut self, name: &str, text: &str) {
+        self.click(self.in_box(name).center());
+        self.h.type_text(text);
+        self.frames(1);
+        self.key(Key::Enter, Modifiers::NONE);
+    }
+
     fn undo(&mut self, steps: usize) {
         for _ in 0..steps {
             self.key(Key::Char('z'), Modifiers::CTRL);

@@ -148,3 +148,47 @@ fn clip_and_release_are_on_the_object_menu() {
     r.undo(2);
     assert_eq!(r.svg(), SQUARES);
 }
+
+#[test]
+fn a_shadow_and_a_blur_are_given_by_the_menu_and_set_in_the_box() {
+    let mut r = squares("paths-shadow");
+    let doc = r.doc();
+    let act = |r: &mut Running, id: &str| {
+        let mut requests = Vec::new();
+        r.ink.act(&lntrn_ui::Action::new(id), &mut HostCx { pointer: Vec2::ZERO, requests: &mut requests });
+        r.frames(2);
+    };
+    // Object > Drop Shadow gives the selection one, and opens the Box,
+    // where its settings are.
+    r.take(&[A]);
+    r.key(Key::Char('r'), Modifiers::NONE);
+    act(&mut r, menus::DROP_SHADOW);
+    assert_eq!((r.says(A, "filter").as_deref(), r.steps(), r.ink.tools.active(), r.ink.toolbox.open), (Some("url(#shadow-1)"), vec!["Drop Shadow".to_owned()], Tool::Pointer, true));
+    assert_eq!(r.box_rows(), ["X", "Y", "W", "H", "Corners", "Shadow X", "Shadow Y", "Soft", "Shadow Colour", "Dark", "Remove", "Scale strokes"]);
+    assert!(r.svg().contains("<feDropShadow dx=\"0\" dy=\"1\" stdDeviation=\"1\" flood-color=\"#000000\" flood-opacity=\"0.5\"/>"), "{}", r.svg());
+    // Asked for again, it's there already: nothing more is made.
+    act(&mut r, menus::DROP_SHADOW);
+    assert_eq!(r.steps().len(), 1);
+    // A number typed: the filter is changed where it is, room and all.
+    r.type_in_box("Shadow Y", "3");
+    assert!(r.svg().contains("<filter id=\"shadow-1\" x=\"-48%\" y=\"-48%\" width=\"195%\" height=\"195%\">") && r.svg().contains("<feDropShadow dx=\"0\" dy=\"3\""), "{}", r.svg());
+    assert_eq!((r.steps().len(), r.svg().contains("shadow-2")), (2, false));
+    // Dragged along: shown as it goes, landed as one step.
+    let soft = r.in_box("Soft").center();
+    r.drag_to(soft, soft + Vec2::new(10.0, 0.0));
+    assert!(r.ink.core.gesturing(doc) && r.steps().len() == 2);
+    assert!(r.ink.core.shown(doc).unwrap().0.to_svg().contains("stdDeviation=\"2\""));
+    r.let_go();
+    assert_eq!((r.steps().len(), r.ink.core.gesturing(doc)), (3, false));
+    // Taken off: the filter that was its alone goes with it.
+    r.press_in_box("Remove");
+    assert_eq!((r.says(A, "filter"), r.svg().contains("<filter"), r.steps().last().map(String::as_str)), (None, false, Some("Remove Effect")));
+    // A blur, the same way.
+    act(&mut r, menus::BLUR);
+    assert_eq!((r.says(A, "filter").as_deref(), r.steps().last().map(String::as_str)), (Some("url(#blur-1)"), Some("Blur")));
+    assert_eq!(r.box_rows(), ["X", "Y", "W", "H", "Corners", "Blur", "Remove", "Scale strokes"]);
+    r.type_in_box("Blur", "0.5");
+    assert!(r.svg().contains("<feGaussianBlur stdDeviation=\"0.5\"/>"));
+    r.undo(6);
+    assert_eq!(r.svg(), SQUARES);
+}

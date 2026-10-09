@@ -50,7 +50,7 @@ pub struct Can {
 
 /// Of the selection `tops` (back to front), what's drawn and may be
 /// changed.
-fn drawn(doc: &Document, tops: &[NodeId]) -> Vec<NodeId> {
+pub(crate) fn drawn(doc: &Document, tops: &[NodeId]) -> Vec<NodeId> {
     tops.iter().copied().filter(|&id| select::is_drawn(doc, id) && doc.lock_over(id).is_none()).collect()
 }
 

@@ -14,6 +14,7 @@ use lntrn_math::Color;
 use crate::color;
 use crate::document::Document;
 use crate::gradient::Units;
+use crate::id::NodeId;
 use crate::kind::Kind;
 use crate::length::{Length, number, numbers, unit};
 use crate::node::Node;
@@ -123,6 +124,27 @@ fn curve(func: &Node) -> Curve {
         (Some("discrete"), Some(values)) => Curve::Discrete(values),
         _ => Curve::Identity,
     }
+}
+
+/// The region a filter needs on `nodes` for an effect that reaches
+/// `reach` of their own units past their shapes: as a `<filter>`'s
+/// attributes, in shares of each node's box, a tenth more than it
+/// takes. Refused with the node that has no box to measure by (a level
+/// line, a group of nothing): a filter shows within a region measured
+/// by its node's box.
+pub fn region(doc: &Document, nodes: &[NodeId], reach: f64) -> Result<Vec<(&'static str, String)>, NodeId> {
+    let boxes = crate::geometry::page_bounds(doc);
+    let (mut across, mut down) = (0.1f64, 0.1f64);
+    for &id in nodes {
+        let Some(b) = boxes.get(&id).filter(|b| b.width() > 0.0 && b.height() > 0.0) else { return Err(id) };
+        // The boxes are in the drawing's coordinates: so must the reach
+        // be.
+        let reach = reach * crate::geometry::to_doc(doc, id).map_or(1.0, |t| t.max_stretch());
+        across = across.max(reach / b.width() + 0.1);
+        down = down.max(reach / b.height() + 0.1);
+    }
+    let percent = |share: f64| format!("{}%", (share * 100.0).ceil().min(10_000.0));
+    Ok(vec![("x", format!("-{}", percent(across))), ("y", format!("-{}", percent(down))), ("width", percent(1.0 + 2.0 * across)), ("height", percent(1.0 + 2.0 * down))])
 }
 
 impl Filter {

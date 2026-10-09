@@ -1151,6 +1151,32 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Not in e1:** a cursor for the Eyedropper (the desktop's theme has
     none; LS3's is a PNG of its own); a swatch of what's under it
     before a press.
+- **M4e's e2 is built** (2026-10-09, 519 tests, deployed).
+  - **Shadows and blurs are `shadows.rs`**: `Soft` (a shadow: where,
+    how soft, its colour, whose alpha is how dark; or a blur), `read`
+    (what a thing's filter is, where it's one such step and nothing
+    else), `set`, `removed`, and their rows in the Pointer's Box
+    (`rows`; `Ink::soft_shown`, `soften`, `unsoften`, through
+    `box_set` like the shape rows).
+  - **A filter is changed where it is while it's the selection's
+    alone** (the step's attributes and the filter's room, by
+    `SetAttr`); one that other things use is left, and the selection
+    gets its own. Taken off, a filter that was the selection's alone is
+    deleted with it. A chain written by hand has no rows.
+  - **The room a filter needs is `ink_doc::filter::region`**, which
+    Claude's `filter_set` uses too (it was the tool's own): the window
+    and Claude give the same filter for the same shadow.
+  - **Object > Drop Shadow… and Blur…** (`Ink::soft_menu`) give the
+    selection a first one (a tenth of the Box's dragging step × 100:
+    one unit on an icon's page) unless the one in hand has its kind
+    already, then open the Box with the Pointer in hand, where the
+    settings are. A thing with no box to measure by (a level line) is
+    said, not given one.
+  - The shadow's colour uses the paint section's picker
+    (`Ink::picker`), opened from a swatch in the Box.
+  - **Not in e2:** a shadow and a blur on one thing at once (each
+    replaces the other: one step to a filter here); spread, inner
+    shadows, more than one shadow.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

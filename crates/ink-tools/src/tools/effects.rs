@@ -1,7 +1,6 @@
 //! Clip paths and filters as tools: a node cut to a shape, a node given
 //! a shadow or a blur. Edits: one Command, one undo step.
 
-use ink_core::ink_doc::geometry::{page_bounds, to_doc};
 use ink_core::ink_doc::refs::Ids;
 use ink_core::ink_doc::style::prop;
 use ink_core::ink_doc::{Document, Element, Kind, Precision, color};
@@ -132,24 +131,14 @@ fn filter_schema() -> Doc {
 }
 
 /// The region a filter needs on `nodes` for an effect that reaches
-/// `reach` of their own units past their shapes: as attributes, in
-/// shares of each node's box, a tenth more than it takes.
+/// `reach` of their own units past their shapes
+/// ([`ink_core::ink_doc::filter::region`]: the window's shadows are
+/// given the same).
 fn region(doc: &Document, nodes: &[NodeId], reach: f64) -> Result<Vec<(&'static str, String)>, ToolError> {
-    let boxes = page_bounds(doc);
-    let (mut across, mut down) = (0.1f64, 0.1f64);
-    for &id in nodes {
+    ink_core::ink_doc::filter::region(doc, nodes, reach).or_else(|id| {
         let node = doc.node(id).map_err(refused_edit)?;
-        let Some(b) = boxes.get(&id).filter(|b| b.width() > 0.0 && b.height() > 0.0) else {
-            return fail(format!("{id} {} has no box with both a width and a height, and a filter shows within a region measured by its node's box: group it with what it belongs to, and filter the group", tag(node)));
-        };
-        // The boxes are in the drawing's coordinates: so must the reach
-        // be.
-        let reach = reach * to_doc(doc, id).map_or(1.0, |t| t.max_stretch());
-        across = across.max(reach / b.width() + 0.1);
-        down = down.max(reach / b.height() + 0.1);
-    }
-    let percent = |share: f64| format!("{}%", (share * 100.0).ceil().min(10_000.0));
-    Ok(vec![("x", format!("-{}", percent(across))), ("y", format!("-{}", percent(down))), ("width", percent(1.0 + 2.0 * across)), ("height", percent(1.0 + 2.0 * down))])
+        fail(format!("{id} {} has no box with both a width and a height, and a filter shows within a region measured by its node's box: group it with what it belongs to, and filter the group", tag(node)))
+    })
 }
 
 fn filter(doc: &Document, input: &In) -> Result<Command, ToolError> {

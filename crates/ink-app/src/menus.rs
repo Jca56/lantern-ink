@@ -53,6 +53,8 @@ pub const ROTATE_CCW: &str = "object.rotate_ccw";
 pub const LOCK: &str = "object.lock";
 pub const CLIP: &str = "object.clip";
 pub const RELEASE_CLIP: &str = "object.release_clip";
+pub const DROP_SHADOW: &str = "object.drop_shadow";
+pub const BLUR: &str = "object.blur";
 pub const TEXT_TO_PATH: &str = "text.to_path";
 /// "Make paths of it anyway?" answered yes: in the font that drew it.
 pub const TEXT_TO_PATH_ANYWAY: &str = "text.to_path_anyway";
@@ -207,8 +209,8 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
                 sep(),
                 row("Clip", CLIP).enabled(st.effects.clip),
                 row("Release Clip", RELEASE_CLIP).enabled(st.effects.release),
-                later("Drop Shadow\u{2026}"),
-                later("Blur\u{2026}"),
+                row("Drop Shadow\u{2026}", DROP_SHADOW).enabled(drawn),
+                row("Blur\u{2026}", BLUR).enabled(drawn),
                 sep(),
                 row(if st.picked.locked { "Unlock" } else { "Lock" }, LOCK).enabled(any),
             ],

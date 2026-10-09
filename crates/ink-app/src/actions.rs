@@ -123,6 +123,8 @@ impl Ink {
                     self.op(Op::Ungroup(true), cx);
                 }
             }
+            DROP_SHADOW => self.soft_menu(true),
+            BLUR => self.soft_menu(false),
             CLIP => self.effect(crate::effects::Effect::Clip, cx),
             RELEASE_CLIP => self.effect(crate::effects::Effect::Release, cx),
             TEXT_TO_PATH => self.effect(crate::effects::Effect::TextToPath(false), cx),

@@ -48,16 +48,6 @@ impl Running {
         self.frames(2);
     }
 
-    /// The names of what the Box holds, top to bottom.
-    fn box_rows(&self) -> Vec<&'static str> {
-        self.ink.toolbox.laid.iter().map(|(name, _)| *name).collect()
-    }
-
-    /// A click on the Box's `name`.
-    fn press_in_box(&mut self, name: &str) {
-        let at = self.ink.toolbox.laid.iter().find(|(n, _)| *n == name).map(|(_, r)| r.center()).unwrap_or_else(|| panic!("the Box has no {name}"));
-        self.click(at);
-    }
 }
 
 #[test]
