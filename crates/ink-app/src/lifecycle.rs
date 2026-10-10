@@ -5,7 +5,6 @@
 use std::path::{Path, PathBuf};
 
 use ink_core::{CoreError, DocId};
-use lntrn_math::Vec2;
 use lntrn_ui::{Action, Dialog, HostCx, ShellRequest};
 
 use crate::actions::doc_action;
@@ -13,14 +12,12 @@ use crate::files::{Done, Then};
 use crate::ink::Ink;
 use crate::menus::*;
 
-/// A new drawing's size when there's none open to copy: an icon's grid.
-const DEFAULT_SIZE: Vec2 = Vec2::new(24.0, 24.0);
-
 impl Ink {
-    /// A new, empty drawing the size of the one showing, in a new tab.
+    /// A new, empty drawing the size of the last one asked for (File >
+    /// New… asks; this is the tab bar's +, and what a window starts
+    /// with), in a new tab.
     pub fn new_document(&mut self) {
-        let size = self.viewport().map_or(DEFAULT_SIZE, |v| v.view);
-        let doc = self.core.new_doc(size.x, size.y);
+        let doc = self.core.new_doc(self.settings.new_width, self.settings.new_height);
         self.tabs.add(doc);
     }
 
@@ -115,7 +112,9 @@ impl Ink {
                         self.write(doc, path, then);
                     }
                 }
-                Done::OpenPicked(None) | Done::SavePicked { path: None, .. } => {}
+                Done::OpenPicked(None) | Done::SavePicked { path: None, .. } | Done::ExportPicked(None) => {}
+                Done::ExportPicked(Some(path)) => self.export_to(path),
+                Done::Exported(Ok(said) | Err(said)) => self.toast(said),
                 Done::Read { path, result } => self.opened(&path, result),
                 Done::Written { job, then, result } => {
                     let name = file_name(&job.path);

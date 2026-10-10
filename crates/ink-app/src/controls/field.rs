@@ -1,13 +1,25 @@
-//! The number field (LS3's `controls/field.rs`): drag along it to
-//! change its number, press and let go to type one. The editing itself
-//! (caret, selection, clipboard, input methods) is LUI2's one text
-//! core; the frame round it is Ink's.
+//! Places to type (LS3's `controls/field.rs`): the text field, and the
+//! number field: drag along it to change its number, press and let go
+//! to type one. The editing itself (caret, selection, clipboard, input
+//! methods) is LUI2's one text core; the frame round it is Ink's.
 
 use lntrn_math::{Rect, Vec2};
-use lntrn_ui::{CursorIcon, Sense, Ui, WidgetId};
+use lntrn_ui::{CursorIcon, FILL, Sense, TextOpts, TextResponse, Ui, WidgetId};
 
 use super::{EDGE, frame, px, snapped, well, written};
-use crate::theme::{ACCENT, TEXT, TEXT_DIM};
+use crate::theme::{ACCENT, CLOSE, TEXT, TEXT_DIM};
+
+/// A line of text to edit, checked by `validate`, which says what's
+/// wrong with the text (`None`: nothing). While it fails the frame is
+/// red, the field says why, and Enter enters nothing. Enter is
+/// `committed`, Escape `cancelled`.
+pub fn field_validated(ui: &mut Ui, label: &str, value: &mut String, validate: &dyn Fn(&str) -> Option<String>) -> TextResponse {
+    let id = ui.id(label);
+    let rect = ui.alloc(Vec2::new(FILL, ui.m.widget_h));
+    let out = ui.text_edit_core_with(id, rect, value, TextOpts { validate: Some(validate), ..TextOpts::default() });
+    frame(ui, rect, if out.invalid { CLOSE } else if out.focused { ACCENT } else { EDGE });
+    out
+}
 
 /// How long a half-typed value keeps while its field isn't drawn: past
 /// that it's forgotten, not entered.

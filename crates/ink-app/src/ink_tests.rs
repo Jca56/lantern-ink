@@ -26,6 +26,7 @@ mod guides;
 mod handles;
 mod nodes;
 mod ops;
+mod pages;
 mod paint;
 mod paths;
 mod pen;
@@ -424,6 +425,7 @@ fn a_file_saved_untouched_is_the_bytes_it_was() {
     assert_eq!((r.ink.label(doc).as_str(), r.ink.is_modified(doc), r.ink.recent.paths[0].clone()), ("copy", false, copy.clone()));
     // Another drawing can't be saved over a file that's open.
     r.key(Key::Char('n'), Modifiers::CTRL);
+    r.key(Key::Enter, Modifiers::NONE);
     let other = r.doc();
     assert!(other != doc && r.ink.tabs.len() == 2);
     r.ink.pending_toast = None;
@@ -442,7 +444,10 @@ fn a_file_saved_untouched_is_the_bytes_it_was() {
 fn tabs_come_and_go_and_only_changed_work_is_asked_about() {
     let mut r = Running::start(1280.0, 800.0, 1.0);
     let first = r.doc();
+    // Ctrl+N asks what size; Enter makes it.
     r.key(Key::Char('n'), Modifiers::CTRL);
+    assert_eq!(r.ink.tabs.len(), 1);
+    r.key(Key::Enter, Modifiers::NONE);
     assert_eq!((r.ink.tabs.len(), r.ink.label(r.doc()).as_str()), (2, "untitled 2"));
     // Untouched, it closes without a word; the first shows again.
     r.key(Key::Char('w'), Modifiers::CTRL);

@@ -2,16 +2,14 @@
 //! its numbers are written) and tidying it. Edits like any other: one
 //! undo step each.
 
+use ink_core::ink_doc::page::{self, Page};
 use ink_core::ink_doc::tidy::{self, Dropped, Extra};
-use ink_core::ink_doc::value::{DECIMALS_ATTR, MAX_DECIMALS};
-use ink_core::ink_doc::{Document, INK_NS, INK_PREFIX, Precision, Viewport};
+use ink_core::ink_doc::value::MAX_DECIMALS;
+use ink_core::ink_doc::{Document, Precision};
 use ink_core::{Actor, Applied, Command, NodeId};
-use ink_geom::number::parse_list;
-use ink_geom::Affine;
 use lntrn_data::{Doc, Map};
 use lntrn_mcp::{Kind, Reply, Tool, ToolError, fail, schema};
 
-use crate::describe::page;
 use crate::input::{In, common, refused};
 use crate::tools::{Ctx, Entry, Handler, edit, previewed};
 
@@ -134,56 +132,35 @@ fn set_schema() -> Doc {
 }
 
 fn set(doc: &Document, input: &In) -> Result<Command, ToolError> {
-    let (a, root) = (&input.args, doc.root());
-    let node = doc.node(root).map_err(crate::input::refused_edit)?;
-    let attr = |name: &str, value: String| Command::SetAttr { node: root, name: name.to_owned(), value: Some(value) };
-    let mut commands = Vec::new();
-    // First, so that what follows is written as finely as it says.
-    let mut precision = Precision::of(doc);
-    if let Some(decimals) = a.opt_int("decimals", 0, MAX_DECIMALS as i64)? {
-        match doc.namespace(root, Some(INK_PREFIX)) {
-            Some(INK_NS) => {}
-            None => commands.push(attr(&format!("xmlns:{INK_PREFIX}"), INK_NS.to_owned())),
-            Some(other) => return fail(format!("this drawing uses the prefix \"{INK_PREFIX}:\" for something else ({other}), so Ink's own attributes have nowhere to go")),
-        }
-        commands.push(attr(&format!("{INK_PREFIX}:{DECIMALS_ATTR}"), decimals.to_string()));
-        precision.decimals = decimals as usize;
-    }
+    let a = &input.args;
+    let decimals = a.opt_int("decimals", 0, MAX_DECIMALS as i64)?.map(|d| d as usize);
     let view_box = match a.opt_list("view_box", "numbers")? {
         None => None,
         Some(items) => match items.iter().map(|d| d.as_f64().filter(|v| v.is_finite())).collect::<Option<Vec<f64>>>().as_deref() {
-            Some(&[x, y, w, h]) if w > 0.0 && h > 0.0 => Some((x, y, w, h)),
+            Some(&[x, y, w, h]) if w > 0.0 && h > 0.0 => Some([x, y, w, h]),
             _ => return fail("\"view_box\" should be [x, y, width, height], its width and height more than nothing"),
         },
     };
-    match (a.opt_str("content")?, view_box) {
-        (None | Some("keep"), _) => {}
-        (Some("fit"), Some((x, y, w, h))) => {
-            // The coordinates that fill the page now: its viewBox, or
-            // without one the page itself.
-            let old = node.attr("viewBox").and_then(parse_list).filter(|v| v.len() == 4 && v[2] > 0.0 && v[3] > 0.0);
-            let (ox, oy, ow, oh) = old.map_or_else(|| (0.0, 0.0, Viewport::of(node).size.x, Viewport::of(node).size.y), |v| (v[0], v[1], v[2], v[3]));
-            let by = Affine::translate(-ox, -oy).then(&Affine::scale(w / ow, h / oh)).then(&Affine::translate(x, y));
-            commands.push(Command::Transform { nodes: vec![root], by });
-        }
+    let fit = match (a.opt_str("content")?, view_box) {
+        (None | Some("keep"), _) => false,
+        (Some("fit"), Some(_)) => true,
         (Some("fit"), None) => return fail("content: \"fit\" goes with a view_box to fit the content to"),
         (Some(other), _) => return fail(format!("content is keep or fit, not \"{other}\"")),
-    }
-    for name in ["width", "height"] {
-        if let Some(v) = a.opt_f64(name)? {
-            if v <= 0.0 {
-                return fail(format!("\"{name}\" must be more than nothing"));
-            }
-            commands.push(attr(name, precision.number(v)));
+    };
+    let mut size = [None, None];
+    for (slot, name) in size.iter_mut().zip(["width", "height"]) {
+        *slot = a.opt_f64(name)?;
+        if slot.is_some_and(|v| v <= 0.0) {
+            return fail(format!("\"{name}\" must be more than nothing"));
         }
     }
-    if let Some((x, y, w, h)) = view_box {
-        commands.push(attr("viewBox", [x, y, w, h].map(|v| precision.number(v)).join(" ")));
-    }
-    if commands.is_empty() {
+    let asked = Page { width: size[0], height: size[1], view_box, fit, decimals };
+    if asked == Page::default() {
         return fail("say what to set: width, height, view_box or decimals");
     }
-    Ok(Command::Batch(commands))
+    // The Command itself is the document's to make: the window's
+    // File > Page makes the same one.
+    page::set(doc, &asked).map_err(crate::input::refused_edit)
 }
 
 fn was_set(doc: &Document, applied: &Applied) -> Reply {
@@ -197,5 +174,5 @@ fn was_set(doc: &Document, applied: &Applied) -> Reply {
         1 => " 1 node was fitted to the new coordinates.".to_owned(),
         n => format!(" {n} nodes were fitted to the new coordinates."),
     };
-    Reply::text(format!("Set. Page: {}; numbers to {} decimals.{refit}", page(doc), Precision::of(doc).decimals))
+    Reply::text(format!("Set. Page: {}; numbers to {} decimals.{refit}", crate::describe::page(doc), Precision::of(doc).decimals))
 }

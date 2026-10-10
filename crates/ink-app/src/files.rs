@@ -29,6 +29,10 @@ pub enum Done {
     /// A file's text, to be opened as a drawing.
     Read { path: PathBuf, result: Result<String, String> },
     Written { job: SaveJob, then: Then, result: Result<(), String> },
+    /// Export's picker closed.
+    ExportPicked(Option<PathBuf>),
+    /// An export was written, or wasn't: what to say of it.
+    Exported(Result<String, String>),
 }
 
 pub struct Files {
@@ -58,9 +62,9 @@ impl Files {
         let done: Vec<Done> = self.rx.try_iter().collect();
         for d in &done {
             match d {
-                Done::OpenPicked(_) | Done::SavePicked { .. } => self.picking = false,
+                Done::OpenPicked(_) | Done::SavePicked { .. } | Done::ExportPicked(_) => self.picking = false,
                 Done::Written { job, .. } => self.saving.retain(|d| *d != job.doc),
-                Done::Read { .. } => {}
+                Done::Read { .. } | Done::Exported(_) => {}
             }
         }
         done
@@ -98,6 +102,21 @@ impl Files {
             let path = picker::pick(&Ask::Save { name }).map(picker::with_extension);
             send(Done::SavePicked { doc, then, path });
         });
+    }
+
+    /// Ask where an export goes, suggesting `name`.
+    pub fn pick_export(&mut self, name: String, png: bool) {
+        if std::mem::replace(&mut self.picking, true) {
+            return;
+        }
+        let send = self.sender();
+        std::thread::spawn(move || send(Done::ExportPicked(picker::pick(&Ask::Export { name, png }))));
+    }
+
+    /// Write an export.
+    pub fn export(&mut self, job: crate::exporting::ExportJob) {
+        let send = self.sender();
+        Pool::global().spawn(move || send(Done::Exported(job.run())));
     }
 
     /// Read the text of the file at `path`.

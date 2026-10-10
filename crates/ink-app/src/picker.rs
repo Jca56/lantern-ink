@@ -10,10 +10,15 @@ use std::process::{Command, Stdio};
 /// What Open and Save As offer.
 pub const FILTERS: &str = "SVG:*.svg";
 
+/// What Export offers for a picture.
+pub const PICTURES: &str = "PNG:*.png";
+
 pub enum Ask {
     Open,
     /// Save, suggesting `name`.
     Save { name: String },
+    /// Export, suggesting `name`: a picture (`png`), or a drawing.
+    Export { name: String, png: bool },
 }
 
 /// The picker, found in Lantern's `bin` or on the path.
@@ -28,6 +33,7 @@ pub fn pick(ask: &Ask) -> Option<PathBuf> {
     match ask {
         Ask::Open => cmd.args(["--pick", "--filters", FILTERS]),
         Ask::Save { name } => cmd.args(["--pick-save", "--filters", FILTERS, "--save-name", name]),
+        Ask::Export { name, png } => cmd.args(["--pick-save", "--filters", if *png { PICTURES } else { FILTERS }, "--save-name", name]),
     };
     let output = match cmd.stdout(Stdio::piped()).stderr(Stdio::inherit()).output() {
         Ok(o) => o,

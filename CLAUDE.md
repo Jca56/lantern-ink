@@ -1384,6 +1384,32 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **Not in f3:** a light ground to see an icon on; a click on a size
     to zoom the canvas to it; the strip of anything but the tab that
     shows.
+- **M4f's f4 is built** (2026-10-09, 572 tests, deployed).
+  - **`ink_doc::page`** (`Page`, `page::of`, `page::set`) is how a
+    page is set, for the window and for `doc_set` both (it was
+    `ink-tools`' own). Fitted to a new viewBox, the guides go through
+    the transform too.
+  - **The dialogs' rows are the host's** (`Host::draw_item` by the
+    dialog's content key, `Host::dialog_ready` for its button; Enter in
+    a number asks for `ShellRequest::DialogDefault`): `menus::DIALOG_NEW`,
+    `DIALOG_PAGE`, `DIALOG_EXPORT`. A new dialog is a key, an arm in
+    each, and a struct of what it holds on `Ink`.
+  - **`paging.rs`** is New… and Page… (`Paging`: each number as typed,
+    `size()`, `page()`); **`exporting.rs`** is Export… (`Exporting`,
+    `ExportJob::run` on the pool, `pictures` for which files);
+    **`tidying.rs`** is Edit > Tidy.
+  - **Ctrl+N asks; the tab bar's + doesn't** (it makes one the size of
+    the last made: `Settings::new_width`, `new_height`). Ctrl+E is
+    Export.
+  - `controls::field_validated` is LS3's text field, copied (D12).
+  - **Not in f4:** JPEG or WebP (the MCP's `doc_export` has them);
+    a picture's ground (see-through always); a size typed for a
+    picture; a preview of what's exported; Tidy's extras (comments,
+    ids, titles: `doc_tidy` has them); a page turned or flipped.
+  - **Left for Alva to say:** several pictures overwrite files of
+    their names without asking (only the name chosen is the picker's
+    to ask about); Export remembers what it was set to only until Ink
+    closes.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

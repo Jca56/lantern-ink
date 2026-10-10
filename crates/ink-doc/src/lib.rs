@@ -45,6 +45,7 @@ pub mod lettering;
 pub mod marks;
 mod node;
 pub mod outline;
+pub mod page;
 mod outlined;
 mod paste;
 pub mod pathedit;

@@ -16,6 +16,18 @@ use crate::tools;
 pub const TITLE_MENUS: [(&str, &str); 6] = [("File", "file"), ("Edit", "edit"), ("Object", "object"), ("Path", "path"), ("Text", "text"), ("View", "view")];
 
 pub const NEW: &str = "file.new";
+/// New…'s dialog: its rows, and its Create.
+pub const DIALOG_NEW: &str = "dialog.new";
+pub const NEW_CREATE: &str = "file.new_create";
+/// File > Page…, its dialog's rows, and its Apply.
+pub const PAGE: &str = "file.page";
+pub const DIALOG_PAGE: &str = "dialog.page";
+pub const PAGE_APPLY: &str = "file.page_apply";
+/// File > Export…, its dialog's rows, and its Export….
+pub const EXPORT: &str = "file.export";
+pub const DIALOG_EXPORT: &str = "dialog.export";
+pub const EXPORT_GO: &str = "file.export_go";
+pub const TIDY: &str = "edit.tidy";
 pub const OPEN: &str = "file.open";
 pub const SAVE: &str = "file.save";
 pub const SAVE_AS: &str = "file.save_as";
@@ -164,11 +176,11 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
     let (any, drawn) = (st.picked.count > 0, st.picked.drawn > 0);
     Some(match name {
         "file" => {
-            let mut items = vec![row("New", NEW), row("Open\u{2026}", OPEN)];
+            let mut items = vec![row("New\u{2026}", NEW), row("Open\u{2026}", OPEN)];
             if !st.recent.paths.is_empty() {
                 items.push(MenuItem::sub("Open Recent", recent_rows(st.recent)));
             }
-            items.extend([row("Save", SAVE).enabled(doc), row("Save As\u{2026}", SAVE_AS).enabled(doc), sep(), later("Page\u{2026}"), later("Export\u{2026}"), sep(), row("Close Tab", CLOSE_TAB).enabled(doc), row("Quit", QUIT)]);
+            items.extend([row("Save", SAVE).enabled(doc), row("Save As\u{2026}", SAVE_AS).enabled(doc), sep(), row("Page\u{2026}", PAGE).enabled(doc), row("Export\u{2026}", EXPORT).enabled(doc), sep(), row("Close Tab", CLOSE_TAB).enabled(doc), row("Quit", QUIT)]);
             Menu::new("File", items)
         }
         "edit" => Menu::new(
@@ -186,7 +198,7 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
                 row("Select All", SELECT_ALL).enabled(doc),
                 row("Deselect", DESELECT).enabled(any),
                 sep(),
-                later("Tidy"),
+                row("Tidy", TIDY).enabled(doc),
                 sep(),
                 later("Let Claude In"),
                 later("Preferences\u{2026}"),
@@ -290,6 +302,7 @@ pub fn keys() -> KeyConfig {
         ('o', ctrl, OPEN),
         ('s', ctrl, SAVE),
         ('s', shift, SAVE_AS),
+        ('e', ctrl, EXPORT),
         ('w', ctrl, CLOSE_TAB),
         ('q', ctrl, QUIT),
         ('z', ctrl, UNDO),

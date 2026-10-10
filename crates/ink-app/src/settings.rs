@@ -44,6 +44,10 @@ props! {
         pub snap_guides: bool = true => { id: 11 },
         /// The preview strip is folded away to its heading.
         pub strip_folded: bool = false => { id: 12 },
+        /// The size of the last drawing File > New… made: the next
+        /// one's, unless another is asked for. An icon's grid at first.
+        pub new_width: f64 = 24.0 => { id: 13, hard: 0.001..=100000.0 },
+        pub new_height: f64 = 24.0 => { id: 14, hard: 0.001..=100000.0 },
     }
 }
 

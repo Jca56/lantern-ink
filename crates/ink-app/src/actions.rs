@@ -33,7 +33,13 @@ impl Ink {
         self.type_settled();
         let active = self.tabs.active_doc();
         match action.id.as_str() {
-            NEW => self.new_document(),
+            NEW => self.ask_new(cx),
+            NEW_CREATE => self.new_created(),
+            PAGE => self.ask_page(cx),
+            PAGE_APPLY => self.page_applied(),
+            EXPORT => self.ask_export(cx),
+            EXPORT_GO => self.export_go(),
+            TIDY => self.tidy(),
             OPEN => self.files.pick_open(),
             SAVE => {
                 if let Some(doc) = active {

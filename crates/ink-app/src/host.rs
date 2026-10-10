@@ -43,6 +43,31 @@ impl Host for Ink {
         menus::menu(name, &self.menu_state())
     }
 
+    fn dialog_ready(&self, action: &Action) -> bool {
+        // A button waits for what its dialog holds to be something.
+        match action.id.as_str() {
+            menus::NEW_CREATE => self.paging.size().is_some(),
+            menus::PAGE_APPLY => self.paging.page().is_some(),
+            menus::EXPORT_GO => self.exporting.ready(),
+            _ => true,
+        }
+    }
+
+    fn draw_item(&mut self, key: &str, ui: &mut Ui, cx: &mut HostCx) -> bool {
+        // The dialogs' own rows. Enter in a number presses the
+        // dialog's button, as LS3's do.
+        let (changed, entered) = match key {
+            menus::DIALOG_NEW => self.paging.new_rows(ui),
+            menus::DIALOG_PAGE => self.paging.page_rows(ui),
+            menus::DIALOG_EXPORT => (self.exporting.rows(ui), false),
+            _ => (false, false),
+        };
+        if entered {
+            cx.request(lntrn_ui::ShellRequest::DialogDefault);
+        }
+        changed
+    }
+
     fn key_hint(&self, action: &Action) -> Option<String> {
         self.keys.hint_for(action)
     }

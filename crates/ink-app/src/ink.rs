@@ -91,6 +91,9 @@ pub struct Ink {
     pub(crate) landed: crate::snap::Landed,
     /// The guides: one being dragged, and the ones that show.
     pub(crate) guiding: crate::guiding::Guiding,
+    /// What the New and Page dialogs hold, and the Export dialog.
+    pub(crate) paging: crate::paging::Paging,
+    pub(crate) exporting: crate::exporting::Exporting,
     /// The Lantern preview strip, at the bottom of the right panel.
     pub(crate) strip: crate::strip::Strip,
     /// The panel's width while its grip is dragged, logical px.
@@ -151,6 +154,8 @@ impl Ink {
             landed: crate::snap::Landed::default(),
             guiding: crate::guiding::Guiding::default(),
             strip: crate::strip::Strip::default(),
+            paging: crate::paging::Paging::default(),
+            exporting: crate::exporting::Exporting::default(),
             panel_drag: None,
             layout: Layout::default(),
             toast: None,

@@ -1240,6 +1240,29 @@ As LS3 §7, to the letter where it can be:
     preview says too).
   - **The strip's room comes out of the paint section's**, which
     scrolls: the object tree keeps its share of the panel.
+  **New, Page, Export and Tidy, as built in M4f** (`paging.rs`,
+  `exporting.rs`, `tidying.rs`; the dialogs are LUI2's, with Ink's own
+  rows in them through `Host::draw_item`, as LS3's are):
+  - **File > New… asks a size**, the icon sizes as presets, and
+    remembers the last one made: the tab bar's + makes another that
+    size, unasked. Enter in a number presses Create; what's no size
+    keeps the button dim.
+  - **File > Page… sets the size a drawing is shown at and its
+    viewBox**, and can fit the drawing to them. One Command,
+    `ink_doc::page::set`, which the MCP's `doc_set` makes too:
+    fitted, everything (the guides with it) goes through the
+    transform from the old viewBox to the new. While the viewBox is
+    the page's own size from nothing, its numbers aren't asked for.
+    The view is fitted to the page afterwards.
+  - **File > Export… writes a clean SVG to ship, or PNGs**: at the
+    page's own size, at any of the icon sizes, or at several at once
+    (each beside the name chosen, its size on the end). The dialog
+    says what, a picker then asks where, and the job pool draws,
+    packs and writes. A clean copy is never written over an open
+    drawing's file. The drawing and its own file aren't touched.
+  - **Edit > Tidy drops what nothing uses** (`Command::Tidy`, with
+    nothing asked for by name) as one step, and the status bar says
+    what went. Comments, ids and titles stay.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

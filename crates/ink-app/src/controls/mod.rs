@@ -15,7 +15,7 @@ mod toggle;
 
 pub use button::button_if;
 pub use dropdown::dropdown;
-pub use field::number_in;
+pub use field::{field_validated, number_in};
 pub use slider::Slider;
 pub use toggle::toggle;
 
