@@ -12,7 +12,7 @@
 
 use ink_core::{Command, DocId};
 use ink_doc::guides::{self, Guide};
-use lntrn_math::{Color, Rect, Vec2};
+use lntrn_math::{Rect, Vec2};
 use lntrn_ui::{CursorIcon, Sense, Ui};
 
 use crate::canvas::CanvasInput;
@@ -24,9 +24,6 @@ use crate::theme::ACCENT;
 
 /// How near a guide, logical px, a press takes hold of it.
 pub const GRAB: f64 = 6.0;
-/// The guides' colour unless Preferences says otherwise: one that no
-/// part of the window has, and that shows on light and on dark.
-pub const COLOR: Color = Color::rgba(1.0, 0.2, 0.85, 1.0);
 
 /// A guide being dragged.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -216,7 +213,7 @@ impl Ink {
         let w = (1.5 * ui.m.scale).round().max(1.0);
         ui.draw.push_clip(area);
         for (guide, lit) in &self.guiding.shown {
-            let (tint, w) = if *lit { (ACCENT, w * 2.0) } else { (COLOR, w) };
+            let (tint, w) = if *lit { (ACCENT, w * 2.0) } else { (self.settings.guide_color(), w) };
             match guide {
                 Guide::X(x) => {
                     let at = view.to_window.apply(Vec2::new(*x, 0.0)).x.round();

@@ -57,6 +57,13 @@ impl Tabs {
         self.active = self.tabs.len() - 1;
     }
 
+    /// A drawing that goes by `name` until it has a file (one that
+    /// came back from an autosave copy).
+    pub fn add_as(&mut self, doc: DocId, name: String) {
+        self.tabs.push(Tab::new(doc, name));
+        self.active = self.tabs.len() - 1;
+    }
+
     /// A drawing opened from a file takes no `untitled` number.
     pub fn add_named(&mut self, doc: DocId) {
         self.tabs.push(Tab::new(doc, String::new()));

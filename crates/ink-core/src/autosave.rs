@@ -7,8 +7,13 @@
 //! rewritten as it changes and removed once it has no unsaved work
 //! (saved for real, or undone back to its saved state) or is closed.
 
+//!
+//! A copy is named for the process that wrote it ([`file_name`]), so a
+//! front end starting up can tell the copies nobody is keeping any
+//! more ([`orphans`]) from a live one's, and offer those back.
+
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use ink_doc::DocId;
@@ -27,6 +32,51 @@ struct Copy {
     stamp: u64,
     /// Where it was written; none if it never was.
     path: Option<PathBuf>,
+}
+
+/// A copy's name: `{who}-{pid}-{doc}-{name}.svg`. `who` is the kind of
+/// front end (`mcp`, `window`) and the pid says which process, so a
+/// live one's copies are never offered back as lost work.
+pub fn file_name(who: &str, doc: DocId, name: &str) -> String {
+    format!("{who}-{}-{doc}-{name}.svg", std::process::id())
+}
+
+/// A copy whose writer is gone: work that was never saved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Orphan {
+    pub path: PathBuf,
+    /// What its drawing was called.
+    pub name: String,
+}
+
+/// Whether process `pid` is one of `program` still running. A number
+/// that has gone round to some other program doesn't count.
+fn running(pid: u32, program: &str) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/comm")).is_ok_and(|name| name.trim() == program)
+}
+
+/// The copies in `dir` that a `who` front end wrote and no longer
+/// keeps: its process (a `program`, by the name the system knows it
+/// by) is gone. In name order.
+pub fn orphans(dir: &Path, who: &str, program: &str) -> Vec<Orphan> {
+    orphans_where(dir, who, |pid| running(pid, program))
+}
+
+fn orphans_where(dir: &Path, who: &str, running: impl Fn(u32) -> bool) -> Vec<Orphan> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut found: Vec<Orphan> = entries
+        .flatten()
+        .filter_map(|e| {
+            let path = e.path();
+            let stem = path.file_name()?.to_str()?.strip_suffix(".svg")?.to_owned();
+            // (A name may have dashes of its own: it's all that's left.)
+            let mut parts = stem.splitn(4, '-');
+            let (by, pid, _doc, name) = (parts.next()?, parts.next()?.parse::<u32>().ok()?, parts.next()?, parts.next()?);
+            (by == who && !running(pid)).then(|| Orphan { path: path.clone(), name: name.to_owned() })
+        })
+        .collect();
+    found.sort_by(|a, b| a.path.cmp(&b.path));
+    found
 }
 
 pub struct Autosave {
@@ -106,6 +156,30 @@ impl Autosave {
     /// it, so a live one's files are never offered as recovery.
     fn path(&self, core: &Core, doc: DocId) -> PathBuf {
         let name = core.path(doc).ok().flatten().and_then(|p| p.file_stem()).map_or("untitled".to_owned(), |s| s.to_string_lossy().into_owned());
-        self.dir.join(format!("{}-{}-{doc}-{name}.svg", self.who, std::process::id()))
+        self.dir.join(file_name(self.who, doc, &name))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_copies_nobody_keeps_are_found_by_whose_they_were() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp/ink-core/orphans");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["window-100-w1-lamp.svg", "window-200-w2-moon-phase.svg", "window-300-w1-live.svg", "mcp-100-d1-claudes.svg", "window-x-w1-odd.svg", "notes.txt", "window-100-w9.svg"] {
+            std::fs::write(dir.join(name), "<svg/>").unwrap();
+        }
+        // 300 is still running: its copy is its own.
+        let found = orphans_where(&dir, "window", |pid| pid == 300);
+        assert_eq!(found.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(), ["lamp", "moon-phase"]);
+        assert_eq!(found[0].path, dir.join("window-100-w1-lamp.svg"));
+        assert_eq!(orphans_where(&dir, "mcp", |_| false).len(), 1);
+        assert!(orphans_where(&dir.join("none"), "window", |_| false).is_empty());
+        // This process's own are named so that it's told from the rest.
+        assert_eq!(file_name("window", DocId(3), "lamp"), format!("window-{}-{}-lamp.svg", std::process::id(), DocId(3)));
+        assert!(running(std::process::id(), std::fs::read_to_string("/proc/self/comm").unwrap().trim()) && !running(std::process::id(), "something-else"));
     }
 }

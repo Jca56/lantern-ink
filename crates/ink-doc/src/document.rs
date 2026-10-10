@@ -55,8 +55,16 @@ impl Document {
     /// A new, empty drawing `width` × `height` user units, as Ink writes
     /// one.
     pub fn new(id: DocId, width: f64, height: f64) -> Document {
-        let (w, h) = (number::format(width, 3), number::format(height, 3));
-        let text = format!("<svg xmlns=\"{SVG_NS}\" xmlns:{INK_PREFIX}=\"{INK_NS}\" width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\">\n</svg>\n");
+        Document::new_with(id, width, height, crate::value::DECIMALS)
+    }
+
+    /// [`Document::new`], its numbers to be written with `decimals`
+    /// decimals (D15): said on its root where that isn't Ink's three.
+    pub fn new_with(id: DocId, width: f64, height: f64, decimals: usize) -> Document {
+        let decimals = decimals.min(crate::value::MAX_DECIMALS);
+        let (w, h) = (number::format(width, decimals), number::format(height, decimals));
+        let said = if decimals == crate::value::DECIMALS { String::new() } else { format!(" {INK_PREFIX}:{}=\"{decimals}\"", crate::value::DECIMALS_ATTR) };
+        let text = format!("<svg xmlns=\"{SVG_NS}\" xmlns:{INK_PREFIX}=\"{INK_NS}\" width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\"{said}>\n</svg>\n");
         Document::parse(id, &text).expect("Ink's own empty drawing reads")
     }
 

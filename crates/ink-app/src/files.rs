@@ -33,6 +33,11 @@ pub enum Done {
     ExportPicked(Option<PathBuf>),
     /// An export was written, or wasn't: what to say of it.
     Exported(Result<String, String>),
+    /// An autosave copy of `doc` as it was at `state` reached `path`,
+    /// or didn't.
+    Copied { doc: DocId, path: PathBuf, state: u64, result: Result<(), String> },
+    /// A copy left behind (the drawing `name`), read to be restored.
+    Recovered { path: PathBuf, name: String, result: Result<String, String> },
 }
 
 pub struct Files {
@@ -64,7 +69,7 @@ impl Files {
             match d {
                 Done::OpenPicked(_) | Done::SavePicked { .. } | Done::ExportPicked(_) => self.picking = false,
                 Done::Written { job, .. } => self.saving.retain(|d| *d != job.doc),
-                Done::Read { .. } | Done::Exported(_) => {}
+                Done::Read { .. } | Done::Exported(_) | Done::Copied { .. } | Done::Recovered { .. } => {}
             }
         }
         done
@@ -117,6 +122,26 @@ impl Files {
     pub fn export(&mut self, job: crate::exporting::ExportJob) {
         let send = self.sender();
         Pool::global().spawn(move || send(Done::Exported(job.run())));
+    }
+
+    /// Write an autosave copy: `text`, the drawing `doc` as it was at
+    /// `state`, to `path`.
+    pub fn copy(&mut self, doc: DocId, path: PathBuf, state: u64, text: String) {
+        let send = self.sender();
+        Pool::global().spawn(move || {
+            let made = path.parent().map_or(Ok(()), std::fs::create_dir_all).map_err(|e| e.to_string());
+            let result = made.and_then(|()| ink_core::write_atomic(&path, text.as_bytes()).map_err(|e| e.to_string()));
+            send(Done::Copied { doc, path, state, result });
+        });
+    }
+
+    /// Read a copy left behind, to restore the drawing `name`.
+    pub fn recover(&mut self, path: PathBuf, name: String) {
+        let send = self.sender();
+        Pool::global().spawn(move || {
+            let result = ink_core::read_text(&path).map_err(|e| e.to_string());
+            send(Done::Recovered { path, name, result });
+        });
     }
 
     /// Read the text of the file at `path`.

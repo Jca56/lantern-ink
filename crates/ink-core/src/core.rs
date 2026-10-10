@@ -100,8 +100,14 @@ impl Core {
 
     /// A new, empty drawing `width` × `height` user units.
     pub fn new_doc(&mut self, width: f64, height: f64) -> DocId {
+        self.new_doc_with(width, height, ink_doc::value::DECIMALS)
+    }
+
+    /// [`Core::new_doc`], its numbers to be written with `decimals`
+    /// decimals.
+    pub fn new_doc_with(&mut self, width: f64, height: f64, decimals: usize) -> DocId {
         let id = self.next_id();
-        self.docs.insert(id, Open::new(Document::new(id, width, height)));
+        self.docs.insert(id, Open::new(Document::new_with(id, width, height, decimals)));
         id
     }
 

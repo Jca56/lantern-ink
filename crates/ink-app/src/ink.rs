@@ -91,6 +91,13 @@ pub struct Ink {
     pub(crate) landed: crate::snap::Landed,
     /// The guides: one being dragged, and the ones that show.
     pub(crate) guiding: crate::guiding::Guiding,
+    /// Unsaved work's copies; the ones other Inks left behind, to ask
+    /// about with the next frame; and the drawings that came back from
+    /// one (unsaved work from the start).
+    pub(crate) autosave: crate::autosaving::Autosave,
+    pub(crate) found: Vec<ink_core::autosave::Orphan>,
+    pub(crate) ask_found: bool,
+    pub(crate) recovered: Vec<DocId>,
     /// What the New and Page dialogs hold, and the Export dialog.
     pub(crate) paging: crate::paging::Paging,
     pub(crate) exporting: crate::exporting::Exporting,
@@ -154,6 +161,10 @@ impl Ink {
             landed: crate::snap::Landed::default(),
             guiding: crate::guiding::Guiding::default(),
             strip: crate::strip::Strip::default(),
+            autosave: crate::autosaving::Autosave::new(crate::settings::dir().map(|d| d.join("autosave"))),
+            found: Vec::new(),
+            ask_found: false,
+            recovered: Vec::new(),
             paging: crate::paging::Paging::default(),
             exporting: crate::exporting::Exporting::default(),
             panel_drag: None,

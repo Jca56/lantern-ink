@@ -56,6 +56,15 @@ impl Host for Ink {
     fn draw_item(&mut self, key: &str, ui: &mut Ui, cx: &mut HostCx) -> bool {
         // The dialogs' own rows. Enter in a number presses the
         // dialog's button, as LS3's do.
+        if key == menus::DIALOG_PREFERENCES {
+            // Kept the moment it's changed.
+            let changed = self.settings.rows(ui);
+            if changed {
+                self.settings.save();
+                self.snaps = None;
+            }
+            return changed;
+        }
         let (changed, entered) = match key {
             menus::DIALOG_NEW => self.paging.new_rows(ui),
             menus::DIALOG_PAGE => self.paging.page_rows(ui),
@@ -124,9 +133,17 @@ impl AppHost for Ink {
         self.files.set_waker(waker.clone());
         self.strip.set_waker(waker.clone());
         self.tiles.set_waker(waker);
+        // What other Inks left behind unsaved, to ask about.
+        if let Some(dir) = crate::settings::dir() {
+            self.look_for_lost(&dir.join("autosave"));
+        }
         for path in std::mem::take(&mut self.startup) {
             self.open(path);
         }
+    }
+
+    fn exiting(&mut self, why: lntrn_app::Exit) {
+        self.last_words(why);
     }
 
     fn after_rebuild(&mut self, gpu: &Gpu, images: &mut Images, shell: &mut Shell<Self>) -> bool {

@@ -8,7 +8,8 @@ use lntrn_math::{Color, Rect, Vec2};
 use lntrn_ui::{ImageHandle, Ui};
 
 use crate::camera::Camera;
-use crate::theme::{ACTIVE, GROUND};
+use crate::prefs::Ground;
+use crate::theme::{ACTIVE, GROUND, PANEL};
 use crate::tiles::Tiles;
 
 /// The line round the page, logical px.
@@ -22,7 +23,26 @@ pub fn rect(area: Rect, cam: &Camera, size: Vec2) -> Rect {
     Rect::new(min, Vec2::new(max.x.round().max(min.x + 1.0), max.y.round().max(min.y + 1.0)))
 }
 
-pub fn draw(ui: &mut Ui, area: Rect, cam: &Camera, size: Vec2, checks: Option<ImageHandle>, tiles: &Tiles, doc: DocId) {
+/// What's behind the page where the drawing is see-through: the
+/// checks' sheet (once it's made), or one colour.
+#[derive(Clone, Copy)]
+pub enum Behind {
+    Checks(Option<ImageHandle>),
+    Fill(Color),
+}
+
+impl Behind {
+    /// As Preferences has it (`ground`), with the checks' sheet.
+    pub fn of(ground: Ground, checks: Option<ImageHandle>) -> Behind {
+        match ground {
+            Ground::Checks => Behind::Checks(checks),
+            Ground::White => Behind::Fill(Color::WHITE),
+            Ground::Dark => Behind::Fill(PANEL),
+        }
+    }
+}
+
+pub fn draw(ui: &mut Ui, area: Rect, cam: &Camera, size: Vec2, behind: Behind, tiles: &Tiles, doc: DocId) {
     ui.draw.rect(area, GROUND);
     let page = rect(area, cam, size);
     ui.draw.push_clip(area);
@@ -30,9 +50,12 @@ pub fn draw(ui: &mut Ui, area: Rect, cam: &Camera, size: Vec2, checks: Option<Im
     // it runs past.
     let line = (EDGE * ui.m.scale).round().max(1.0);
     ui.draw.stroke_rect(page.expand(line), line, 0.0, ACTIVE);
-    // The checks keep their size on the screen, and go with the page.
+    // What's behind it, as Preferences says: white, Lantern's dark, or
+    // checks, which keep their size on the screen and go with the page.
     let shown = page.intersection(&area);
-    if let (Some(sheet), false) = (checks, shown.is_empty()) {
+    if let Behind::Fill(color) = behind {
+        ui.draw.rect(shown, color);
+    } else if let (Behind::Checks(Some(sheet)), false) = (behind, shown.is_empty()) {
         let (w, h) = (f64::from(sheet.width), f64::from(sheet.height));
         ui.draw.push_clip(shown);
         let (first_x, first_y) = (((shown.min.x - page.min.x) / w).floor(), ((shown.min.y - page.min.y) / h).floor());

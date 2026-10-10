@@ -32,6 +32,8 @@ mod paths;
 mod pen;
 mod text;
 mod pointer;
+mod prefs;
+mod saves;
 mod shapes;
 mod snaps;
 mod strip;
@@ -263,6 +265,16 @@ impl Running {
         let mut requests = Vec::new();
         self.ink.act(&lntrn_ui::Action::new(id), &mut lntrn_ui::HostCx { pointer: Vec2::ZERO, requests: &mut requests });
         self.frames(2);
+    }
+
+    /// A row of a menu that asks in a dialog: the dialog is up after.
+    fn ask(&mut self, id: &str) {
+        let mut requests = Vec::new();
+        self.ink.act(&lntrn_ui::Action::new(id), &mut lntrn_ui::HostCx { pointer: Vec2::ZERO, requests: &mut requests });
+        for request in requests {
+            self.shell.request(&mut self.ink, request);
+        }
+        self.frames(3);
     }
 
     fn undo(&mut self, steps: usize) {

@@ -4,6 +4,7 @@
 
 mod actions;
 mod anchors;
+mod autosaving;
 mod boxes;
 mod camera;
 mod canvas;
@@ -47,6 +48,8 @@ mod picker;
 mod picking;
 mod pointer;
 mod polygons;
+mod prefs;
+mod recovery;
 mod rounding;
 mod rulers;
 mod select;

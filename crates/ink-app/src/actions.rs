@@ -40,6 +40,9 @@ impl Ink {
             EXPORT => self.ask_export(cx),
             EXPORT_GO => self.export_go(),
             TIDY => self.tidy(),
+            PREFERENCES => self.ask_preferences(cx),
+            RESTORE_FOUND => self.restore_found(),
+            DISCARD_FOUND => self.discard_found(),
             OPEN => self.files.pick_open(),
             SAVE => {
                 if let Some(doc) = active {
@@ -192,8 +195,6 @@ impl Ink {
                     self.nudge(lntrn_math::Vec2::new(*dx, *dy));
                 }
             }
-            // A greyed row: its slice hasn't come.
-            LATER => {}
             other => lntrn_core::log_error!("no such action: {other}"),
         }
     }

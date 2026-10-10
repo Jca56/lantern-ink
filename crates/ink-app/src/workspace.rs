@@ -152,6 +152,14 @@ impl Ink {
                 }
             }
         }
+        // Unsaved work's copies, as they fall due; and once, the ones
+        // another Ink left behind, asked about.
+        self.autosave_tick(ui);
+        if std::mem::take(&mut self.ask_found)
+            && let Some(dialog) = self.recovery_dialog()
+        {
+            cx.request(ShellRequest::Dialog(dialog));
+        }
         // A right press on a row or on the canvas: the selection's menu.
         // On a palette swatch: that swatch's.
         if let Some(menu) = swatch_menu {
@@ -228,9 +236,9 @@ impl Ink {
         // As a gesture under way would leave it, else as it is.
         let Ok((drawing, look)) = self.core.shown(doc) else { return };
         self.tiles.want(doc, drawing, look, cam.zoom, Rect::from_min_size(Vec2::ZERO - cam.corner(), area.size()));
-        page::draw(ui, area, &cam, page, self.icons.checker(), &self.tiles, doc);
+        page::draw(ui, area, &cam, page, page::Behind::of(self.settings.ground(), self.icons.checker()), &self.tiles, doc);
         if self.settings.pixel_grid {
-            crate::grid::draw(ui, area, &view, ink_doc::arrange::page_box(drawing), crate::grid::COLOR);
+            crate::grid::draw(ui, area, &view, ink_doc::arrange::page_box(drawing), self.settings.grid_color());
         }
         self.draw_guides(ui, area, &view);
         crate::rulers::draw(ui, &self.layout, &view, (input.over || guided).then_some(ui.state.pointer));

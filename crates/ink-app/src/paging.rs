@@ -161,7 +161,7 @@ impl Ink {
             (self.settings.new_width, self.settings.new_height) = (width, height);
             self.settings.save();
         }
-        let doc = self.core.new_doc(width, height);
+        let doc = self.core.new_doc_with(width, height, self.settings.decimals());
         self.tabs.add(doc);
     }
 

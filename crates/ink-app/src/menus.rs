@@ -1,7 +1,6 @@
 //! The title bar's six menus and the keys (ARCHITECTURE §8; the
-//! machinery is LS3's `menus.rs`). Rows whose work comes in a later
-//! slice of M4 are there, greyed, so the menus have their final shape
-//! from the start (`docs/M4.md` says which slice lights each).
+//! machinery is LS3's `menus.rs`). Every row does something since M4's
+//! last slice; "Let Claude In" comes with the live bridge (M5).
 
 use lntrn_props::Value;
 use lntrn_ui::keymap::CTX_WINDOW;
@@ -28,6 +27,12 @@ pub const EXPORT: &str = "file.export";
 pub const DIALOG_EXPORT: &str = "dialog.export";
 pub const EXPORT_GO: &str = "file.export_go";
 pub const TIDY: &str = "edit.tidy";
+/// Edit > Preferences, and its dialog's rows.
+pub const PREFERENCES: &str = "edit.preferences";
+pub const DIALOG_PREFERENCES: &str = "dialog.preferences";
+/// "Unsaved work found": the copies left behind, restored or let go.
+pub const RESTORE_FOUND: &str = "recovery.restore";
+pub const DISCARD_FOUND: &str = "recovery.discard";
 pub const OPEN: &str = "file.open";
 pub const SAVE: &str = "file.save";
 pub const SAVE_AS: &str = "file.save_as";
@@ -97,8 +102,6 @@ pub const NUDGE: &str = "pointer.nudge";
 /// and how many times that with Shift.
 pub const NUDGE_BY: f64 = 1.0;
 pub const NUDGE_MORE: f64 = 10.0;
-/// A row whose work isn't built yet: greyed, and it does nothing.
-pub const LATER: &str = "later";
 /// "Save first?" answered: save, then close.
 pub const SAVE_AND_CLOSE: &str = "tab.save_and_close";
 /// "Save first?" answered: close without saving.
@@ -148,11 +151,6 @@ pub fn path_action(op: crate::pathops::PathOp) -> Action {
     Action::new(PATH_OP).with("op", Value::Str(op.label().to_owned()))
 }
 
-/// A row that waits for its slice.
-fn later(label: &str) -> MenuItem {
-    row(label, LATER).enabled(false)
-}
-
 /// Undo's row, or Redo's: the step it's for by name, and that it's
 /// Claude's when it is ("Undo Claude's Move"). Dim with none.
 fn step_row(verb: &str, id: &str, step: Option<&Step>) -> MenuItem {
@@ -200,8 +198,7 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
                 sep(),
                 row("Tidy", TIDY).enabled(doc),
                 sep(),
-                later("Let Claude In"),
-                later("Preferences\u{2026}"),
+                row("Preferences\u{2026}", PREFERENCES),
             ],
         ),
         "object" => Menu::new(
@@ -303,6 +300,7 @@ pub fn keys() -> KeyConfig {
         ('s', ctrl, SAVE),
         ('s', shift, SAVE_AS),
         ('e', ctrl, EXPORT),
+        (',', ctrl, PREFERENCES),
         ('w', ctrl, CLOSE_TAB),
         ('q', ctrl, QUIT),
         ('z', ctrl, UNDO),

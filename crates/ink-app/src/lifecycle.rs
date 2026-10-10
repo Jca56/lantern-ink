@@ -17,7 +17,7 @@ impl Ink {
     /// New… asks; this is the tab bar's +, and what a window starts
     /// with), in a new tab.
     pub fn new_document(&mut self) {
-        let doc = self.core.new_doc(self.settings.new_width, self.settings.new_height);
+        let doc = self.core.new_doc_with(self.settings.new_width, self.settings.new_height, self.settings.decimals());
         self.tabs.add(doc);
     }
 
@@ -72,10 +72,13 @@ impl Ink {
     /// nothing in it to lose, though it has never been saved (so its
     /// tab shows no `•`, and closing it asks nothing).
     pub(crate) fn untouched(&self, doc: DocId) -> bool {
-        matches!(self.core.path(doc), Ok(None)) && self.core.history(doc).is_ok_and(|h| h.undoable().next().is_none() && h.redoable().next().is_none())
+        // (One that came back from an autosave copy is unsaved work,
+        // whatever's been done to it since.)
+        !self.recovered.contains(&doc) && matches!(self.core.path(doc), Ok(None)) && self.core.history(doc).is_ok_and(|h| h.undoable().next().is_none() && h.redoable().next().is_none())
     }
 
     pub(crate) fn close(&mut self, doc: DocId) {
+        self.recovered.retain(|d| *d != doc);
         self.tiles.forget(doc);
         self.tabs.remove(doc);
         if let Err(e) = self.core.close(doc) {
@@ -115,6 +118,13 @@ impl Ink {
                 Done::OpenPicked(None) | Done::SavePicked { path: None, .. } | Done::ExportPicked(None) => {}
                 Done::ExportPicked(Some(path)) => self.export_to(path),
                 Done::Exported(Ok(said) | Err(said)) => self.toast(said),
+                Done::Copied { doc, path, state, result } => {
+                    if let Err(e) = &result {
+                        lntrn_core::log_error!("autosave of {doc} to {}: {e}", path.display());
+                    }
+                    self.autosave.written(doc, &path, state, result.is_ok());
+                }
+                Done::Recovered { path, name, result } => self.recovered(&path, name, result),
                 Done::Read { path, result } => self.opened(&path, result),
                 Done::Written { job, then, result } => {
                     let name = file_name(&job.path);

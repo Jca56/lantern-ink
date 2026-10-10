@@ -1263,6 +1263,31 @@ As LS3 §7, to the letter where it can be:
   - **Edit > Tidy drops what nothing uses** (`Command::Tidy`, with
     nothing asked for by name) as one step, and the status bar says
     what went. Comments, ids and titles stay.
+  **Not losing work, as built in M4f** (`autosaving.rs`,
+  `recovery.rs`; `ink_core::autosave`):
+  - **Each drawing with unsaved work has a copy** in the autosave
+    folder, written (on the job pool) once it's been left alone five
+    seconds, and after a minute of steady work at the latest. The copy
+    goes when the changes do: saved for real, the tab closed, a quit
+    that was asked about. So what's in the folder is what a crash
+    would lose. This is LS3's `autosave.rs`, copied.
+  - **Copies are named for their writer** (`window-{pid}-{doc}-{name}
+    .svg`): as a window opens, the ones whose process is gone
+    (`autosave::orphans`) are asked about, "Unsaved work found",
+    restore them all or discard them all. A restored drawing has no
+    file of its own: it's unsaved work from the start, under the name
+    it had, and its copy is that window's to keep.
+  - **A window that ends without being asked** (the compositor gone)
+    writes a last copy of everything unsaved on its way out
+    (`AppHost::exiting`). A kill gets no call: that's what the copies
+    as it goes are for.
+  **Preferences, as built in M4f** (`prefs.rs`): what things dragged
+  land on (the grid, other shapes and the page, guides), how many
+  decimals a new drawing is written with (said on its root from the
+  start, where it isn't three), the pixel grid's and the guides'
+  colours (one of six each), and what's behind the page (checks,
+  white, or the dark of Lantern's panels). Each is kept the moment
+  it's changed.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**
@@ -1383,7 +1408,7 @@ As LS3 §7, to the letter where it can be:
 | **M1** ✅ | The workspace; `ink-geom`, `ink-doc`, `ink-render`, `ink-core` | Every corpus file round-trips byte-identical, renders in agreement with `lntrn-svg`, and survives edit → undo unchanged. Core saves, loads and exports PNG, headless. Built 2026-10-06; the done-test is `ink-core/tests/m1.rs` |
 | **M2** ✅ | `ink-tools` + `lantern-ink-mcp`, the \* tools | Registered (with approval). Claude draws an icon headless, previews it, and saves an `.svg` a Lantern app shows 🎉. Built, deployed and registered 2026-10-06 (17 tools); the done-test passed in a fresh Claude Code session the same day (a session's tools are fixed when it starts) |
 | **M3** ✅ | Operations: every Command in §3.4 as a Command + tool + test, in five slices: **a** structure and transforms (built 2026-10-06), **b** paint (built 2026-10-07), **c** paths (built 2026-10-07), **d** text (built 2026-10-07), **e** tidy (built 2026-10-07) (Alva's order, 2026-10-06) | Path editing, transforms, align, gradients, clips, text, boolean ops, tidy export all work over MCP. They do: the done-test (a stress sheet, all 39 tools, a fresh session) ran 2026-10-07, and what it found was fixed the same day |
-| **M4** | `lantern-ink`, the window, in the LS3 look, in six slices (Alva's order, 2026-10-07): **a** the shell and the viewer (built 2026-10-07), **b** the object tree, the Pointer and undo, **c** paint and the shape tools, **d** the Node tool and the Pen, **e** text, gradients and the eyedropper, **f** the icon aids and not losing work | The scope checklist written with Alva at M4's start (D20) is `docs/M4.md`: every box ticked or struck by her |
+| **M4** | `lantern-ink`, the window, in the LS3 look, in six slices (Alva's order, 2026-10-07): **a** the shell and the viewer (built 2026-10-07), **b** the object tree, the Pointer and undo, **c** paint and the shape tools, **d** the Node tool and the Pen, **e** text, gradients and the eyedropper, **f** the icon aids and not losing work. All six are built (the last 2026-10-09) | The scope checklist written with Alva at M4's start (D20) is `docs/M4.md`: every box ticked or struck by her |
 | **M5** | The live bridge | Alva watches Claude draw in her window, with shared undo |
 
 LUI2 changes Ink is known to want so far: possibly one new crate (D11).

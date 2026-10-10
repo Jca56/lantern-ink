@@ -48,6 +48,14 @@ props! {
         /// one's, unless another is asked for. An icon's grid at first.
         pub new_width: f64 = 24.0 => { id: 13, hard: 0.001..=100000.0 },
         pub new_height: f64 = 24.0 => { id: 14, hard: 0.001..=100000.0 },
+        /// Preferences: how many decimals a new drawing's numbers are
+        /// written with (D15: three).
+        pub new_decimals: i64 = 3 => { id: 15 },
+        /// Preferences: which of the pixel grid's colours, which of the
+        /// guides', and what's behind the page (`prefs.rs`).
+        pub grid_tint: i64 = 0 => { id: 16 },
+        pub guide_tint: i64 = 0 => { id: 17 },
+        pub page_ground: i64 = 0 => { id: 18 },
     }
 }
 

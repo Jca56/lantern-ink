@@ -1410,6 +1410,48 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     their names without asking (only the name chosen is the picker's
     to ask about); Export remembers what it was set to only until Ink
     closes.
+- **M4f's f5 is built** (2026-10-09, 585 tests, deployed; **not yet
+  looked at by Alva**), and with it **all of M4f, and every slice of
+  M4**. M4 is done when Alva has ticked or struck every box of
+  `docs/M4.md`. Next after that: **M5, the live bridge** (Claude
+  drawing in this window; ARCHITECTURE §7).
+  - **Autosave in the window is `autosaving.rs`** (LS3's
+    `autosave.rs`, copied: when a copy is due, and which files are
+    this window's) **and `recovery.rs`** (`Ink::autosave_tick` each
+    frame, the copies written by `Files::copy`; `look_for_lost`,
+    `recovery_dialog`, `restore_found`, `discard_found`; `last_words`
+    from `AppHost::exiting`).
+  - **`ink_core::autosave`** is public now: `file_name(who, doc,
+    name)` and `orphans(dir, who, program)` (a `who`'s copies whose
+    process is gone; a pid counts as running only while it's that
+    program). The window offers back `window-…` copies only: **the
+    MCP server's (`mcp-…`) are never offered by anyone**, as before.
+  - **A restored drawing isn't "untouched"** (`Ink::recovered`): it
+    shows its `•`, and closing it asks. `Tabs::add_as` names its tab.
+  - **A drawing never saved and undone back to nothing still has a
+    copy** (it has work to redo, and its tab says `•`): the window's
+    own idea of unsaved, kept.
+  - **Preferences is `prefs.rs`** (`Settings::rows`, kept as each row
+    changes; `grid_color`, `guide_color`, `ground`, `decimals`).
+    `Settings` has `new_decimals`, `grid_tint`, `guide_tint` and
+    `page_ground`. Ctrl+, opens it.
+  - **A new drawing's decimals are said from the start**
+    (`Document::new_with`, `Core::new_doc_with`), so setting them is
+    no step and the drawing is still untouched.
+  - **`page::Behind`** is what the canvas draws under the page.
+  - **No row of any menu is greyed for a later slice** (`menus::later`
+    and `LATER` are gone). "Let Claude In" left the Edit menu until
+    the bridge exists; the CLAUDE pill still says so.
+  - Test helpers: `Running::ask(id)` does a menu's action and lets
+    the shell open the dialog it asks for (`run` drops it).
+  - **Not in f5:** restoring some of what was found and not the rest
+    (it's all or none, as LS3); a restored drawing going back to the
+    file it was (the copy's name has no folder in it); Preferences'
+    own colour picker (six swatches each); keys to rebind.
+  - **File sizes to watch** (flagged at 500): `ink-geom/src/meet.rs`
+    477, `ink_tests.rs` 475, `ink-geom/src/combine.rs` 463,
+    `ink-doc/src/pathedit.rs` 459, `noding.rs` 457, `tiles.rs` 452,
+    `grading.rs` 451, `ink-doc/src/outline.rs` 450.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

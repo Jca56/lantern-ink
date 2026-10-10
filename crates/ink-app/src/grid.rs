@@ -15,9 +15,6 @@ use crate::shapes;
 
 /// How far apart, logical px, the grid's lines are before it shows.
 pub const CELL_MIN: f64 = 8.0;
-/// Its lines unless Preferences says otherwise: a grey that shows on
-/// light and on dark.
-pub const COLOR: Color = Color::rgba(0.5, 0.5, 0.5, 0.45);
 
 /// The grid's lines over the part of `page` (the drawing's
 /// coordinates) that shows in `area`: where each line down is across
