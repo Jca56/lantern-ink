@@ -159,15 +159,16 @@ fn the_box_holds_a_shape_tools_own_settings() {
 }
 
 #[test]
-fn a_shape_lands_on_whole_units_unless_ctrl_frees_it() {
+fn a_shape_lands_on_the_grid_unless_ctrl_frees_it() {
     let mut r = empty("shapes-grid");
     r.ink.tools.select(Tool::Rect);
-    r.drag(r.on_page(4.3, 29.6), r.on_page(13.8, 36.4));
-    assert_eq!(r.newest(), "<rect x=\"4\" y=\"30\" width=\"10\" height=\"6\" fill=\"#f3b700\"/>");
+    // Whole units, and this far in, half ones.
+    r.drag(r.on_page(4.2, 29.9), r.on_page(13.8, 36.4));
+    assert_eq!(r.newest(), "<rect x=\"4\" y=\"30\" width=\"10\" height=\"6.5\" fill=\"#f3b700\"/>");
     // Out from the middle, the middle is on the grid too.
     r.h.set_mods(Modifiers::ALT);
     r.drag(r.on_page(30.4, 20.2), r.on_page(33.3, 22.1));
-    assert_eq!(r.newest(), "<rect x=\"27\" y=\"18\" width=\"6\" height=\"4\" fill=\"#f3b700\"/>");
+    assert_eq!(r.newest(), "<rect x=\"27.5\" y=\"18\" width=\"6\" height=\"4\" fill=\"#f3b700\"/>");
     // With Ctrl, where the pointer is, as finely as the file says.
     r.h.set_mods(Modifiers::CTRL);
     r.drag(r.on_page(4.25, 40.5), r.on_page(10.75, 44.125));

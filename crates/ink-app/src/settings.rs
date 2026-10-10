@@ -28,6 +28,15 @@ props! {
         pub align_to_page: bool = false => { id: 3 },
         /// The paint section is folded away to its heading.
         pub paint_folded: bool = false => { id: 4 },
+        /// View > Snapping: drags land on the grid and on lines, and
+        /// show what they landed on.
+        pub snapping: bool = true => { id: 5 },
+        /// View > Pixel Grid: a line at every unit, zoomed in.
+        pub pixel_grid: bool = true => { id: 6 },
+        /// Preferences: what snapping lands things on. Whole and half
+        /// units; other shapes and the page.
+        pub snap_grid: bool = true => { id: 7 },
+        pub snap_shapes: bool = true => { id: 8 },
     }
 }
 

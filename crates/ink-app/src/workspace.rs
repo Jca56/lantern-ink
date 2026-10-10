@@ -191,6 +191,8 @@ impl Ink {
         let to_window = viewport.to_page.then(&Affine::new(unit.x, 0.0, 0.0, unit.y, origin.x, origin.y));
         let Some(to_doc) = to_window.inverse() else { return };
         let view = View { to_window, to_doc, scale: ui.m.scale };
+        // What a drag lands on this frame is the tools' to say.
+        self.landed = crate::snap::Landed::default();
         // A shape tool draws; the selection's box shows under it, to be
         // taken hold of with the Pointer.
         match shapes::kind_of(tool).filter(|_| !popup) {
@@ -217,6 +219,10 @@ impl Ink {
         let Ok((drawing, look)) = self.core.shown(doc) else { return };
         self.tiles.want(doc, drawing, look, cam.zoom, Rect::from_min_size(Vec2::ZERO - cam.corner(), area.size()));
         page::draw(ui, area, &cam, page, self.icons.checker(), &self.tiles, doc);
+        if self.settings.pixel_grid {
+            crate::grid::draw(ui, area, &view, ink_doc::arrange::page_box(drawing), crate::grid::COLOR);
+        }
+        scene.landed = (self.landed.x.map(|x| to_window.apply(Vec2::new(x, 0.0)).x), self.landed.y.map(|y| to_window.apply(Vec2::new(0.0, y)).y));
         overlay::draw(ui, area, &scene);
     }
 }

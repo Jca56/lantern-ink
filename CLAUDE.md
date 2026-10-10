@@ -1283,6 +1283,56 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     and bold (`lntrn-text` has two); the Box's rows under the Pointer
     (take the Text tool).
 
+- **M4f (the icon aids, and not losing work) is under way**, in five
+  pieces: **f1** the pixel grid and snapping, **f2** rulers and guides,
+  **f3** the preview strip, **f4** File > New…, Page…, Export… and
+  Edit > Tidy, **f5** autosave and what it found, Preferences, and the
+  last greyed rows. Alva's calls, 2026-10-09: **rulers are built** (a
+  guide is dragged out of one; View > Rulers hides them); **the
+  preview strip is at the bottom of the right panel**, folding away;
+  **Preferences holds the essentials and the look** (what snapping
+  lands on, a new drawing's decimals, the grid's and guides' colours,
+  the checks behind the page); and **straight through**, as slice e:
+  each piece committed and pushed once it's tested and deployed ("M4f
+  pixel grid and snapping", …), **stopping only at the end of M4f,
+  with one checklist for all of it**.
+- **M4f's f1 is built** (2026-10-09, 547 tests, deployed).
+  - **What lands where is `snap.rs`** (no window; LS3's `snap.rs` with
+    a grid under it): `Targets` (lines down and across, the grid's
+    step, how near a line draws), and the ways something lands on
+    them: `point`, `edge`, `diagonal`, `moved`, and `handle` (each
+    handle of the selection's box). `Landed` is the lines landed on.
+  - **Nearest wins, a line before the grid where they're as near.** A
+    line reaches eleven px; the grid reaches everywhere. So a line off
+    the grid takes only what's nearer it than the grid is.
+  - **Half units come in with zoom** (`snap::step_for`): once they're
+    six px apart on the screen. A 512-unit page fitted lands things on
+    whole units; an icon's page, on halves too. **My call, not Alva's:
+    she was told at f1's handoff.**
+  - **The window's side is `snapping.rs`**: `Ink::snap_to(ui, view,
+    doc, skip)` before a tool reads the drawing (None while View >
+    Snapping is off or Ctrl is down), `of_shapes` (which boxes are
+    lines: shapes and texts that show, and what stands at the
+    Pointer's level; not what's dragged), `add_anchors` (the Node
+    tool's and the Pen's). What a tool landed on goes in `Ink::landed`,
+    which the canvas clears each frame and the overlay draws.
+  - **A moved box lands by an edge on the grid, never its middle**; on
+    a line by its left, middle or right. So something off the grid is
+    pulled onto it both ways by any drag, as in other editors.
+  - **`shapes::grid_for` is a whole step of the grid** still; nothing
+    rounds to it by itself any more (`on_grid` is gone).
+  - **The pixel grid is `grid.rs`**: whole units across the page, over
+    the drawing, once they're eight px apart.
+  - `Settings` has `snapping`, `pixel_grid`, `snap_grid` and
+    `snap_shapes` now (the last two wait for Preferences, f5).
+  - The canvas's keys (the arrows, Escape) are `keys.rs` now, out of
+    `pointer.rs` (which was 479 lines).
+  - **Not in f1:** the gradient's ends, a curve's handles and a bent
+    segment land nowhere (free, as Alva chose for handles); a box
+    turned or scaled about its middle lands by the corner dragged
+    only; numbers typed or dragged in the Box aren't snapped; equal
+    gaps between shapes ("smart" spacing).
+
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a
   machine whose LUI2 is behind won't even load the workspace (it was

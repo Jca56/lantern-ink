@@ -54,9 +54,9 @@ impl Running {
 fn a_click_and_typing_make_a_text() {
     let mut r = blank("text-types");
     let doc = r.doc();
-    // A click puts the caret there, on whole units; nothing's in the
+    // A click puts the caret there, on the grid; nothing's in the
     // drawing till something is typed.
-    r.click(r.spot(10.3, 20.2));
+    r.click(r.spot(10.2, 20.2));
     assert_eq!((r.ink.texting.caret(), r.steps().len(), r.svg().as_str()), (Some((0, 0)), 0, BLANK));
     // Typed, it's shown as it goes: lettered as the Box says, painted
     // as the last shape was filled, a sixth of the icon's page tall.

@@ -1018,10 +1018,9 @@ As LS3 §7, to the letter where it can be:
     LS3). A polygon fills the box dragged (stretched, unless Shift
     keeps it regular); a star is a polygon with as many corners again
     between, part of the way in.
-  - **A new shape lands on whole units of the drawing**, as LS3's land
-    on whole pixels (finer only on a page of a few units); Ctrl draws
-    free of it. Slice f's snapping takes this over, with half units,
-    other shapes' edges, and a switch.
+  - **A new shape lands on the grid**, as LS3's land on whole pixels,
+    or on a line of what's there; Ctrl draws free of it (snapping,
+    below).
   - **A new shape is painted as the last one was** (`Ink::paints`: the
     fill, the stroke, its line and the opacity last set in the paint
     section). A line is all stroke: its own, or the fill's colour.
@@ -1160,6 +1159,38 @@ As LS3 §7, to the letter where it can be:
     its own face), size, bold, italic, alignment, line height; and
     says so when the font a text asks for isn't on this machine, with
     what drew instead.
+  **Snapping and the pixel grid, as built in M4f** (`snap.rs`,
+  `snapping.rs`, `grid.rs`):
+  - **Everything dragged lands** on the grid or on a line, each way by
+    itself, and whichever is nearest wins. The grid is whole units of
+    the drawing, and half ones once those are six px apart on the
+    screen (on a page of only a few units, as fine as leaves it some
+    sixteen steps across). The lines are the edges and middle of the
+    page, of every shape and text that shows, and of what stands at
+    the Pointer's level; the Node tool and the Pen add the anchors
+    that stay where they are. A line draws things from eleven px away
+    (LS3's reach), the grid from wherever they are; a line as near as
+    the grid wins.
+  - **What lands:** a shape tool's two corners, a Pen's point, a
+    dragged anchor (the one pressed), a new text's place, and the
+    selection's box: moved whole, its left, middle or right on a line
+    or an edge of it on the grid (with Shift, only the way it goes); a
+    side, the one way it goes; a corner, as a point, or with Shift
+    along its diagonal. A turn, a handle of a curve, a bent segment
+    and a gradient's ends are free.
+  - **A line landed on shows** right across the canvas, in LS3's cyan,
+    for as long as the drag is on it (the Pen's shows before the press:
+    where a point would go). The grid isn't shown as landed on: the
+    pixel grid is what shows it.
+  - **A tool asks for its lines before it reads the drawing**
+    (`Ink::snap_to`, kept from frame to frame while nothing they hang
+    on changes), lands its point or box on them, and leaves what it
+    landed on in `Ink::landed` for that frame's overlay.
+  - **View > Snapping is the switch; Ctrl holds it off.** What it lands
+    things on (the grid, the shapes) is Preferences'.
+  - **The pixel grid** is a line at every whole unit across the page,
+    drawn over the drawing in screen px, once units are eight px
+    apart; View > Pixel Grid hides it.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

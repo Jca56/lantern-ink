@@ -3,8 +3,10 @@
 //! handles out, one each way: on the path whose loose end is the one
 //! anchor picked, else as the first point of a new path, on top of the
 //! level the Pointer is in. A press on that path's other end closes it.
-//! Anchors land on whole units of the drawing (Ctrl frees them); a
-//! handle pulled out is free (Shift: at a multiple of 45°).
+//! Anchors land on the grid, level with the anchors that are there, or
+//! on another shape's line (`snap.rs`; Ctrl frees them), and where one
+//! would land shows before the press; a handle pulled out is free
+//! (Shift: at a multiple of 45°).
 //!
 //! Everything else is the Node tool's, which runs under the Pen
 //! (`noding.rs`): anchors, handles and segments are dragged, and a
@@ -232,6 +234,10 @@ impl Ink {
         }
         let (s, pointer, mods) = (view.scale, ui.state.pointer, ui.state.mods);
         let at = view.to_doc.apply(pointer);
+        // What a point lands on: not on the box of the path it's put
+        // on the end of, which it changes.
+        let own: Vec<NodeId> = self.noding.picked.iter().map(|(node, _)| *node).collect();
+        let mut lines = if input.over && self.penning.drag.is_none() { self.snap_to(ui, view, doc, &own) } else { None };
         let Ok(drawing) = self.core.doc(doc) else { return false };
         let Ok((looks, _)) = self.core.shown(doc) else { return false };
         let Some(tab) = self.tabs.iter().find(|t| t.doc == doc) else { return false };
@@ -249,14 +255,17 @@ impl Ink {
         let out = self.penning.out.map(|(_, _, out)| out);
         let window = |p: Vec2| view.to_window.apply(p);
         let closes = tip.as_ref().and_then(|t| t.other.map(|(_, end, _)| window(t.to_doc.apply(end)))).filter(|end| input.over && self.penning.drag.is_none() && !matches!(hover, Some((_, Hit::Handle { .. }))) && end.distance(pointer) <= CLOSE * s / 2.0);
-        // A new point: on whole units of the drawing, unless Ctrl.
-        let grid = if mods.ctrl() {
-            0.0
-        } else {
-            let page = ink_doc::arrange::page_box(drawing);
-            shapes::grid_for(page.width().max(page.height()))
-        };
-        let place = shapes::on_grid(at, grid);
+        // A new point: on the grid, or level with an anchor that's there
+        // or on a line of another shape, unless Ctrl. What it would land
+        // on shows before the press, where a press would place one.
+        let mut place = at;
+        if let Some(lines) = lines.as_mut().filter(|_| hover.is_none() && closes.is_none()) {
+            if let Some((_, start, _)) = self.penning.start {
+                lines.add_point(start);
+            }
+            crate::snapping::add_anchors(lines, &shown, &[]);
+            (place, self.landed) = lines.point(at);
+        }
         // The handle pulled out of a point by a press at `from`: as far
         // as the pointer has gone from there.
         let pulled = |from: Vec2| (window(from).distance(pointer) >= PULL_MIN * s).then(|| if mods.shift() { octant(at - from) } else { at - from });

@@ -43,16 +43,14 @@ impl Ink {
         if self.shaping.is_some_and(|s| s.doc != doc || s.kind != kind) {
             self.drop_shape();
         }
-        // On whole units of the drawing, so a shape's numbers are plain
-        // ones; freely, with Ctrl.
-        let grid = match self.core.doc(doc) {
-            Ok(drawing) if !ui.state.mods.ctrl() => {
-                let page = ink_doc::arrange::page_box(drawing);
-                shapes::grid_for(page.width().max(page.height()))
-            }
-            _ => 0.0,
-        };
-        let at = shapes::on_grid(view.to_doc.apply(ui.state.pointer), grid);
+        // On the grid, so a shape's numbers are plain ones, or on a line
+        // of what's there already (`snap.rs`); freely, with Ctrl.
+        let lines = if input.pressed || self.shaping.is_some() { self.snap_to(ui, view, doc, &[]) } else { None };
+        let mut at = view.to_doc.apply(ui.state.pointer);
+        if let Some(lines) = &lines {
+            (at, self.landed) = lines.point(at);
+        }
+        let grid = lines.map_or(0.0, |lines| lines.step);
         if input.pressed && self.shaping.is_none() && self.core.begin(doc, Actor::Alva).is_ok() {
             self.shaping = Some(Shaping { doc, kind, from: at });
         }

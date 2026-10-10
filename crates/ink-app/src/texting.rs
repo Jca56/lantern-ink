@@ -33,7 +33,6 @@ use crate::overlay::Scene;
 use crate::paint::{self, Paint, Which};
 use crate::picking::top_at;
 use crate::pointer::View;
-use crate::shapes;
 use crate::tools::Tool;
 use crate::typing::{Caret, Go, Words};
 
@@ -330,6 +329,7 @@ impl Ink {
         if input.pressed {
             self.type_done();
             let per_unit = view.to_window.linear(Vec2::X).length().max(1e-12);
+            let lines = self.snap_to(ui, view, doc, &[]);
             let Ok(drawing) = self.core.doc(doc) else { return };
             let under = top_at(drawing, at, REACH * s / per_unit).filter(|&id| drawing.get(id).is_some_and(|n| n.kind == Kind::Text));
             let editing = match under.and_then(|id| drawing.get(id)) {
@@ -341,12 +341,11 @@ impl Ink {
                     Editing { doc, node: Some(node.id), fresh: None, at: Vec2::new(first(node, "x"), first(node, "y")), group: node.parent.unwrap_or(drawing.root()), words, caret, leading: written.leading, typed: None, moved: now, stamp }
                 }
                 None => {
-                    // On whole units of the drawing, unless Ctrl.
-                    let page = ink_doc::arrange::page_box(drawing);
-                    let grid = if ui.state.mods.ctrl() { 0.0 } else { shapes::grid_for(page.width().max(page.height())) };
+                    // On the grid or a line of what's there, unless Ctrl.
+                    let place = lines.map_or(at, |lines| lines.point(at).0);
                     let group = self.tabs.iter().find(|t| t.doc == doc).map_or(drawing.root(), |tab| tab.selection.context(drawing));
                     let into = geometry::to_doc(drawing, group).and_then(|t| t.inverse()).unwrap_or(Affine::IDENTITY);
-                    Editing { doc, node: None, fresh: None, at: into.apply(shapes::on_grid(at, grid)), group, words: Words::default(), caret: Caret::default(), leading: self.texting.letters.leading, typed: None, moved: now, stamp }
+                    Editing { doc, node: None, fresh: None, at: into.apply(place), group, words: Words::default(), caret: Caret::default(), leading: self.texting.letters.leading, typed: None, moved: now, stamp }
                 }
             };
             if let Some(node) = editing.node {

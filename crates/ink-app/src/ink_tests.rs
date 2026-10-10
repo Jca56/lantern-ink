@@ -31,6 +31,7 @@ mod pen;
 mod text;
 mod pointer;
 mod shapes;
+mod snaps;
 mod tree;
 
 /// Where the tiles' pictures are kept in a test.

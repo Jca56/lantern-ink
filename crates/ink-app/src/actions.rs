@@ -147,6 +147,8 @@ impl Ink {
                 };
                 self.op(Op::Align(part("x"), part("y")), cx);
             }
+            PIXEL_GRID => self.toggle_pixel_grid(),
+            SNAPPING => self.toggle_snapping(),
             ALIGN_TO_PAGE => {
                 self.settings.align_to_page = !self.settings.align_to_page;
                 self.settings.save();

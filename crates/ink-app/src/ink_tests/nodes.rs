@@ -93,13 +93,13 @@ fn the_node_tool_picks_shapes_and_their_anchors() {
 }
 
 #[test]
-fn anchors_drag_onto_whole_units_and_land_as_one_step() {
+fn anchors_drag_onto_the_grid_and_land_as_one_step() {
     let mut r = scene("nodes-move");
     let doc = r.doc();
     r.hill();
     // Shown as it goes, with the drawing untouched; the anchor's handle
     // goes with it.
-    r.drag_to(r.spot(20.0, 20.0), r.spot(23.4, 21.7));
+    r.drag_to(r.spot(20.0, 20.0), r.spot(23.2, 21.8));
     assert!(r.ink.core.gesturing(doc) && r.steps().is_empty() && r.svg() == SCENE);
     assert!(r.ink.core.shown(doc).unwrap().0.to_svg().contains("d=\"M4 20 C4 8 23 10 23 22 L20 30\""));
     r.let_go();
@@ -115,7 +115,7 @@ fn anchors_drag_onto_whole_units_and_land_as_one_step() {
     r.drag(r.spot(23.0, 22.0), r.spot(23.0, 19.8));
     assert_eq!((r.says(HILL, "d").as_deref(), r.steps().last().map(String::as_str)), (Some("M4 18 C4 6 23 8 23 20 L20.5 30.25"), Some("Move Anchors")));
     // Gone nowhere, nothing was done; nor by a drag given up.
-    r.drag(r.spot(23.0, 20.0), r.spot(23.3, 20.4));
+    r.drag(r.spot(23.0, 20.0), r.spot(23.2, 20.2));
     assert_eq!(r.steps().len(), 3);
     r.drag_to(r.spot(23.0, 20.0), r.spot(30.0, 26.0));
     assert!(r.ink.core.gesturing(doc));

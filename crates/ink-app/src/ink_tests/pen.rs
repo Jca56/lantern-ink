@@ -35,9 +35,9 @@ fn the_pen_draws_a_path_point_by_point() {
     // The first point is the Pen's own: nothing is in the drawing yet.
     r.click(r.spot(4.0, 4.0));
     assert_eq!((r.ink.penning.start(), r.steps().len(), r.svg().as_str()), (Some(Vec2::new(4.0, 4.0)), 0, PAGE));
-    // The second makes the path: on whole units, painted as the last
+    // The second makes the path: on the grid, painted as the last
     // shape was, on top, selected, its end the anchor to go on from.
-    r.click(r.spot(20.3, 4.4));
+    r.click(r.spot(20.2, 4.2));
     assert_eq!(r.ink.core.doc(doc).unwrap().markup(NEW).unwrap(), "<path d=\"M4 4 H20\" fill=\"#f3b700\"/>");
     assert_eq!((r.steps(), r.selected(), r.anchors(), r.ink.penning.start()), (vec!["Pen".to_owned()], vec![NEW], vec![(NEW, a(4))], None));
     // A click is a corner.

@@ -69,6 +69,8 @@ pub const ZOOM_OUT: &str = "view.zoom_out";
 pub const FIT: &str = "view.fit";
 /// The page at its own size: a px of it a px of the screen.
 pub const ACTUAL: &str = "view.actual";
+pub const PIXEL_GRID: &str = "view.pixel_grid";
+pub const SNAPPING: &str = "view.snapping";
 /// A tool's letter was pressed: `key`.
 pub const TOOL_KEY: &str = "tool.key";
 /// Escape on the canvas, and the arrow keys.
@@ -107,6 +109,15 @@ pub struct MenuState<'a> {
     pub effects: crate::effects::Can,
     /// Align is against the page.
     pub align_to_page: bool,
+    /// What the View menu has ticked.
+    pub view: Ticks,
+}
+
+/// The View menu's ticks.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Ticks {
+    pub pixel_grid: bool,
+    pub snapping: bool,
 }
 
 fn row(label: &str, id: &str) -> MenuItem {
@@ -235,8 +246,8 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
                 row("Fit to Window", FIT).enabled(doc),
                 row("Actual Size", ACTUAL).enabled(doc),
                 sep(),
-                later("Pixel Grid"),
-                later("Snapping"),
+                row("Pixel Grid", PIXEL_GRID).checked(st.view.pixel_grid),
+                row("Snapping", SNAPPING).checked(st.view.snapping),
                 later("Guides"),
             ],
         ),
@@ -340,7 +351,7 @@ mod tests {
     #[test]
     fn every_title_menu_is_there() {
         let recent = Recent::default();
-        let st = MenuState { has_doc: true, undo: None, redo: None, recent: &recent, picked: Picked::default(), paths: crate::pathops::Can::default(), effects: crate::effects::Can::default(), align_to_page: false };
+        let st = MenuState { has_doc: true, undo: None, redo: None, recent: &recent, picked: Picked::default(), paths: crate::pathops::Can::default(), effects: crate::effects::Can::default(), align_to_page: false, view: Ticks::default() };
         for (_, name) in TITLE_MENUS {
             assert!(menu(name, &st).is_some(), "{name}");
         }

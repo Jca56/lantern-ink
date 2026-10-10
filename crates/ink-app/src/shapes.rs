@@ -6,10 +6,10 @@
 //! Alva's choices, as in LS3: Shift draws a square, a circle, a regular
 //! polygon, or a line at a multiple of 45°; Alt draws out from the
 //! middle. A new shape is painted as the last one was. And as LS3's
-//! land on whole pixels, Ink's land on whole units of the drawing (an
-//! icon's own pixels), so their numbers are plain ones; Ctrl draws
-//! free of that. (Half units, other shapes' edges and a switch for it
-//! all are slice f's snapping.)
+//! land on whole pixels, Ink's land on the grid (whole units of the
+//! drawing, an icon's own pixels, and half ones zoomed in) or on a
+//! line of what's there (`snap.rs`), so their numbers are plain ones;
+//! Ctrl draws free of that.
 
 use ink_doc::Precision;
 use ink_geom::{Cap, Join};
@@ -71,16 +71,11 @@ impl Default for Settings {
     }
 }
 
-/// What a new shape's corners land on, for a page `page` units along
-/// its longer side: whole units, or on a page of only a few units, as
-/// fine as leaves it some sixteen steps across.
+/// A whole step of the grid things land on (`snap.rs`), for a page
+/// `page` units along its longer side: a unit, or on a page of only a
+/// few units, as fine as leaves it some sixteen steps across.
 pub fn grid_for(page: f64) -> f64 {
     10f64.powf((page.max(1e-9) / 16.0).log10().floor()).min(1.0)
-}
-
-/// `p` on the nearest crossing of a grid `grid` units apart.
-pub fn on_grid(p: Vec2, grid: f64) -> Vec2 {
-    if grid > 0.0 { Vec2::new((p.x / grid).round() * grid, (p.y / grid).round() * grid) } else { p }
 }
 
 /// The fewest and the most sides a polygon is drawn with.
@@ -279,7 +274,6 @@ mod tests {
         // Whole units on an icon's page and on a big one; finer only
         // where a unit is most of the page.
         assert_eq!((grid_for(24.0), grid_for(512.0), grid_for(16.0), grid_for(8.0), grid_for(1.0)), (1.0, 1.0, 1.0, 0.1, 0.01));
-        assert_eq!((on_grid(Vec2::new(3.4, 29.5), 1.0), on_grid(Vec2::new(0.26, -0.24), 0.1).x), (Vec2::new(3.0, 30.0), 0.30000000000000004));
         assert_eq!((kind_of(Tool::Polygon), kind_of(Tool::Pointer), Kind::Ellipse.label()), (Some(Kind::Polygon), None, "Ellipse"));
     }
 }

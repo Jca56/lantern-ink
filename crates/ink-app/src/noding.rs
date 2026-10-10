@@ -1,13 +1,13 @@
 //! The Node tool on the canvas (ARCHITECTURE §8): the selected shapes
 //! show their anchors, and a press takes one (`nodes.rs` has what's
 //! under the pointer). A click on an anchor picks it (Shift adds or
-//! lets go); a drag moves every anchor picked, onto whole units of the
-//! drawing unless Ctrl frees it (Alva's choice, as shapes land). A
-//! picked anchor shows its handles: one dragged takes the other round
-//! while they're in line, and goes alone with Alt. A segment dragged
-//! bends, the point taken following the pointer. A click on a shape
-//! picks that shape, itself, whatever group it's in; a drag on nothing
-//! is a marquee over anchors.
+//! lets go); a drag moves every anchor picked, the one pressed landing
+//! on the grid, level with an anchor that stays, or on another shape's
+//! line (`snap.rs`; Ctrl frees it). A picked anchor shows its handles:
+//! one dragged takes the other round while they're in line, and goes
+//! alone with Alt. A segment dragged bends, the point taken following
+//! the pointer. A click on a shape picks that shape, itself, whatever
+//! group it's in; a drag on nothing is a marquee over anchors.
 //!
 //! Every drag is a gesture in the core (§4.3): the real drawing shows
 //! as it goes, and it lands as one step. A shape that isn't a path yet
@@ -35,7 +35,6 @@ use crate::overlay::Scene;
 use crate::picking::top_at;
 use crate::pointer::View;
 use crate::select::Click;
-use crate::shapes;
 
 /// How far the pointer may stray from a press and still have clicked,
 /// and how far from the pointer a click still finds a shape, logical
@@ -156,6 +155,13 @@ impl Ink {
         let (s, pointer, mods) = (view.scale, ui.state.pointer, ui.state.mods);
         let at = view.to_doc.apply(pointer);
         let per_unit = view.to_window.linear(Vec2::X).length().max(1e-12);
+        // What dragged anchors land on: not on their own shapes' boxes,
+        // which they change.
+        let dragged: Option<Vec<NodeId>> = match &self.noding.drag {
+            Some((_, Drag::Anchors { moved, .. })) => Some(moved.iter().map(|(node, ..)| *node).collect()),
+            _ => None,
+        };
+        let mut lines = dragged.and_then(|skip| self.snap_to(ui, view, doc, &skip));
 
         let Ok(drawing) = self.core.doc(doc) else { return };
         // As a drag under way has it.
@@ -178,12 +184,12 @@ impl Ink {
             picked.retain(|(node, id)| find(*node).is_some_and(|sh| sh.outline.find(*id).is_some()));
         }
         let hover = (input.over && noding.drag.is_none()).then(|| nodes::under(&shown, &picked, pointer, s)).flatten();
-        let grid = if mods.ctrl() {
-            0.0
-        } else {
-            let page = ink_doc::arrange::page_box(drawing);
-            shapes::grid_for(page.width().max(page.height()))
-        };
+        // The anchors that stay where they are, are lines to land on
+        // too: level with one, or straight under it.
+        if let (Some(lines), Some((_, Drag::Anchors { moved, .. }))) = (&mut lines, &noding.drag) {
+            let going: Vec<(NodeId, &[AnchorId])> = moved.iter().map(|(node, ids, _)| (*node, ids.as_slice())).collect();
+            crate::snapping::add_anchors(lines, &shown, &going);
+        }
 
         let (mut ask, mut show, mut say, mut op) = (Vec::new(), None, None, None);
         // A right press: an anchor not picked is picked first; then the
@@ -329,11 +335,16 @@ impl Ink {
                 }
             }
             Some(Drag::Anchors { from, lead, moved, first, before }) => {
-                // The anchor pressed lands on the grid; with Shift, the
-                // drag keeps to the way it has gone furthest.
-                let mut by = shapes::on_grid(lead + (at - from), grid) - lead;
+                // The anchor pressed lands on the grid, or on a line;
+                // with Shift, the drag keeps to the way it has gone
+                // furthest.
+                let mut by = at - from;
+                if let Some(lines) = &lines {
+                    let (to, landed) = lines.point(lead + by);
+                    (by, self.landed) = (to - lead, landed);
+                }
                 if mods.shift() {
-                    if by.x.abs() >= by.y.abs() { by.y = 0.0 } else { by.x = 0.0 }
+                    if by.x.abs() >= by.y.abs() { (by.y, self.landed.y) = (0.0, None) } else { (by.x, self.landed.x) = (0.0, None) }
                 }
                 let edits: Vec<(NodeId, Vec<PathEdit>)> = if by == Vec2::ZERO { Vec::new() } else { moved.iter().map(|(node, ids, to_own)| (*node, vec![PathEdit::Move { anchors: ids.clone(), by: to_own.linear(by) }])).collect() };
                 let nowhere = edits.is_empty();

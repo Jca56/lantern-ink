@@ -2,8 +2,8 @@
 //! it's the same size at every zoom (ARCHITECTURE §8): the selection's
 //! box and its handles, a box round each selected thing, the marquee,
 //! the edge of the group the Pointer has gone into, a rectangle's
-//! corner dot, and with the Node tool a path's line, its anchors and
-//! their handles (LS3's look for its pen's).
+//! corner dot, with the Node tool a path's line, its anchors and their
+//! handles (LS3's look for its pen's), and the lines a drag landed on.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_ui::Ui;
@@ -43,7 +43,13 @@ pub struct Scene {
     pub axis: Option<crate::grading::Axis>,
     /// The caret of the text being typed into: its top, and its bottom.
     pub caret: Option<(Vec2, Vec2)>,
+    /// The lines a drag landed on this frame: where one runs down the
+    /// canvas, and where one runs across it.
+    pub landed: (Option<f64>, Option<f64>),
 }
+
+/// The lines something landed on (LS3's cyan).
+const LANDED: Color = Color::rgba(0.0, 0.95, 1.0, 1.0);
 
 /// A closed line round `quad`, gold over a dark edge: seen on the tan
 /// ground and over any drawing.
@@ -141,6 +147,13 @@ pub fn draw(ui: &mut Ui, area: Rect, scene: &Scene) {
         disc(ui, half + w * 2.0, Color::rgba(0.0, 0.0, 0.0, 0.75));
         disc(ui, half, Color::WHITE);
         disc(ui, half - w * 3.0, ACCENT);
+    }
+    // What a drag landed on: a line right across the canvas.
+    if let Some(x) = scene.landed.0 {
+        ui.draw.rect(Rect::from_xywh(x.round() - w, area.min.y, w * 2.0, area.height()), LANDED);
+    }
+    if let Some(y) = scene.landed.1 {
+        ui.draw.rect(Rect::from_xywh(area.min.x, y.round() - w, area.width(), w * 2.0), LANDED);
     }
     if let Some(m) = scene.marquee {
         let r = Rect::new(Vec2::new(m.min.x.round(), m.min.y.round()), Vec2::new(m.max.x.round(), m.max.y.round()));
