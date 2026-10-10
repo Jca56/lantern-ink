@@ -65,6 +65,8 @@ pub const TOOLBAR_W: f64 = 78.0;
 pub const STRIP: f64 = 4.0;
 pub const RULE: f64 = 2.0;
 pub const TAB_BAR_H: f64 = 44.0;
+/// How thick a ruler is: room for its 18 px numbers.
+pub const RULER: f64 = 30.0;
 pub const STATUS_H: f64 = 48.0;
 pub const PANEL_W: f64 = 400.0;
 pub const PANEL_MIN: f64 = 260.0;

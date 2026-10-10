@@ -244,6 +244,14 @@ enum  Child { Node(NodeId), Text(String) /* text, comments, CDATA, as written */
   neither mark. The marks
   are read under whichever prefix stands for Ink's namespace, and
   written as `ink:`, declared on the root the first time one is needed.
+- **Guides** (as built in M4f, `ink-doc/src/guides.rs`) are one mark
+  on the root: `ink:guides="x12 y4.5"`, a line down the page at
+  x = 12 and one across it at y = 4.5, in the document's coordinates,
+  written with the document's decimals. `Command::SetGuides` says all
+  of them at once (none takes the mark off), so adding, moving and
+  removing one are each a step to undo. No lock holds them: they're
+  the drawing's, not a node's. What isn't a guide in the mark is
+  passed over. A clean copy to ship leaves them out with the rest.
 - **Dirty state is derived:** `modified = version != saved_version`.
 
 ### 3.4 Commands
@@ -1191,6 +1199,31 @@ As LS3 §7, to the letter where it can be:
   - **The pixel grid** is a line at every whole unit across the page,
     drawn over the drawing in screen px, once units are eight px
     apart; View > Pixel Grid hides it.
+  **Rulers and guides, as built in M4f** (`rulers.rs`, `guiding.rs`,
+  `layout.rs`):
+  - **A ruler along the canvas's top and one down its left**, thirty
+    px thick, out of the canvas's own room (`Layout`), numbered in the
+    drawing's units at round steps (1, 2, 5 and their tens) seventy px
+    apart at least, with small ticks between and a gold mark where the
+    pointer is. Down the left one a number's digits are stacked: LUI2
+    turns no text on its side, and a ruler wide enough for whole
+    numbers at 18 px would be fifty px of canvas. View > Rulers hides
+    them.
+  - **A guide is dragged out of a ruler** (the top one gives a line
+    across, the left one a line down), whatever tool is in hand, and
+    lands as anything dragged lands, but never on another guide. It's
+    the window's own while it's dragged (nothing of the core's: guides
+    draw nothing), and one step when it's let go on the canvas; let go
+    on a ruler, it never was.
+  - **The Pointer takes hold of a guide where it crosses bare canvas**:
+    nothing drawn under the pointer, and clear of the selection's box.
+    Where a guide crosses a shape, a press is the shape's. Dragged
+    back onto a ruler or off the canvas, the guide is gone; onto
+    another guide, the two are one.
+  - **Guides that show are lines to land on** (`snap_lines`), and are
+    drawn right across the canvas under the selection's box. View >
+    Guides hides them (then nothing lands on them, and none is taken
+    hold of); View > Clear Guides takes them all off, as a step.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

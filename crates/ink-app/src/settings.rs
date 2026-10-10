@@ -37,6 +37,11 @@ props! {
         /// units; other shapes and the page.
         pub snap_grid: bool = true => { id: 7 },
         pub snap_shapes: bool = true => { id: 8 },
+        /// View > Rulers, and View > Guides: shown or not.
+        pub rulers: bool = true => { id: 9 },
+        pub guides: bool = true => { id: 10 },
+        /// Preferences: things land on guides (while they show).
+        pub snap_guides: bool = true => { id: 11 },
     }
 }
 

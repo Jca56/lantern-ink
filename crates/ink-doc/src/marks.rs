@@ -72,7 +72,7 @@ impl Document {
     /// The attribute Ink's mark `name` is written as on `id`, with the
     /// declaration the drawing needs first (on its root) when nothing
     /// there says what `ink:` stands for.
-    fn mark_name(&mut self, id: NodeId, name: &str) -> Result<String, DocError> {
+    pub(crate) fn mark_name(&mut self, id: NodeId, name: &str) -> Result<String, DocError> {
         // Under the prefix it has already, whatever that is.
         if let Some(had) = self.node(id)?.attrs.iter().find(|a| local(&a.name) == name && prefix(&a.name).is_some_and(|p| self.namespace(id, Some(p)) == Some(INK_NS))) {
             return Ok(had.name.clone());
@@ -228,7 +228,8 @@ impl Document {
             Command::OutlineStroke { nodes, .. } => each(nodes, Reach::Own).and_then(|()| beside(nodes)),
             Command::EditPath { node, .. } | Command::SetPath { node, .. } | Command::SetText { node, .. } | Command::SetLabel { node, .. } | Command::SetGeometry { node, .. } => reach(*node, Reach::Own),
             Command::SetLocked { nodes, .. } => each(nodes, Reach::Lock),
-            Command::Tidy { .. } | Command::Batch(_) => Ok(()),
+            // Guides are the drawing's, not a node's: no lock holds them.
+            Command::Tidy { .. } | Command::SetGuides { .. } | Command::Batch(_) => Ok(()),
         }
     }
 }

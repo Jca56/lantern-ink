@@ -149,6 +149,9 @@ impl Ink {
             }
             PIXEL_GRID => self.toggle_pixel_grid(),
             SNAPPING => self.toggle_snapping(),
+            RULERS => self.toggle_rulers(),
+            GUIDES => self.toggle_guides(),
+            CLEAR_GUIDES => self.clear_guides(),
             ALIGN_TO_PAGE => {
                 self.settings.align_to_page = !self.settings.align_to_page;
                 self.settings.save();

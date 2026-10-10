@@ -221,6 +221,11 @@ impl Document {
                     applied.note(vec![root]);
                 }
             }
+            Command::SetGuides { guides } => {
+                if self.set_guides(guides)? {
+                    applied.note(vec![self.root]);
+                }
+            }
             Command::SetLocked { nodes, locked } => {
                 if nodes.is_empty() {
                     return invalid("there's nothing to lock: name at least one node");

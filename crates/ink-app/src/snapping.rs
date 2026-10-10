@@ -3,13 +3,15 @@
 //! menu. A tool asks for its lines before it reads the drawing
 //! (`Ink::snap_to`), lands its point or its box on them, and leaves
 //! what it landed on in `Ink::landed`, drawn over the canvas for that
-//! frame; so the lines are gone when the drag is.
+//! frame; so the lines are gone when the drag is. Guides that show are
+//! lines too (`guiding.rs`).
 //!
 //! View > Snapping turns it all off; Ctrl holds it off while it's down.
 
 use std::collections::HashMap;
 
 use ink_core::{DocId, NodeId};
+use ink_doc::guides::Guide;
 use ink_doc::outline::AnchorId;
 use ink_doc::{Document, Kind};
 use lntrn_math::{Rect, Vec2};
@@ -29,8 +31,8 @@ pub(crate) struct Kept {
     level: NodeId,
     skip: Vec<NodeId>,
     per_unit: f64,
-    /// The grid, the shapes: which are snapped to.
-    parts: (bool, bool),
+    /// The grid, the shapes, the guides: which are snapped to.
+    parts: (bool, bool, bool),
     targets: Targets,
 }
 
@@ -66,14 +68,20 @@ pub fn add_anchors(lines: &mut Targets, shown: &[Shown], going: &[(NodeId, &[Anc
 
 impl Ink {
     /// What a drag on `doc` lands on, as `view` shows it: the grid, the
-    /// page, and the shapes but for `skip` (what's dragged). None while
-    /// snapping is off, or Ctrl is down.
+    /// page, the shapes but for `skip` (what's dragged), and the guides
+    /// that show. None while snapping is off, or Ctrl is down.
     pub(crate) fn snap_to(&mut self, ui: &Ui, view: &View, doc: DocId, skip: &[NodeId]) -> Option<Targets> {
+        self.snap_lines(ui, view, doc, skip, true)
+    }
+
+    /// [`Ink::snap_to`], with the guides or (for a guide dragged)
+    /// without.
+    pub(crate) fn snap_lines(&mut self, ui: &Ui, view: &View, doc: DocId, skip: &[NodeId], guides: bool) -> Option<Targets> {
         if !self.settings.snapping || ui.state.mods.ctrl() {
             return None;
         }
         let per_unit = view.to_window.linear(Vec2::X).length().max(1e-12);
-        let parts = (self.settings.snap_grid, self.settings.snap_shapes);
+        let parts = (self.settings.snap_grid, self.settings.snap_shapes, guides && self.settings.guides && self.settings.snap_guides);
         let drawing = self.core.doc(doc).ok()?;
         let stamp = self.core.history(doc).ok()?.stamp();
         let tab = self.tabs.iter_mut().find(|t| t.doc == doc)?;
@@ -92,6 +100,14 @@ impl Ink {
         }
         if parts.0 {
             targets.step = snap::step_for(shapes::grid_for(page.width().max(page.height())), per_unit, view.scale);
+        }
+        if parts.2 {
+            for guide in ink_doc::guides::of(drawing) {
+                match guide {
+                    Guide::X(x) => targets.xs.push(x),
+                    Guide::Y(y) => targets.ys.push(y),
+                }
+            }
         }
         targets.reach = REACH * view.scale / per_unit;
         targets.settle();

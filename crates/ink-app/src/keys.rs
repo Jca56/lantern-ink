@@ -45,6 +45,9 @@ impl Ink {
         if self.grading.busy() {
             return self.drop_grade();
         }
+        if self.guiding.busy() {
+            return self.guiding.drop_drag();
+        }
         // A text typed into is let go of (what was typed has landed).
         if self.typing() {
             return self.type_done();

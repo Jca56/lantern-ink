@@ -1332,6 +1332,39 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
     turned or scaled about its middle lands by the corner dragged
     only; numbers typed or dragged in the Box aren't snapped; equal
     gaps between shapes ("smart" spacing).
+- **M4f's f2 is built** (2026-10-09, 556 tests, deployed).
+  - **Guides are in the file:** `ink-doc/src/guides.rs` (`Guide::X`, a
+    line down the page at an x; `Guide::Y`, one across at a y;
+    `guides::of`), on the root as `ink:guides="x12 y4.5"`, and
+    `Command::SetGuides { guides }`, all of them at once. No lock holds
+    them. **Not over MCP** (no tool reads or sets them yet).
+  - **The rulers are `rulers.rs`** (`step`, `parts`, `ticks`, `label`,
+    by themselves and tested by themselves; `draw`) and three new
+    rects of `Layout` (`ruler_top`, `ruler_left`, `ruler_corner`: the
+    canvas is what's left). `theme::RULER` is their thickness.
+  - **The left ruler's numbers are stacked digits** (my call: LUI2
+    can't turn text, and whole numbers at 18 px would want a ruler
+    fifty px wide). **Told to Alva at f2's handoff.**
+  - **Guides in the window are `guiding.rs`** (`Ink::guide_tool`, run
+    before every tool: while a guide has the pointer the tools get
+    nothing; `Ink::guiding`). A drag of one is the window's own, and
+    lands as one `Ink::edit`: "Add Guide", "Move Guide", "Remove
+    Guide".
+  - **The Pointer takes a guide only on bare canvas** (my call, told
+    to Alva): where one crosses a shape or the selection's box, the
+    press is theirs. The tan ground round the page is always bare.
+  - `Ink::snap_lines(…, guides)` is `snap_to` with the guides or
+    without (a guide dragged doesn't land on guides).
+  - `Settings` has `rulers`, `guides` and `snap_guides`; View has
+    Rulers, Guides and Clear Guides.
+  - Test helpers: `Running::run(id)` does a menu's action.
+  - **Not in f2:** a guide's place typed as a number; locking guides;
+    slanted guides; a guide's own colour; the corner square does
+    nothing (other editors move the origin from it); the rulers don't
+    mark the selection's extent.
+  - **For f4:** when File > Page… fits the drawing to a new viewBox
+    (the root transformed), the guides want to go through the same
+    transform.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

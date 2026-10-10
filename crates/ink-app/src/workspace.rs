@@ -64,7 +64,7 @@ impl Ink {
                 ui.state.request_redraw_after(until - now);
             }
         }
-        let l = Layout::new(ui.clip(), ui.m.scale, self.panel_drag.unwrap_or(self.settings.panel_width));
+        let l = Layout::new(ui.clip(), ui.m.scale, self.panel_drag.unwrap_or(self.settings.panel_width), self.settings.rulers);
         self.layout = l;
         self.scale = ui.m.scale;
 
@@ -144,6 +144,9 @@ impl Ink {
             _ => {
                 self.toolbox.gone();
                 ui.draw.rect(l.canvas, crate::theme::GROUND);
+                for ruler in [l.ruler_top, l.ruler_left, l.ruler_corner] {
+                    ui.draw.rect(ruler, crate::theme::PANEL);
+                }
             }
         }
         // A right press on a row or on the canvas: the selection's menu.
@@ -160,7 +163,7 @@ impl Ink {
     /// The canvas: the view moved as the pointer asks, the tool in
     /// hand, and the drawing as the camera shows it.
     fn canvas(&mut self, ui: &mut Ui, area: Rect, doc: DocId, viewport: &Viewport, click: Option<Click>, popup: bool) {
-        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy() || self.noding.busy() || self.penning.busy() || self.grading.busy() || self.shaping.is_some());
+        let (tool, page, busy) = (self.tools.active(), viewport.size, self.pointing.busy() || self.noding.busy() || self.penning.busy() || self.grading.busy() || self.guiding.busy() || self.shaping.is_some());
         let Some(tab) = self.tabs.active_mut() else { return };
         // A tab first laid out is fitted.
         let cam = tab.camera.get_or_insert_with(|| Camera::fit(area, page));
@@ -193,6 +196,10 @@ impl Ink {
         let view = View { to_window, to_doc, scale: ui.m.scale };
         // What a drag lands on this frame is the tools' to say.
         self.landed = crate::snap::Landed::default();
+        // A guide out of a ruler, or one taken hold of with the Pointer:
+        // while it has the pointer, no tool does.
+        let guided = self.guide_tool(ui, &view, doc, &input, tool == Tool::Pointer && !popup);
+        let input = if guided { canvas::CanvasInput { clicked: false, pressed: false, held: false, released: false, double: false, ..input } } else { input };
         // A shape tool draws; the selection's box shows under it, to be
         // taken hold of with the Pointer.
         match shapes::kind_of(tool).filter(|_| !popup) {
@@ -222,6 +229,8 @@ impl Ink {
         if self.settings.pixel_grid {
             crate::grid::draw(ui, area, &view, ink_doc::arrange::page_box(drawing), crate::grid::COLOR);
         }
+        self.draw_guides(ui, area, &view);
+        crate::rulers::draw(ui, &self.layout, &view, (input.over || guided).then_some(ui.state.pointer));
         scene.landed = (self.landed.x.map(|x| to_window.apply(Vec2::new(x, 0.0)).x), self.landed.y.map(|y| to_window.apply(Vec2::new(0.0, y)).y));
         overlay::draw(ui, area, &scene);
     }

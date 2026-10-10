@@ -34,6 +34,7 @@ pub mod fonts;
 mod foreign;
 pub mod geometry;
 pub mod gradient;
+pub mod guides;
 pub mod hit;
 mod id;
 mod kind;

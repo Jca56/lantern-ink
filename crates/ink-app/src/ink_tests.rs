@@ -22,6 +22,7 @@ use crate::tools::Tool;
 
 mod canvas;
 mod gradient;
+mod guides;
 mod handles;
 mod nodes;
 mod ops;
@@ -250,6 +251,13 @@ impl Running {
         self.h.type_text(text);
         self.frames(1);
         self.key(Key::Enter, Modifiers::NONE);
+    }
+
+    /// A row of a menu, by its action's name.
+    fn run(&mut self, id: &str) {
+        let mut requests = Vec::new();
+        self.ink.act(&lntrn_ui::Action::new(id), &mut lntrn_ui::HostCx { pointer: Vec2::ZERO, requests: &mut requests });
+        self.frames(2);
     }
 
     fn undo(&mut self, steps: usize) {

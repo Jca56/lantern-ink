@@ -71,6 +71,9 @@ pub const FIT: &str = "view.fit";
 pub const ACTUAL: &str = "view.actual";
 pub const PIXEL_GRID: &str = "view.pixel_grid";
 pub const SNAPPING: &str = "view.snapping";
+pub const RULERS: &str = "view.rulers";
+pub const GUIDES: &str = "view.guides";
+pub const CLEAR_GUIDES: &str = "view.clear_guides";
 /// A tool's letter was pressed: `key`.
 pub const TOOL_KEY: &str = "tool.key";
 /// Escape on the canvas, and the arrow keys.
@@ -118,6 +121,10 @@ pub struct MenuState<'a> {
 pub struct Ticks {
     pub pixel_grid: bool,
     pub snapping: bool,
+    pub rulers: bool,
+    pub guides: bool,
+    /// The drawing has guides (to clear).
+    pub any_guides: bool,
 }
 
 fn row(label: &str, id: &str) -> MenuItem {
@@ -248,7 +255,10 @@ pub fn menu(name: &str, st: &MenuState) -> Option<Menu> {
                 sep(),
                 row("Pixel Grid", PIXEL_GRID).checked(st.view.pixel_grid),
                 row("Snapping", SNAPPING).checked(st.view.snapping),
-                later("Guides"),
+                sep(),
+                row("Rulers", RULERS).checked(st.view.rulers),
+                row("Guides", GUIDES).checked(st.view.guides),
+                row("Clear Guides", CLEAR_GUIDES).enabled(st.view.any_guides),
             ],
         ),
         _ => return None,

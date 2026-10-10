@@ -89,6 +89,8 @@ pub struct Ink {
     /// and the ones something landed on this frame, to show.
     pub(crate) snaps: Option<crate::snapping::Kept>,
     pub(crate) landed: crate::snap::Landed,
+    /// The guides: one being dragged, and the ones that show.
+    pub(crate) guiding: crate::guiding::Guiding,
     /// The panel's width while its grip is dragged, logical px.
     pub(crate) panel_drag: Option<f64>,
     /// Last frame's regions.
@@ -145,6 +147,7 @@ impl Ink {
             shaping: None,
             snaps: None,
             landed: crate::snap::Landed::default(),
+            guiding: crate::guiding::Guiding::default(),
             panel_drag: None,
             layout: Layout::default(),
             toast: None,
@@ -195,6 +198,6 @@ impl Ink {
 
     pub(crate) fn menu_state(&self) -> MenuState<'_> {
         let history = self.tabs.active_doc().and_then(|d| self.core.history(d).ok());
-        MenuState { has_doc: self.tabs.active_doc().is_some(), undo: history.and_then(|h| h.undoable().next_back()), redo: history.and_then(|h| h.redoable().next()), recent: &self.recent, picked: self.picked(), paths: self.path_can(), effects: self.effect_can(), align_to_page: self.settings.align_to_page, view: menus::Ticks { pixel_grid: self.settings.pixel_grid, snapping: self.settings.snapping } }
+        MenuState { has_doc: self.tabs.active_doc().is_some(), undo: history.and_then(|h| h.undoable().next_back()), redo: history.and_then(|h| h.redoable().next()), recent: &self.recent, picked: self.picked(), paths: self.path_can(), effects: self.effect_can(), align_to_page: self.settings.align_to_page, view: menus::Ticks { pixel_grid: self.settings.pixel_grid, snapping: self.settings.snapping, rulers: self.settings.rulers, guides: self.settings.guides, any_guides: self.has_guides() } }
     }
 }

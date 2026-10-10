@@ -4,7 +4,6 @@
 //! off.
 
 use ink_core::NodeId;
-use lntrn_ui::{Action, HostCx};
 
 use super::*;
 use crate::menus;
@@ -25,12 +24,6 @@ fn scene(name: &str) -> Running {
 }
 
 impl Running {
-    fn run(&mut self, id: &str) {
-        let mut requests = Vec::new();
-        self.ink.act(&Action::new(id), &mut HostCx { pointer: Vec2::ZERO, requests: &mut requests });
-        self.frames(2);
-    }
-
     /// What `A` says of where it is and how big.
     fn a(&self) -> [String; 4] {
         ["x", "y", "width", "height"].map(|name| self.says(A, name).unwrap())

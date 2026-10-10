@@ -128,6 +128,10 @@ pub enum Command {
     /// everything in it, refuses every other Command until it's
     /// unlocked.
     SetLocked { nodes: Vec<NodeId>, locked: bool },
+    /// The drawing's guides, all of them: the lines a person lines
+    /// things up by, kept on the root as `ink:guides`
+    /// ([`crate::guides`]). None takes the mark off.
+    SetGuides { guides: Vec<crate::guides::Guide> },
     /// Put what the drawing `svg` holds (text off the clipboard) into
     /// this one ([`crate::Document::clipping`] makes such text): what it
     /// draws at `place`, its definitions into `<defs>`. A definition
