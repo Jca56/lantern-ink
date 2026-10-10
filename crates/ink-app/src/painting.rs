@@ -145,13 +145,18 @@ impl Ink {
 
     /// The paint section, in the top of `panel`: how much of the panel
     /// it took, and a palette swatch's menu to open.
-    pub(crate) fn paint_section(&mut self, ui: &mut Ui, panel: Rect, window: Rect) -> (f64, Option<ContextMenu>) {
+    pub(crate) fn paint_section(&mut self, ui: &mut Ui, whole: Rect, foot: f64, window: Rect) -> (f64, Option<ContextMenu>) {
+        // The panel but for its foot (the preview strip's).
+        let panel = Rect::new(whole.min, Vec2::new(whole.max.x, (whole.max.y - foot).max(whole.min.y)));
         self.picker.begin(window);
         let (paints, stops, step) = self.paints_shown();
         let shown = Shown { paints: &paints, folded: self.settings.paint_folded, stops, step };
         // The object tree keeps its room under it: where the panel is
         // too short for all of the section, the section scrolls.
-        let room = (panel.height() - (panel.height() * TREE_SHARE).max(TREE_LEAST * ui.m.scale)).max(0.0);
+        // (Its share of the whole panel: what stands at the panel's foot
+        // comes out of this section's room, which scrolls, not the
+        // tree's.)
+        let room = (panel.height() - (whole.height() * TREE_SHARE).max(TREE_LEAST * ui.m.scale)).max(0.0);
         let tall = self.paint_panel.tall;
         let out = if tall > room && room > 0.0 {
             let mut out = section::Out::default();

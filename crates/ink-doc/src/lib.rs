@@ -38,6 +38,7 @@ pub mod guides;
 pub mod hit;
 mod id;
 mod kind;
+pub mod lantern;
 mod layout;
 pub mod length;
 pub mod lettering;

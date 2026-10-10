@@ -57,6 +57,7 @@ mod snapping;
 mod shaping;
 mod textbox;
 mod texting;
+mod strip;
 mod theme;
 mod tiles;
 mod toolbox;

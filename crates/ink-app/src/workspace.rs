@@ -83,10 +83,13 @@ impl Ink {
             }
             None => {}
         }
-        // The paint section, then the object tree in what's left of the
-        // panel under it.
-        let (paint_h, swatch_menu) = self.paint_section(ui, l.panel, ui.clip());
-        let tree_room = Rect::new(Vec2::new(l.panel.min.x, (l.panel.min.y + paint_h).min(l.panel.max.y)), l.panel.max);
+        // The preview strip keeps the panel's foot; over it, the paint
+        // section, then the object tree in what's left between them.
+        let strip_h = self.strip.height(ui.m.scale, self.settings.strip_folded).min(l.panel.height() / 2.0).round();
+        let (strip, panel) = l.panel.take_bottom(strip_h);
+        self.preview_strip(ui, strip);
+        let (paint_h, swatch_menu) = self.paint_section(ui, l.panel, strip_h, ui.clip());
+        let tree_room = Rect::new(Vec2::new(panel.min.x, (panel.min.y + paint_h).min(panel.max.y)), panel.max);
         // The object tree, of the drawing as it looks: what it asks for
         // is done once it's drawn.
         let shown = self.tabs.active_mut().and_then(|tab| {

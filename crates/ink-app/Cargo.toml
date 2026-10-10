@@ -24,6 +24,7 @@ lntrn-data.workspace = true
 lntrn-image.workspace = true
 lntrn-math.workspace = true
 lntrn-props.workspace = true
+lntrn-svg.workspace = true
 lntrn-sys.workspace = true
 lntrn-text.workspace = true
 lntrn-ui.workspace = true

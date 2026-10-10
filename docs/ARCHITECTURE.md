@@ -1224,6 +1224,22 @@ As LS3 §7, to the letter where it can be:
     drawn right across the canvas under the selection's box. View >
     Guides hides them (then nothing lands on them, and none is taken
     hold of); View > Clear Guides takes them all off, as a step.
+  **The preview strip, as built in M4f** (`strip.rs`):
+  - **The drawing as Lantern's apps will show it as an icon**: drawn
+    by `lntrn-svg` (their renderer, not Ink's) at 16, 24, 32, 48 and 64
+    logical px, with as many px as the screen's scale gives an icon of
+    that size, each shown one for one on the dark an app shows icons
+    on, its size said under it. At the foot of the right panel; its
+    heading folds it away.
+  - **Drawn on the job pool** from the drawing's text, one strip at a
+    time, again whenever the drawing looks different (`Look`: a drag
+    shows as it goes). The pictures go to LUI2's images when the GPU is
+    next in reach (`Strip::finished`, with the tiles').
+  - **What the drawing has that `lntrn-svg` doesn't draw is said under
+    the icons** (`ink_doc::lantern::misses`, which the MCP's Lantern
+    preview says too).
+  - **The strip's room comes out of the paint section's**, which
+    scrolls: the object tree keeps its share of the panel.
   **The menus' work and the Box, as built in M4b** (`ops.rs`,
   `boxes.rs`, `toolbox.rs`, `controls/`):
   - **Every row of Edit and Object is one Command on the selection**

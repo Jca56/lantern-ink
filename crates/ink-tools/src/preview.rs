@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use ink_core::ink_doc::{Document, Kind, Viewport};
+use ink_core::ink_doc::Viewport;
 use ink_core::{Core, DocId, View};
 use ink_geom::{Affine, Rect};
 use lntrn_image::{Compression, Filter, Image};
@@ -237,29 +237,6 @@ const ICON_SIZES: [u32; 5] = [16, 24, 32, 48, 64];
 const SHOWN: u32 = 128;
 const GAP: u32 = 12;
 
-/// What's in `doc` that `lntrn-svg` doesn't draw, by name.
-fn lantern_misses(doc: &Document) -> Vec<&'static str> {
-    let mut misses: Vec<&'static str> = Vec::new();
-    for id in doc.descendants(doc.root()) {
-        let Some(node) = doc.get(id) else { continue };
-        let miss = match node.kind {
-            Kind::Text | Kind::TSpan => "<text>",
-            Kind::Use => "<use>",
-            Kind::Image => "<image>",
-            Kind::Mask => "<mask>",
-            Kind::Pattern => "<pattern>",
-            Kind::Marker => "<marker>",
-            Kind::Style => "<style> rules",
-            Kind::FilterPrimitive if node.local() != "feDropShadow" => "filters other than feDropShadow",
-            _ => continue,
-        };
-        if !misses.contains(&miss) {
-            misses.push(miss);
-        }
-    }
-    misses
-}
-
 /// The drawing as `lntrn-svg` draws it at each icon size, side by side,
 /// each enlarged pixel for pixel.
 fn lantern(core: &Core, env: &Env, doc: DocId, o: &Options) -> Result<(Picture, String), ToolError> {
@@ -280,7 +257,7 @@ fn lantern(core: &Core, env: &Env, doc: DocId, o: &Options) -> Result<(Picture, 
     }
     let on_disk = keep(&strip, &env.next_preview(doc));
     let bytes = lntrn_image::encode_png(&flatten(&strip, o.background));
-    let misses = lantern_misses(document);
+    let misses = ink_core::ink_doc::lantern::misses(document);
     let missing = if misses.is_empty() { String::new() } else { format!(" lntrn-svg doesn't draw what this drawing has of: {}.", misses.join(", ")) };
     let sizes = ICON_SIZES.map(|s| s.to_string()).join(", ");
     // The strip is the size its icons make it, whatever was asked for.
@@ -294,6 +271,7 @@ fn lantern(core: &Core, env: &Env, doc: DocId, o: &Options) -> Result<(Picture, 
 
 #[cfg(test)]
 mod tests {
+    use ink_core::ink_doc::Document;
     use ink_geom::Vec2;
 
     use super::*;

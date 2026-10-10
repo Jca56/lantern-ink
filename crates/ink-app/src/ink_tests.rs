@@ -33,6 +33,7 @@ mod text;
 mod pointer;
 mod shapes;
 mod snaps;
+mod strip;
 mod tree;
 
 /// Where the tiles' pictures are kept in a test.
@@ -60,6 +61,8 @@ struct Running {
     ink: Ink,
     shell: Shell<Ink>,
     kept: Kept,
+    /// And the preview strip's.
+    strips: Kept,
 }
 
 fn corpus(name: &str) -> PathBuf {
@@ -84,7 +87,7 @@ impl Running {
     fn start(width: f64, height: f64, scale: f64) -> Running {
         let mut h = Harness::new(width, height);
         h.scale = scale;
-        let mut r = Running { h, ink: Ink::new(Vec::new()), shell: Shell::new(Editor::Workspace), kept: Kept::default() };
+        let mut r = Running { h, ink: Ink::new(Vec::new()), shell: Shell::new(Editor::Workspace), kept: Kept::default(), strips: Kept::default() };
         r.frames(4);
         r
     }
@@ -95,6 +98,7 @@ impl Running {
         for _ in 0..n {
             self.h.shell_frame(&mut self.shell, &mut self.ink);
             self.ink.tiles.finished(&mut self.kept);
+            self.ink.strip.finished(&mut self.strips);
         }
     }
 

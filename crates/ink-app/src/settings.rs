@@ -42,6 +42,8 @@ props! {
         pub guides: bool = true => { id: 10 },
         /// Preferences: things land on guides (while they show).
         pub snap_guides: bool = true => { id: 11 },
+        /// The preview strip is folded away to its heading.
+        pub strip_folded: bool = false => { id: 12 },
     }
 }
 

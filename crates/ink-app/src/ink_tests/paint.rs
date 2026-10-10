@@ -19,6 +19,9 @@ fn painted(name: &str) -> Running {
     let path = scratch(name).join("painted.svg");
     std::fs::write(&path, PAINTED).unwrap();
     let mut r = Running::start(1920.0, 1080.0, 1.0);
+    // (The preview strip folded away: in a window this short, with it
+    // open, the palette is scrolled to.)
+    r.ink.settings.strip_folded = true;
     r.open(&path);
     r.frames(2);
     r

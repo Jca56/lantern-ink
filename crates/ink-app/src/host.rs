@@ -97,6 +97,7 @@ impl AppHost for Ink {
 
     fn waker(&mut self, waker: Waker) {
         self.files.set_waker(waker.clone());
+        self.strip.set_waker(waker.clone());
         self.tiles.set_waker(waker);
         for path in std::mem::take(&mut self.startup) {
             self.open(path);
@@ -113,6 +114,8 @@ impl AppHost for Ink {
         }
         // Tiles the pool has drawn since the last frame.
         again |= self.tiles.finished(&mut OnGpu(gpu, images));
+        // And the preview strips.
+        again |= self.strip.finished(&mut OnGpu(gpu, images));
         again
     }
 }

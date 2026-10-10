@@ -1365,6 +1365,25 @@ edit SVGs), then the LUI2 window in LS3's look, then the live bridge.
   - **For f4:** when File > Page… fits the drawing to a new viewBox
     (the root transformed), the guides want to go through the same
     transform.
+- **M4f's f3 is built** (2026-10-09, 560 tests, deployed).
+  - **The preview strip is `strip.rs`** (`Strip`, `Ink::strip`,
+    `Ink::preview_strip`): `lntrn_svg::render` of the drawing's text
+    at each of `strip::SIZES` times the screen's scale, on the job
+    pool, shown one px for one. `ink-app` depends on `lntrn-svg` now
+    (for this only: everything else in the window is `ink-render`'s).
+  - **It takes the panel's foot, and the paint section pays for it**
+    (`paint_section(ui, whole, foot, window)`): the tree's share is of
+    the whole panel. In a 1080-px window with the strip open the
+    palette grid is scrolled to; folded (`Settings::strip_folded`), it
+    isn't.
+  - **`ink_doc::lantern::misses`** is what `lntrn-svg` doesn't draw of
+    a drawing (it was `ink-tools`' own): the strip says it in a line
+    under the icons, the MCP's Lantern preview in its reply.
+  - The window's tests keep the strip's pictures in a stand-in of
+    their own (`Running::strips`), counted like the tiles'.
+  - **Not in f3:** a light ground to see an icon on; a click on a size
+    to zoom the canvas to it; the strip of anything but the tab that
+    shows.
 
 ## Working here
 - **Ink builds against LUI2's working tree** (`../lantern-ui-2`): a

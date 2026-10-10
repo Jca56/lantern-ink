@@ -91,6 +91,8 @@ pub struct Ink {
     pub(crate) landed: crate::snap::Landed,
     /// The guides: one being dragged, and the ones that show.
     pub(crate) guiding: crate::guiding::Guiding,
+    /// The Lantern preview strip, at the bottom of the right panel.
+    pub(crate) strip: crate::strip::Strip,
     /// The panel's width while its grip is dragged, logical px.
     pub(crate) panel_drag: Option<f64>,
     /// Last frame's regions.
@@ -148,6 +150,7 @@ impl Ink {
             snaps: None,
             landed: crate::snap::Landed::default(),
             guiding: crate::guiding::Guiding::default(),
+            strip: crate::strip::Strip::default(),
             panel_drag: None,
             layout: Layout::default(),
             toast: None,
